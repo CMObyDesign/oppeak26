@@ -4,13 +4,35 @@ This project powers a two-tier diagnostic funnel for CFO By Design, a fractional
 
 ## Folder Structure
 
-- `logic/question_mapping.json` — source-of-truth question and threshold configuration (existing file, not overwritten).
-- `logic/scoring_logic.js` — scoring engine, path routing, tier detection, and AI context extraction.
-- `logic/scoring_logic.test.js` — Node built-in tests validating routing, thresholds, and context extraction.
-- `prompts/free_tier_prompt.md` — system prompt for the 5-question free diagnostic report.
-- `prompts/paid_tier_prompt.md` — system prompt for the 14-question paid diagnostic report.
-- `prompts/strategist_brief_prompt.md` — internal strategist brief generator prompt.
-- `worker/src/index.js` — Cloudflare Worker scaffold for webhook intake and orchestration.
+```text
+oppeak26/
+├── logic/
+│   ├── question_mapping.json   — 14 questions, scoring config,
+│   │                             path thresholds
+│   ├── scoring_logic.js        — scoring engine, path assignment
+│   └── scoring_logic.test.js   — test suite
+├── prompts/
+│   ├── free_tier_prompt.md     — AI prompt for free 5-question
+│   │                             results page
+│   ├── paid_tier_prompt.md     — AI prompt for $47 full
+│   │                             diagnostic PDF report
+│   ├── strategist_brief_prompt.md       — internal brief for
+│   │                                      $47 pre-call prep
+│   └── strategist_brief_deep_dive_prompt.md — internal brief
+│                                              for $297 session prep
+├── skills/
+│   ├── gbp-competitor-audit/
+│   │   └── SKILL.md            — GBP audit skill for local
+│   │                             financial service clients
+│   └── review-response-reputation/
+│       └── SKILL.md            — FTC-compliant review response
+│                                 and reputation program
+├── worker/
+│   └── src/
+│       └── index.js            — Cloudflare Worker scaffold,
+│                                 three-tier orchestration
+└── README.md
+```
 
 ## Setup
 
@@ -42,12 +64,12 @@ node --test logic/scoring_logic.test.js
 npx wrangler deploy
 ```
 
-## Diagnostic Paths
+## Three Diagnostic Paths
 
-- **CRITICAL_EXPOSURE** — foundational financial risk is high and immediate stabilization is needed.
-- **HIDDEN_LIABILITY** — operations appear stable, but unresolved structural gaps are limiting financing leverage.
-- **UNTAPPED_CAPACITY** — fundamentals are comparatively strong, with room to optimize growth and capital strategy.
-- **REHAB_REQUIRED** — forced routing path triggered by a critical risk response (Q11_D), regardless of total score.
+- **CRITICAL_EXPOSURE** (free: 5-12 / full: 14-28)
+- **HIDDEN_LIABILITY** (free: 13-18 / full: 29-41)
+- **UNTAPPED_CAPACITY** (free: 19-25 / full: 42-54)
+- **REHAB_REQUIRED** (triggered by Q11_D regardless of score)
 
 ## Maintainer
 
