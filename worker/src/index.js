@@ -126,6 +126,54 @@ async function callClaude(prompt, env) {
   return data.content[0].text;
 }
 
+function escapeHtml(s) {
+  return String(s ?? "").replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]
+  ));
+}
+
+// Inline-styled HTML report body. Inline styles are essential for email clients
+// (Gmail / Outlook / Apple Mail) which strip <style> blocks.
+function buildReportHtml(agent) {
+  const e = escapeHtml;
+  const priColor = (p) =>
+    p === "CRITICAL" ? "#b91c1c" :
+    p === "HIGH" ? "#d97706" :
+    "#92400e";
+
+  const gapItem = (g) => `
+    <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid ${priColor(g.priority)};border-radius:4px;">
+      <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:16px;">${e(g.title)}<span style="font-size:10px;font-weight:700;color:${priColor(g.priority)};letter-spacing:1.5px;margin-left:10px;">${e(g.priority)}</span></div>
+      <div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:6px;line-height:1.55;">${e(g.impact)}</div>
+    </td></tr><tr><td style="height:10px;"></td></tr>`;
+
+  const oppItem = (o) => `
+    <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid #c4a647;border-radius:4px;">
+      <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:16px;">${e(o.title)}</div>
+      <div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:6px;line-height:1.55;">${e(o.desc)}</div>
+      <div style="font-family:Arial,sans-serif;color:#92400e;font-weight:700;font-size:11px;margin-top:8px;letter-spacing:1.5px;text-transform:uppercase;">${e(o.impact)}</div>
+    </td></tr><tr><td style="height:10px;"></td></tr>`;
+
+  const gaps = (agent.gaps || []).map(gapItem).join("");
+  const opps = (agent.opportunities || []).map(oppItem).join("");
+  const context = agent.context
+    ? `<p style="font-family:Georgia,serif;font-style:italic;color:#6b7280;font-size:15px;line-height:1.6;margin:12px 0 0;">${e(agent.context)}</p>`
+    : "";
+
+  return `
+<div style="display:inline-block;padding:6px 14px;background:#fef3c7;color:#92400e;font-weight:700;font-size:11px;letter-spacing:2px;border-radius:999px;font-family:Arial,sans-serif;">${e(agent.badge)}</div>
+<h1 style="font-family:Georgia,serif;font-size:26px;font-weight:700;margin:20px 0 16px;color:#1a1a1a;line-height:1.3;">${e(agent.headline)}</h1>
+<p style="font-family:Georgia,serif;font-size:17px;color:#374151;line-height:1.65;margin:0;">${e(agent.opener)}</p>
+${context}
+<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Critical Gaps Identified</h2>
+<table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">${gaps}</table>
+<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Your Highest-Impact Opportunities</h2>
+<table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">${opps}</table>
+<h2 style="font-family:Georgia,serif;font-size:20px;font-weight:700;color:#1a1a1a;margin:32px 0 12px;">${e(agent.nextStepHeadline)}</h2>
+<p style="font-family:Georgia,serif;font-size:16px;color:#374151;line-height:1.6;font-style:italic;margin:0;">${e(agent.nextStepBody)}</p>
+`.trim();
+}
+
 // Tolerant JSON extraction ‚Äî strips fences / preamble if the model adds any.
 function parseAgentJson(text) {
   let t = text.trim();
@@ -273,25 +321,14 @@ export default {
 
     // Best-effort GHL writeback to CFO By Design's real SWOT custom fields.
     if (contactId) {
-      const reportBody = [
-        `# ${agent.badge || ""}`,
-        `## ${agent.headline || ""}`,
-        agent.opener || "",
-        agent.context ? `_${agent.context}_` : "",
-        "",
-        "## Critical Gaps",
-        ...(agent.gaps || []).map(g => `- **${g.title}** (${g.priority}) ‚Äî ${g.impact}`),
-        "",
-        "## Opportunities",
-        ...(agent.opportunities || []).map(o => `- **${o.title}** ‚Äî ${o.desc} _(${o.impact})_`),
-        "",
-        `## ${agent.nextStepHeadline || ""}`,
-        agent.nextStepBody || "",
-      ].join("\n");
+      const reportBody = buildReportHtml(agent);
 
-      // Tier picks the destination field ‚Äî the keys exist already in GHL.
+      // One report field per tier ‚Äî no mirroring. Each tier has its own named deliverable:
+      //   free     ‚Üí swot_free_report      (Free SWOT Report)
+      //   paid_47  ‚Üí swot_full_report      (Full Diagnostic Report)
+      //   paid_297 ‚Üí business_playbook     (Business Playbook ‚Äî the $297 deliverable)
       const reportFieldKey =
-        tier === "paid_297" ? "swot_strategist_brief"
+        tier === "paid_297" ? "business_playbook"
         : tier === "paid_47" ? "swot_full_report"
         : "swot_free_report";
 
@@ -299,9 +336,6 @@ export default {
         { key: "swot_path", field_value: String(agent.path || "") },
         { key: "swot_rehab_flag", field_value: agent.path === "rehab" ? "true" : "false" },
         { key: reportFieldKey, field_value: reportBody },
-        // Mirror the report into the new SWOT "Business Playbook" field so email
-        // templates can pull {{contact.business_playbook}} regardless of tier.
-        { key: "business_playbook", field_value: reportBody },
       ];
       if (tier === "paid_297") {
         fields.push({ key: "swot_deep_dive_booked", field_value: "true" });
