@@ -1,0 +1,10 @@
+name = "swot-engine"
+main = "worker/src/index.js"
+compatibility_date = "2024-01-01"
+
+[vars]
+# Non-sensitive config - safe to commit
+GHL_LOCATION_ID = "oLIENQCtGnt9U6gfLhE5"
+
+# Secrets (ANTHROPIC_API_KEY, GHL_API_KEY) are set in the
+# Cloudflare dashboard under Settings > Variables and Secrets.
