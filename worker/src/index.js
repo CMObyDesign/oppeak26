@@ -12,7 +12,7 @@
  */
 
 const CONFIG = {
-  CLAUDE_MODEL: "claude-sonnet-4-20250514",
+  CLAUDE_MODEL: "claude-sonnet-4-6",
   ANTHROPIC_VERSION: "2023-06-01",
   GHL_API_BASE: "https://services.leadconnectorhq.com",
   GHL_LOCATION_ID: "oLIENQCtGnt9U6gfLhE5",
