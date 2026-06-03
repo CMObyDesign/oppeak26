@@ -16,8 +16,8 @@ const CONFIG = {
   ANTHROPIC_VERSION: "2023-06-01",
   GHL_API_BASE: "https://services.leadconnectorhq.com",
   GHL_LOCATION_ID: "oLIENQCtGnt9U6gfLhE5",
-  BOOKING_LINK_47: "YOUR_30MIN_CALENDAR_LINK",
-  BOOKING_LINK_297: "YOUR_50MIN_CALENDAR_LINK",
+  BOOKING_LINK_47: "https://my.cfobydesign.com/widget/booking/D3yNZNFtqIYsChkOgQc9",
+  BOOKING_LINK_297: "https://my.cfobydesign.com/widget/booking/VGdN6KoFBtbdnSvHKHTh",
   PAYMENT_LINK_47: "https://my.cfobydesign.com/payment-link/6a0db7aa1a6dcdeebb53b641",
   PAYMENT_LINK_297: "https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0",
 };
