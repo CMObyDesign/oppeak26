@@ -220,12 +220,39 @@ export default {
       return json({ success: false, error: err.message }, 500);
     }
 
-    // Best-effort GHL writeback (only if a contactId is supplied and fields exist).
+    // Best-effort GHL writeback to CFO By Design's real SWOT custom fields.
     if (contact.contactId) {
+      const reportBody = [
+        `# ${agent.badge || ""}`,
+        `## ${agent.headline || ""}`,
+        agent.opener || "",
+        agent.context ? `_${agent.context}_` : "",
+        "",
+        "## Critical Gaps",
+        ...(agent.gaps || []).map(g => `- **${g.title}** (${g.priority}) ‚Äî ${g.impact}`),
+        "",
+        "## Opportunities",
+        ...(agent.opportunities || []).map(o => `- **${o.title}** ‚Äî ${o.desc} _(${o.impact})_`),
+        "",
+        `## ${agent.nextStepHeadline || ""}`,
+        agent.nextStepBody || "",
+      ].join("\n");
+
+      // Tier picks the destination field ‚Äî the keys exist already in GHL.
+      const reportFieldKey =
+        tier === "paid_297" ? "swot_strategist_brief"
+        : tier === "paid_47" ? "swot_full_report"
+        : "swot_free_report";
+
       const fields = [
         { key: "swot_path", field_value: String(agent.path || "") },
-        { key: "swot_report_summary", field_value: String(agent.opener || "") },
+        { key: "swot_rehab_flag", field_value: agent.path === "rehab" ? "true" : "false" },
+        { key: reportFieldKey, field_value: reportBody },
       ];
+      if (tier === "paid_297") {
+        fields.push({ key: "swot_deep_dive_booked", field_value: "true" });
+      }
+
       const tags = [`SWOT_${tier.toUpperCase()}`, ...(agent.opportunityFlags || [])];
       ctx.waitUntil(
         Promise.allSettled([
