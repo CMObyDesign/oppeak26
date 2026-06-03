@@ -165,6 +165,54 @@ async function updateGHLContact(contactId, fields, env) {
   return res.ok;
 }
 
+// Find an existing contact by email in the configured location. Returns its id or null.
+async function findGHLContactByEmail(email, env) {
+  if (!email || !env.GHL_API_KEY) return null;
+  const url = `${CONFIG.GHL_API_BASE}/contacts/search/duplicate?locationId=${CONFIG.GHL_LOCATION_ID}&email=${encodeURIComponent(email)}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${env.GHL_API_KEY}`,
+      Version: "2021-07-28",
+    },
+  });
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => ({}));
+  return data?.contact?.id || data?.id || null;
+}
+
+// Create a contact in the configured location. Returns the new id or null.
+async function createGHLContact(contact, env) {
+  if (!env.GHL_API_KEY) return null;
+  const body = {
+    locationId: CONFIG.GHL_LOCATION_ID,
+    email: contact.email,
+    firstName: (contact.name || "").split(" ")[0] || undefined,
+    lastName: (contact.name || "").split(" ").slice(1).join(" ") || undefined,
+    source: "SWOT Funnel",
+  };
+  const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${env.GHL_API_KEY}`,
+      Version: "2021-07-28",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => ({}));
+  return data?.contact?.id || data?.id || null;
+}
+
+// Resolve a contactId: pass-through if given, otherwise find-by-email, otherwise create.
+async function resolveGHLContactId(contact, env) {
+  if (contact?.contactId) return contact.contactId;
+  if (!contact?.email) return null;
+  const existing = await findGHLContactByEmail(contact.email, env);
+  if (existing) return existing;
+  return await createGHLContact(contact, env);
+}
+
 async function addGHLTag(contactId, tags, env) {
   if (!contactId || !env.GHL_API_KEY || !tags.length) return false;
   const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}/tags`, {
@@ -220,8 +268,11 @@ export default {
       return json({ success: false, error: err.message }, 500);
     }
 
+    // Resolve a GHL contactId from email if one wasn't passed in.
+    const contactId = await resolveGHLContactId(contact, env);
+
     // Best-effort GHL writeback to CFO By Design's real SWOT custom fields.
-    if (contact.contactId) {
+    if (contactId) {
       const reportBody = [
         `# ${agent.badge || ""}`,
         `## ${agent.headline || ""}`,
@@ -253,11 +304,18 @@ export default {
         fields.push({ key: "swot_deep_dive_booked", field_value: "true" });
       }
 
-      const tags = [`SWOT_${tier.toUpperCase()}`, ...(agent.opportunityFlags || [])];
+      // Tag pattern matches the workflows you build in GHL:
+      //   SWOT_FREE_LEAD / SWOT_PAID_47 / SWOT_PAID_297, plus opportunity flags.
+      const tierTag =
+        tier === "paid_297" ? "SWOT_PAID_297"
+        : tier === "paid_47" ? "SWOT_PAID_47"
+        : "SWOT_FREE_LEAD";
+      const tags = [tierTag, `SWOT_PATH_${(agent.path || "").toUpperCase()}`, ...(agent.opportunityFlags || [])].filter(Boolean);
+
       ctx.waitUntil(
         Promise.allSettled([
-          updateGHLContact(contact.contactId, fields, env),
-          addGHLTag(contact.contactId, tags, env),
+          updateGHLContact(contactId, fields, env),
+          addGHLTag(contactId, tags, env),
         ])
       );
     }
