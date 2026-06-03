@@ -1,328 +1,107 @@
 /**
- * CFO By Design — SWOT Engine Worker v2
- * Cloudflare Worker — three-tier funnel orchestration
+ * CFO By Design ‚Äî SWOT Engine Worker v3
+ * Agent-assessed funnel.
  *
- * Data flow:
- * GHL webhook → tier determination → score calculation →
- * prompt selection → Claude API → report generation →
- * GHL custom field update → Zoho CRM sync
+ * Flow: form answers -> Claude assesses (Miguel's logic) + writes the report
+ *       -> structured JSON that the front-end renders directly.
  *
- * Tiers:
- *   free     → free_tier_prompt    → on-screen results + email
- *   paid_47  → paid_tier_prompt    → PDF report + 30-min booking
- *   paid_297 → strategist_brief    → 50-min session + brief
+ * The worker is QUESTION-AGNOSTIC: it accepts whatever labeled question/answer
+ * pairs the form sends, so it works with the current questions and with v3.
  *
- * Environment variables (set in Cloudflare dashboard):
- *   ANTHROPIC_API_KEY
- *   GHL_API_KEY
- *   ZOHO_API_KEY
+ * Runtime secrets (set in Cloudflare dashboard): ANTHROPIC_API_KEY, GHL_API_KEY
  */
 
 const CONFIG = {
+  CLAUDE_MODEL: "claude-sonnet-4-20250514",
+  ANTHROPIC_VERSION: "2023-06-01",
+  GHL_API_BASE: "https://services.leadconnectorhq.com",
   GHL_LOCATION_ID: "oLIENQCtGnt9U6gfLhE5",
-  PAYMENT_LINK_47: "https://my.cfobydesign.com/payment-link/6a0db7aa1a6dcdeebb53b641",
-  PAYMENT_LINK_297: "https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0",
   BOOKING_LINK_47: "YOUR_30MIN_CALENDAR_LINK",
   BOOKING_LINK_297: "YOUR_50MIN_CALENDAR_LINK",
-  CLAUDE_MODEL: "claude-sonnet-4-20250514",
-  GHL_API_BASE: "https://services.leadconnectorhq.com",
+  PAYMENT_LINK_47: "https://my.cfobydesign.com/payment-link/6a0db7aa1a6dcdeebb53b641",
+  PAYMENT_LINK_297: "https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0",
 };
 
-const PATH_THRESHOLDS = {
-  free_tier: {
-    CRITICAL_EXPOSURE: { min: 5, max: 12 },
-    HIDDEN_LIABILITY: { min: 13, max: 18 },
-    UNTAPPED_CAPACITY: { min: 19, max: 25 },
-  },
-  full_assessment: {
-    CRITICAL_EXPOSURE: { min: 14, max: 28 },
-    HIDDEN_LIABILITY: { min: 29, max: 41 },
-    UNTAPPED_CAPACITY: { min: 42, max: 54 },
-  },
+// How the agent assesses ‚Äî Miguel Hernandez's actual diagnostic logic, grounded in the
+// May 27, 2026 session transcript. Phrasing kept close to his own words on purpose.
+const ASSESSMENT_RUBRIC = `You are a Senior Fractional CFO for CFO By Design, diagnosing a business from a SWOT intake.
+Diagnose the way Miguel Hernandez does. The whole assessment is about one thing: the owner's
+"ability to manage, or their ability to drown."
+
+THE TWO CRITICAL NUMBERS (Miguel: "those two numbers together are critical and they're very basic"):
+- Total corporate debt the business carries.
+- Monthly debt service ‚Äî what they pay every month servicing that debt.
+Together these tell you whether cash flow can actually support the business.
+
+THE MAGIC QUESTION (Miguel's term): does the owner make decisions based on their real numbers,
+or on "what's in their bank account"? Most decide on bank balance without knowing net revenue ‚Äî
+that is the core financial blind spot, and it is a strong driver toward the paid diagnosis.
+
+RED FLAGS THAT BLOCK FUNDING (push toward "rehab"):
+- Active judgments, tax liens, or tax defaults ‚Äî debt that is UNRESOLVED, not merely "being managed."
+- Business tax returns for the last 2 years unfiled, or filed with an unresolved balance.
+
+CASH-FLOW STRESS SIGNALS:
+- Accounts receivable aging ‚Äî 30 days is normal; 60+ days is when it becomes a problem.
+- Corporate debt whose status is stretched or unmanaged (it is "status," never "relationship").
+- No documented financial plan or budget; never had a financial audit or deep dive.
+
+PATH SELECTION ‚Äî choose exactly one:
+- "rehab"  : active judgments / liens / tax defaults, OR unfiled-or-delinquent taxes. Stabilize the
+             foundation before any growth strategy. The report becomes a resolution roadmap.
+- "urgent" : no legal/tax blocker, but the financial blind spot plus stacked stress signals
+             (stretched debt, heavy debt service, AR 60+, no budget). Real pressure ‚Äî "critical exposure."
+- "growth" : a functioning business with momentum but real, fixable gaps under the surface.
+- "strong" : decisions made on real numbers, debt well-managed, taxes current, AR healthy.
+             Here to optimize and scale ("untapped capacity"), not to fix.
+
+OPPORTUNITY FLAGS ‚Äî list any that apply (these are services CFO By Design / Spark can sell):
+- Merchant processing never reviewed, or unknown cost / value / coverage -> "MERCHANT_PROCESSING_OPP"
+- Heavy or stretched corporate debt -> "DEBT_RESTRUCTURE_OPP"
+- Unfiled taxes or an outstanding balance -> "TAX_RESOLUTION_OPP"
+- Weak digital presence vs competitors (reviews, local visibility), or a local / e-commerce model
+  that depends on it -> "DIGITAL_PRESENCE_OPP"`;
+
+const TIER_GUIDE = {
+  free: "FREE tier: concise and punchy. Surface the gaps and create urgency to upgrade, without solving everything. 3 gaps, 2 opportunities.",
+  paid_47: "$47 FULL DIAGNOSTIC: specific and prescriptive. Name exact gaps and what they cost. 3 gaps, 2 opportunities.",
+  paid_297: "$297 DEEP DIVE: senior strategist brief. Deep, numbers-driven, references their narrative answers. 3 gaps, 2 opportunities.",
 };
 
-function calculateScore(answers) {
-  let total = 0;
-  const categoryScores = {};
-  let rehabTriggered = false;
-  const contextData = {};
-  const contextOnly = ["Q9", "Q13"];
-  const aiAnchor = "Q14";
+function buildPrompt(tier, answers, contact) {
+  const answerBlock = answers
+    .map((a) => `- ${a.question}\n  Answer: ${a.answer}`)
+    .join("\n");
+  const guide = TIER_GUIDE[tier] || TIER_GUIDE.free;
 
-  if (parseInt(answers["Q11"]) === 1) {
-    rehabTriggered = true;
-  }
+  return `${ASSESSMENT_RUBRIC}
 
-  for (const [qId, value] of Object.entries(answers)) {
-    if (contextOnly.includes(qId)) {
-      contextData[qId] = value;
-      continue;
-    }
-    if (qId === aiAnchor) {
-      contextData[qId] = value;
-      continue;
-    }
-    const points = parseInt(value) || 0;
-    total += points;
-    categoryScores[qId] = points;
-  }
+CLIENT: ${contact.name || "Business Owner"}
+TIER: ${tier}
 
-  const hasPaidAnswers = Object.keys(answers).some(
-    k => parseInt(k.replace("Q", "")) >= 6
-  );
-  const tier = hasPaidAnswers ? "full_assessment" : "free_tier";
+THEIR ANSWERS:
+${answerBlock}
 
-  let path;
-  if (rehabTriggered) {
-    path = "REHAB_REQUIRED";
-  } else {
-    const thresholds = PATH_THRESHOLDS[tier];
-    if (total <= thresholds.CRITICAL_EXPOSURE.max) {
-      path = "CRITICAL_EXPOSURE";
-    } else if (total <= thresholds.HIDDEN_LIABILITY.max) {
-      path = "HIDDEN_LIABILITY";
-    } else {
-      path = "UNTAPPED_CAPACITY";
-    }
-  }
+TASK: Assess this business using the logic above. ${guide}
+Every sentence must reference THEIR actual answers ‚Äî no generic filler, no invented numbers.
 
-  return { total, categoryScores, path, rehabTriggered, tier, contextData };
-}
-
-function buildFreePrompt(answers, scoreResult, contactData) {
-  const stageLabels = {
-    "1": "Early stage — revenue is inconsistent",
-    "2": "Growing — money coming in but margins feel thin",
-    "3": "Scaling — revenue is real but structure isn't keeping up",
-    "5": "Established — $2M+, efficiency is the challenge",
-  };
-  const accountingLabels = {
-    "1": "doing it myself in spreadsheets",
-    "2": "using basic accounting software",
-    "3": "part-time bookkeeper",
-    "4": "full-time bookkeeper or accountant",
-    "5": "CPA with monthly reviews",
-  };
-  const breakEvenLabels = {
-    "1": "No — never calculated it",
-    "2": "Rough idea but never done the actual math",
-    "3": "Calculated before but don't actively track",
-    "4": "Yes — know it and check occasionally",
-    "5": "Yes — use it to make decisions every month",
-  };
-
-  return `You are a Senior Fractional CFO for high-growth businesses.
-Your tone is professional, direct, and diagnostic. No fluff. No generic language.
-Every sentence must reference this specific client's answers.
-
-Client: ${contactData.firstName || "Business Owner"}
-Revenue stage: ${stageLabels[answers.Q1] || answers.Q1}
-Accounting: ${accountingLabels[answers.Q2] || answers.Q2}
-Break-even awareness: ${breakEvenLabels[answers.Q3] || answers.Q3}
-Reporting confidence: ${answers.Q4}/5
-Business maturity: ${answers.Q5}/5
-
-Diagnostic path: ${scoreResult.path}
-Free score: ${scoreResult.total} out of 25
-
-Generate a financial pulse check report in clean Markdown.
-Follow this exact structure:
-
-**Your path: ${scoreResult.path}**
-Score: ${scoreResult.total} out of 25
-
-[One paragraph interpreting the specific relationship between 
-their accounting answer and break-even awareness. Name the 
-exact risk this combination creates for a business at their 
-stage. No generic language.]
-
-**What this means for your funding access**
-[2-3 sentences. Specific to their revenue stage and 
-reporting confidence score. Name what lenders see.]
-
-**What this assessment did not cover**
-[Name the 5 categories not yet assessed: funding readiness, 
-credit position, cash flow management, debt obligations, 
-advisory support. State that lenders evaluate all 5. 
-One sentence each. Create urgency without exaggeration.]
-
-**Your next step**
-[One CTA sentence pointing to the $47 Full Diagnostic 
-+ 30-minute Strategy Session.]
-
-Max 350 words. Prose only in main narrative — no bullet lists.`;
-}
-
-function buildPaid47Prompt(answers, scoreResult, contactData, businessProfile) {
-  const q14 = scoreResult.contextData["Q14"] || "";
-  const q13 = scoreResult.contextData["Q13"] || "";
-  const q9 = scoreResult.contextData["Q9"] || "";
-
-  const industryInsights = {
-    "Professional services — consulting, coaching, or agency":
-      "Coaches and consultants at your revenue stage who access $100K+ credit lines share one thing — documented break-even and monthly P&L review.",
-    "Construction, trades, or home services":
-      "Construction businesses at your revenue stage typically need equipment financing and tax resolution before growth capital. Lenders look at project revenue consistency and tax compliance first.",
-    "Real estate or mortgage / lending":
-      "Mortgage and lending professionals face personal credit scrutiny above almost any other industry. Your personal credit score directly determines what business products you can access.",
-    "Credit repair or financial coaching":
-      "Financial coaches who can demonstrate their own financial structure to clients close more high-ticket engagements. Your credibility is directly tied to your financial health.",
-    "Nonprofit or community organization":
-      "Nonprofits with earned revenue arms qualify for business funding products most assume are unavailable. The key is separating operational revenue from donation income in your financials.",
-  };
-
-  const competitorInsight = industryInsights[q9] ||
-    "Businesses in your industry that access growth capital consistently share one trait — organized financials they can present on demand.";
-
-  return `You are a Senior Fractional CFO for high-growth businesses.
-Tone: professional, direct, diagnostic. No fluff.
-Every sentence must reference this client's actual answers.
-
-CLIENT PROFILE:
-Name: ${contactData.firstName || "Business Owner"}
-Business: ${businessProfile.businessName || "not provided"}
-Website: ${businessProfile.website || "not provided"}
-Market: ${businessProfile.city || "not provided"}
-Industry: ${q9 || "not specified"}
-Path: ${scoreResult.path}
-Full score: ${scoreResult.total}/54
-Rehab triggered: ${scoreResult.rehabTriggered}
-
-ALL ANSWERS:
-Q1 Revenue stage: ${answers.Q1}
-Q2 Accounting: ${answers.Q2}
-Q3 Break-even: ${answers.Q3}
-Q4 Reporting confidence: ${answers.Q4}
-Q5 Business maturity: ${answers.Q5}
-Q6 Funding history: ${answers.Q6}
-Q7 Credit profile: ${answers.Q7}
-Q8 Geographic scope: ${answers.Q8}
-Q10 Cash flow: ${answers.Q10}
-Q11 Debt/obligations: ${answers.Q11}
-Q12 Advisory support: ${answers.Q12}
-Q13 12-month goal: ${q13}
-Q14 Stated challenge: ${q14}
-
-Generate a full diagnostic report in clean Markdown for PDF export.
-
-${q14
-  ? `OPENING: Lead with "${q14}" — validate this challenge in 2-3 sentences and link it directly to their quantitative scores.`
-  : "OPENING: Lead with their single lowest-scoring category and what it signals."
-}
-
-SECTION 1 — YOUR FINANCIAL HEALTH PATH
-State path name and score. 2-3 sentences on what this path 
-means at their specific revenue stage. Concrete — not abstract.
-
-SECTION 2 — WHAT YOUR SCORES ARE TELLING US
-Prose. Walk through the 4-5 most significant categories.
-Name the most critical interplay pair for this client specifically.
-Apply cascade logic where relevant.
-
-SECTION 3 — YOUR SINGLE MOST URGENT GAP
-One gap only. What it is. What it costs them right now.
-What it is blocking — tie to their Q13 goal directly.
-
-SECTION 4 — WHAT YOUR COMPETITORS ARE DOING DIFFERENTLY
-${scoreResult.rehabTriggered
-  ? "REHAB PATH: Replace this section with resolution roadmap — what happens in months 1-3, 4-6, and 7-12 if they address the active matter now."
-  : `2-3 insights. Use this industry context: ${competitorInsight}`
-}
-
-SECTION 5 — TWO SERVICE BUNDLES
-Two specific CFO By Design bundles tied to their top two gaps.
-Name what each bundle does in 30 days and 90 days.
-
-SECTION 6 — YOUR 30-MINUTE STRATEGY SESSION
-3-4 sentences. Reference their Q13 goal by name.
-State what will happen on the call — specific, not vague.
-End with: Book your session → ${CONFIG.BOOKING_LINK_47}
-
-SECTION 7 — WHAT A SENIOR STRATEGIST SEES THAT THIS REPORT CANNOT
-Lead with one observation requiring deeper analysis than a 
-scored assessment can provide. Include the note from senior team.
-Reference their path and lowest two scores specifically.
-End with: Ready for the full analysis? → ${CONFIG.PAYMENT_LINK_297}
-
-Constraints: Max 650 words. Prose-driven. No generic language.`;
-}
-
-function buildDeepDivePrompt(answers, scoreResult, deepDiveAnswers, contactData) {
-  const q14 = scoreResult.contextData["Q14"] || "";
-  const qJ = deepDiveAnswers["Q_J"] || "";
-  const qH = deepDiveAnswers["Q_H"] || "";
-  const qI = deepDiveAnswers["Q_I"] || "";
-
-  const vendorFlag = parseInt(qH) <= 2 && parseInt(qH) > 0;
-  const taxFlag = parseInt(qI) >= 3;
-
-  return `You are the CFO By Design Senior Strategist Intelligence System.
-Generate an internal prep brief for a human senior strategist.
-Direct, blunt, internal document. Bullet points fine throughout.
-
-${scoreResult.rehabTriggered ? "⚑ REHAB FLAG ACTIVE — open Section 4 with this. Tax or legal matter must be resolved first." : ""}
-${taxFlag ? "⚑ TAX SITUATION FLAG — client has outstanding tax matter. Position Tax Resolution as prerequisite." : ""}
-${vendorFlag ? "★ VENDOR OPPORTUNITY — client has not reviewed merchant processing, payroll, or insurance costs. Mention before call closes." : ""}
-
-CLIENT:
-Name: ${contactData.firstName || ""} ${contactData.lastName || ""}
-Path: ${scoreResult.path}
-Score: ${scoreResult.total}/54
-Rehab triggered: ${scoreResult.rehabTriggered}
-
-ASSESSMENT ANSWERS:
-Q1-Q5: ${JSON.stringify({Q1:answers.Q1,Q2:answers.Q2,Q3:answers.Q3,Q4:answers.Q4,Q5:answers.Q5})}
-Q6-Q12: ${JSON.stringify({Q6:answers.Q6,Q7:answers.Q7,Q8:answers.Q8,Q10:answers.Q10,Q11:answers.Q11,Q12:answers.Q12})}
-Q13 goal: ${scoreResult.contextData["Q13"] || ""}
-Q14 challenge: ${q14}
-
-DEEP DIVE CONTEXT:
-Q_A Team size: ${deepDiveAnswers.Q_A || ""}
-Q_B Revenue mix: ${deepDiveAnswers.Q_B || ""}
-Q_C Budget/plan: ${deepDiveAnswers.Q_C || ""}
-Q_D Pricing model: ${deepDiveAnswers.Q_D || ""}
-Q_E Accounts receivable: ${deepDiveAnswers.Q_E || ""}
-Q_F Audit history: ${deepDiveAnswers.Q_F || ""}
-Q_G Debt relationship: ${deepDiveAnswers.Q_G || ""}
-Q_H Vendor cost review: ${qH}
-Q_I Tax situation: ${qI}
-Q_J 3-year vision: ${qJ}
-
-Generate the full strategist brief:
-
-SECTION 1 — CLIENT SNAPSHOT
-One prose paragraph. Brief a colleague in 30 seconds.
-
-SECTION 2 — THE GAP
-Q_J vision vs Q14 obstacle. One direct sentence naming the gap.
-3-4 sentences on why current structure makes that vision hard.
-
-SECTION 3 — THREE FINANCIAL POTHOLES
-For each: name it, what the data shows, why it matters,
-what breaks first, earliest warning signal.
-Apply cascade logic. Be specific to their answers.
-
-SECTION 4 — PRE-MORTEM
-4-6 sentence scenario. What happens in 12 months if nothing changes.
-Specific to their answers. Not generic.
-${scoreResult.rehabTriggered ? "Open with the active matter — what happens if unresolved before growth." : ""}
-
-SECTION 5 — CALL BATTLE PLAN
-Phase 1 (0-10 min): 2-3 specific openers
-Phase 2 (10-35 min): sequenced analysis walkthrough
-Phase 3 (35-50 min): quick wins (30 days), medium bets (90 days),
-long game (6-12 months), close toward CFO retainer
-${vendorFlag ? "Include vendor cost review talking point before close." : ""}
-
-SECTION 6 — BRIDGE TO ONGOING ENGAGEMENT
-2-3 talking points using Q_J vision and biggest pothole.
-
-SECTION 7 — WATCH FLAGS
-Any sensitivity flags. ${taxFlag ? "TAX RESOLUTION: position carefully — prerequisite, not obstacle." : ""}
-${vendorFlag ? "VENDOR OPPORTUNITY: merchant processing, payroll, insurance savings conversation." : ""}
-
-Max 600 words. Scannable in 5 minutes.
-END: PATH: ${scoreResult.path} | SCORE: ${scoreResult.total}/54`;
+Return ONLY valid JSON ‚Äî no markdown code fences, no text before or after ‚Äî in exactly this shape:
+{
+  "path": "rehab | urgent | growth | strong",
+  "badge": "SHORT UPPERCASE LABEL",
+  "headline": "one bold sentence naming their reality",
+  "opener": "2-3 sentences describing their actual situation",
+  "context": "one sentence of perspective",
+  "gaps": [
+    { "title": "short", "impact": "the concrete cost/consequence", "priority": "CRITICAL | HIGH | MEDIUM" }
+  ],
+  "opportunities": [
+    { "title": "short", "desc": "one sentence", "impact": "short tag, e.g. Unlock $250K+" }
+  ],
+  "nextStepHeadline": "short",
+  "nextStepBody": "2-3 sentences leading to a strategy call",
+  "opportunityFlags": ["MERCHANT_PROCESSING_OPP"]
+}`;
 }
 
 async function callClaude(prompt, env) {
@@ -331,72 +110,73 @@ async function callClaude(prompt, env) {
     headers: {
       "Content-Type": "application/json",
       "x-api-key": env.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
+      "anthropic-version": CONFIG.ANTHROPIC_VERSION,
     },
     body: JSON.stringify({
       model: CONFIG.CLAUDE_MODEL,
-      max_tokens: 1500,
+      max_tokens: 2000,
       messages: [{ role: "user", content: prompt }],
     }),
   });
   if (!response.ok) {
-    throw new Error(`Claude API error: ${response.status}`);
+    const detail = await response.text();
+    throw new Error(`Claude API ${response.status}: ${detail.slice(0, 300)}`);
   }
   const data = await response.json();
   return data.content[0].text;
 }
 
+// Tolerant JSON extraction ‚Äî strips fences / preamble if the model adds any.
+function parseAgentJson(text) {
+  let t = text.trim();
+  t = t.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
+  const start = t.indexOf("{");
+  const end = t.lastIndexOf("}");
+  if (start === -1 || end === -1) throw new Error("Agent returned no JSON object");
+  return JSON.parse(t.slice(start, end + 1));
+}
+
+// Accept answers as an array [{question, answer}] OR an object { "Q1": "..." }.
+function normalizeAnswers(raw) {
+  if (Array.isArray(raw)) {
+    return raw
+      .filter((a) => a && (a.answer !== undefined && a.answer !== ""))
+      .map((a) => ({ question: String(a.question || a.id || "Question"), answer: String(a.answer) }));
+  }
+  if (raw && typeof raw === "object") {
+    return Object.entries(raw)
+      .filter(([, v]) => v !== undefined && v !== "")
+      .map(([k, v]) => ({ question: k, answer: String(v) }));
+  }
+  return [];
+}
+
 async function updateGHLContact(contactId, fields, env) {
   if (!contactId || !env.GHL_API_KEY) return false;
-  const response = await fetch(
-    `${CONFIG.GHL_API_BASE}/contacts/${contactId}`,
-    {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${env.GHL_API_KEY}`,
-        Version: "2021-07-28",
-      },
-      body: JSON.stringify({ customFields: fields }),
-    }
-  );
-  return response.ok;
+  const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${env.GHL_API_KEY}`,
+      Version: "2021-07-28",
+    },
+    body: JSON.stringify({ customFields: fields }),
+  });
+  return res.ok;
 }
 
 async function addGHLTag(contactId, tags, env) {
-  if (!contactId || !env.GHL_API_KEY) return false;
-  const response = await fetch(
-    `${CONFIG.GHL_API_BASE}/contacts/${contactId}/tags`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${env.GHL_API_KEY}`,
-        Version: "2021-07-28",
-      },
-      body: JSON.stringify({ tags }),
-    }
-  );
-  return response.ok;
-}
-
-async function syncZohoCRM(contactData, scoreResult, env) {
-  // Wire after GHL flow confirmed working
-  console.log("Zoho sync pending implementation");
-  return true;
-}
-
-function determineTier(body) {
-  if (body.tier) return body.tier;
-  const answers = body.answers || {};
-  const hasDeepDive = body.deepDiveAnswers &&
-    Object.keys(body.deepDiveAnswers).length > 0;
-  const hasPaid = Object.keys(answers).some(
-    k => parseInt(k.replace("Q", "")) >= 6
-  );
-  if (hasDeepDive) return "paid_297";
-  if (hasPaid) return "paid_47";
-  return "free";
+  if (!contactId || !env.GHL_API_KEY || !tags.length) return false;
+  const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}/tags`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${env.GHL_API_KEY}`,
+      Version: "2021-07-28",
+    },
+    body: JSON.stringify({ tags }),
+  });
+  return res.ok;
 }
 
 function corsHeaders() {
@@ -407,134 +187,59 @@ function corsHeaders() {
   };
 }
 
+function json(body, status = 200) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json", ...corsHeaders() },
+  });
+}
+
 export default {
   async fetch(request, env, ctx) {
-    if (request.method === "OPTIONS") {
-      return new Response(null, { headers: corsHeaders() });
-    }
-    if (request.method !== "POST") {
-      return new Response(JSON.stringify({ error: "POST only" }), {
-        status: 405,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
+    if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders() });
+    if (request.method !== "POST") return json({ success: false, error: "POST only" }, 405);
 
     let body;
     try {
       body = await request.json();
     } catch {
-      return new Response(JSON.stringify({ error: "Invalid JSON" }), {
-        status: 400,
-        headers: { "Content-Type": "application/json" },
-      });
+      return json({ success: false, error: "Invalid JSON body" }, 400);
     }
 
-    const {
-      answers = {},
-      deepDiveAnswers = {},
-      contactData = {},
-      businessProfile = {},
-    } = body;
+    const tier = body.tier || "free";
+    const contact = body.contact || body.contactData || {};
+    const answers = normalizeAnswers(body.answers);
+    if (!answers.length) return json({ success: false, error: "No answers provided" }, 400);
 
-    const tier = determineTier(body);
-    const scoreResult = calculateScore(answers);
-
-    let prompt;
-    let claudeOutput;
-    let ghlFields = [];
-    let tags = [];
-
+    let agent;
     try {
-      if (tier === "free") {
-        prompt = buildFreePrompt(answers, scoreResult, contactData);
-        claudeOutput = await callClaude(prompt, env);
-        ghlFields = [
-          { key: "swot_path", field_value: scoreResult.path },
-          { key: "swot_score", field_value: String(scoreResult.total) },
-          { key: "swot_free_report", field_value: claudeOutput },
-        ];
-        tags = ["SWOT_FREE_LEAD"];
-      }
-
-      else if (tier === "paid_47") {
-        prompt = buildPaid47Prompt(
-          answers, scoreResult, contactData, businessProfile
-        );
-        claudeOutput = await callClaude(prompt, env);
-        ghlFields = [
-          { key: "swot_paid_path", field_value: scoreResult.path },
-          { key: "swot_paid_score", field_value: String(scoreResult.total) },
-          { key: "swot_full_report", field_value: claudeOutput },
-          { key: "swot_rehab_flag",
-            field_value: String(scoreResult.rehabTriggered) },
-        ];
-        tags = ["SWOT_PAID_LEAD"];
-      }
-
-      else if (tier === "paid_297") {
-        prompt = buildDeepDivePrompt(
-          answers, scoreResult, deepDiveAnswers, contactData
-        );
-        claudeOutput = await callClaude(prompt, env);
-
-        const vendorVal = parseInt(deepDiveAnswers.Q_H) || 0;
-        const taxVal = parseInt(deepDiveAnswers.Q_I) || 0;
-        if (vendorVal > 0 && vendorVal <= 2) tags.push("VENDOR_OPPORTUNITY");
-        if (taxVal >= 3) tags.push("TAX_RESOLUTION_OPPORTUNITY");
-
-        ghlFields = [
-          { key: "swot_297_path", field_value: scoreResult.path },
-          { key: "swot_297_score", field_value: String(scoreResult.total) },
-          { key: "swot_strategist_brief", field_value: claudeOutput },
-          { key: "swot_deep_dive_booked", field_value: "true" },
-          { key: "swot_vendor_review",
-            field_value: deepDiveAnswers.Q_H || "" },
-          { key: "swot_tax_situation",
-            field_value: deepDiveAnswers.Q_I || "" },
-        ];
-        tags.push("SWOT_DEEP_DIVE_BOOKED");
-      }
-
-      if (contactData.contactId) {
-        await updateGHLContact(contactData.contactId, ghlFields, env);
-        await addGHLTag(contactData.contactId, tags, env);
-        ctx.waitUntil(
-          syncZohoCRM(contactData, scoreResult, env)
-        );
-      }
-
-      return new Response(
-        JSON.stringify({
-          success: true,
-          tier,
-          path: scoreResult.path,
-          score: scoreResult.total,
-          rehabTriggered: scoreResult.rehabTriggered,
-          report: claudeOutput,
-          bookingLink:
-            tier === "paid_47" ? CONFIG.BOOKING_LINK_47
-            : tier === "paid_297" ? CONFIG.BOOKING_LINK_297
-            : null,
-        }),
-        {
-          headers: {
-            "Content-Type": "application/json",
-            ...corsHeaders(),
-          },
-        }
-      );
+      const raw = await callClaude(buildPrompt(tier, answers, contact), env);
+      agent = parseAgentJson(raw);
     } catch (err) {
-      console.error("Worker error:", err.message);
-      return new Response(
-        JSON.stringify({ success: false, error: err.message }),
-        {
-          status: 500,
-          headers: {
-            "Content-Type": "application/json",
-            ...corsHeaders(),
-          },
-        }
+      console.error("Assessment error:", err.message);
+      return json({ success: false, error: err.message }, 500);
+    }
+
+    // Best-effort GHL writeback (only if a contactId is supplied and fields exist).
+    if (contact.contactId) {
+      const fields = [
+        { key: "swot_path", field_value: String(agent.path || "") },
+        { key: "swot_report_summary", field_value: String(agent.opener || "") },
+      ];
+      const tags = [`SWOT_${tier.toUpperCase()}`, ...(agent.opportunityFlags || [])];
+      ctx.waitUntil(
+        Promise.allSettled([
+          updateGHLContact(contact.contactId, fields, env),
+          addGHLTag(contact.contactId, tags, env),
+        ])
       );
     }
+
+    const bookingLink =
+      tier === "paid_297" ? CONFIG.BOOKING_LINK_297
+      : tier === "paid_47" ? CONFIG.BOOKING_LINK_47
+      : null;
+
+    return json({ success: true, tier, ...agent, bookingLink });
   },
 };
