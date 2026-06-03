@@ -299,6 +299,9 @@ export default {
         { key: "swot_path", field_value: String(agent.path || "") },
         { key: "swot_rehab_flag", field_value: agent.path === "rehab" ? "true" : "false" },
         { key: reportFieldKey, field_value: reportBody },
+        // Mirror the report into the new SWOT "Business Playbook" field so email
+        // templates can pull {{contact.business_playbook}} regardless of tier.
+        { key: "business_playbook", field_value: reportBody },
       ];
       if (tier === "paid_297") {
         fields.push({ key: "swot_deep_dive_booked", field_value: "true" });
