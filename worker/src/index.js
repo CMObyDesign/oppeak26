@@ -1,5 +1,5 @@
 /**
- * CFO By Design ‚Äî SWOT Engine Worker v3
+ * CFO By Design ‚Äö√Ñ√Æ SWOT Engine Worker v3
  * Agent-assessed funnel.
  *
  * Flow: form answers -> Claude assesses (Miguel's logic) + writes the report
@@ -22,7 +22,7 @@ const CONFIG = {
   PAYMENT_LINK_297: "https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0",
 };
 
-// How the agent assesses ‚Äî Miguel Hernandez's actual diagnostic logic, grounded in the
+// How the agent assesses ‚Äö√Ñ√Æ Miguel Hernandez's actual diagnostic logic, grounded in the
 // May 27, 2026 session transcript. Phrasing kept close to his own words on purpose.
 const ASSESSMENT_RUBRIC = `You are a Senior Fractional CFO for CFO By Design, diagnosing a business from a SWOT intake.
 Diagnose the way Miguel Hernandez does. The whole assessment is about one thing: the owner's
@@ -30,32 +30,32 @@ Diagnose the way Miguel Hernandez does. The whole assessment is about one thing:
 
 THE TWO CRITICAL NUMBERS (Miguel: "those two numbers together are critical and they're very basic"):
 - Total corporate debt the business carries.
-- Monthly debt service ‚Äî what they pay every month servicing that debt.
+- Monthly debt service ‚Äö√Ñ√Æ what they pay every month servicing that debt.
 Together these tell you whether cash flow can actually support the business.
 
 THE MAGIC QUESTION (Miguel's term): does the owner make decisions based on their real numbers,
-or on "what's in their bank account"? Most decide on bank balance without knowing net revenue ‚Äî
+or on "what's in their bank account"? Most decide on bank balance without knowing net revenue ‚Äö√Ñ√Æ
 that is the core financial blind spot, and it is a strong driver toward the paid diagnosis.
 
 RED FLAGS THAT BLOCK FUNDING (push toward "rehab"):
-- Active judgments, tax liens, or tax defaults ‚Äî debt that is UNRESOLVED, not merely "being managed."
+- Active judgments, tax liens, or tax defaults ‚Äö√Ñ√Æ debt that is UNRESOLVED, not merely "being managed."
 - Business tax returns for the last 2 years unfiled, or filed with an unresolved balance.
 
 CASH-FLOW STRESS SIGNALS:
-- Accounts receivable aging ‚Äî 30 days is normal; 60+ days is when it becomes a problem.
+- Accounts receivable aging ‚Äö√Ñ√Æ 30 days is normal; 60+ days is when it becomes a problem.
 - Corporate debt whose status is stretched or unmanaged (it is "status," never "relationship").
 - No documented financial plan or budget; never had a financial audit or deep dive.
 
-PATH SELECTION ‚Äî choose exactly one:
+PATH SELECTION ‚Äö√Ñ√Æ choose exactly one:
 - "rehab"  : active judgments / liens / tax defaults, OR unfiled-or-delinquent taxes. Stabilize the
              foundation before any growth strategy. The report becomes a resolution roadmap.
 - "urgent" : no legal/tax blocker, but the financial blind spot plus stacked stress signals
-             (stretched debt, heavy debt service, AR 60+, no budget). Real pressure ‚Äî "critical exposure."
+             (stretched debt, heavy debt service, AR 60+, no budget). Real pressure ‚Äö√Ñ√Æ "critical exposure."
 - "growth" : a functioning business with momentum but real, fixable gaps under the surface.
 - "strong" : decisions made on real numbers, debt well-managed, taxes current, AR healthy.
              Here to optimize and scale ("untapped capacity"), not to fix.
 
-OPPORTUNITY FLAGS ‚Äî list any that apply (these are services CFO By Design / Spark can sell):
+OPPORTUNITY FLAGS ‚Äö√Ñ√Æ list any that apply (these are services CFO By Design / Spark can sell):
 - Merchant processing never reviewed, or unknown cost / value / coverage -> "MERCHANT_PROCESSING_OPP"
 - Heavy or stretched corporate debt -> "DEBT_RESTRUCTURE_OPP"
 - Unfiled taxes or an outstanding balance -> "TAX_RESOLUTION_OPP"
@@ -68,24 +68,37 @@ const TIER_GUIDE = {
   paid_297: "$297 DEEP DIVE: senior strategist brief. Deep, numbers-driven, references their narrative answers. 3 gaps, 2 opportunities.",
 };
 
-function buildPrompt(tier, answers, contact) {
+function buildPrompt(tier, answers, contact, businessProfile = {}) {
   const answerBlock = answers
     .map((a) => `- ${a.question}\n  Answer: ${a.answer}`)
     .join("\n");
   const guide = TIER_GUIDE[tier] || TIER_GUIDE.free;
 
+  // Optional business profile (sent at $47 + $297 tiers from the GHL survey
+  // business-info section). Only emit lines that have real values.
+  const profileLines = [
+    businessProfile.businessName && `Business: ${businessProfile.businessName}`,
+    businessProfile.industry     && `Industry: ${businessProfile.industry}`,
+    businessProfile.website      && `Website: ${businessProfile.website}`,
+    [businessProfile.city, businessProfile.state, businessProfile.country]
+      .filter(Boolean).join(", "),
+  ].filter(Boolean);
+  const profileBlock = profileLines.length
+    ? `\nBUSINESS PROFILE:\n${profileLines.join("\n")}\n`
+    : "";
+
   return `${ASSESSMENT_RUBRIC}
 
-CLIENT: ${contact.name || "Business Owner"}
+CLIENT: ${contact.name || "Business Owner"}${profileBlock}
 TIER: ${tier}
 
 THEIR ANSWERS:
 ${answerBlock}
 
 TASK: Assess this business using the logic above. ${guide}
-Every sentence must reference THEIR actual answers ‚Äî no generic filler, no invented numbers.
+Every sentence must reference THEIR actual answers ‚Äö√Ñ√Æ no generic filler, no invented numbers.
 
-Return ONLY valid JSON ‚Äî no markdown code fences, no text before or after ‚Äî in exactly this shape:
+Return ONLY valid JSON ‚Äö√Ñ√Æ no markdown code fences, no text before or after ‚Äö√Ñ√Æ in exactly this shape:
 {
   "path": "rehab | urgent | growth | strong",
   "badge": "SHORT UPPERCASE LABEL",
@@ -174,7 +187,7 @@ ${context}
 `.trim();
 }
 
-// Tolerant JSON extraction ‚Äî strips fences / preamble if the model adds any.
+// Tolerant JSON extraction ‚Äö√Ñ√Æ strips fences / preamble if the model adds any.
 function parseAgentJson(text) {
   let t = text.trim();
   t = t.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
@@ -304,12 +317,16 @@ export default {
 
     const tier = body.tier || "free";
     const contact = body.contact || body.contactData || {};
+    const businessProfile = body.businessProfile || {};
     const answers = normalizeAnswers(body.answers);
     if (!answers.length) return json({ success: false, error: "No answers provided" }, 400);
 
     let agent;
     try {
-      const raw = await callClaude(buildPrompt(tier, answers, contact), env);
+      const raw = await callClaude(
+        buildPrompt(tier, answers, contact, businessProfile),
+        env
+      );
       agent = parseAgentJson(raw);
     } catch (err) {
       console.error("Assessment error:", err.message);
@@ -323,10 +340,10 @@ export default {
     if (contactId) {
       const reportBody = buildReportHtml(agent);
 
-      // One report field per tier ‚Äî no mirroring. Each tier has its own named deliverable:
-      //   free     ‚Üí swot_free_report      (Free SWOT Report)
-      //   paid_47  ‚Üí swot_full_report      (Full Diagnostic Report)
-      //   paid_297 ‚Üí business_playbook     (Business Playbook ‚Äî the $297 deliverable)
+      // One report field per tier ‚Äö√Ñ√Æ no mirroring. Each tier has its own named deliverable:
+      //   free     ‚Äö√ú√≠ swot_free_report      (Free SWOT Report)
+      //   paid_47  ‚Äö√ú√≠ swot_full_report      (Full Diagnostic Report)
+      //   paid_297 ‚Äö√ú√≠ business_playbook     (Business Playbook ‚Äö√Ñ√Æ the $297 deliverable)
       const reportFieldKey =
         tier === "paid_297" ? "business_playbook"
         : tier === "paid_47" ? "swot_full_report"
