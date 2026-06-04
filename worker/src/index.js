@@ -78,10 +78,11 @@ similar businesses. If an answer doesn't explicitly establish the trigger, leave
 - DIGITAL_PRESENCE_OPP: Fire when the business explicitly signals weak digital visibility
   (no/low reviews, no GBP, invisible in search/social, weak vs competitors) AND the business
   model depends on local discovery or online acquisition. Do NOT fire for businesses whose
-  growth model is referral-only and explicitly so.`;
+  growth model is referral-only and explicitly so. NEVER fire on the FREE tier ‚Äî digital
+  presence findings are a paid-tier reveal and must be held back from the free report.`;
 
 const TIER_GUIDE = {
-  free: "FREE tier: concise and punchy. Surface the gaps and create urgency to upgrade, without solving everything. 3 gaps, 2 opportunities.",
+  free: "FREE tier: concise and punchy. Surface the gaps and create urgency to upgrade, without solving everything. 3 gaps, 2 opportunities. DO NOT use digital presence / Google Business Profile / reviews / SEO as a gap or opportunity in the FREE report ‚Äî that finding is reserved for the paid diagnostic. Focus the free tier on financial visibility, cash flow, decision-making, revenue concentration, and pipeline math.",
   paid_47: "$47 FULL DIAGNOSTIC: specific and prescriptive. Name exact gaps and what they cost. 3 gaps, 2 opportunities.",
   paid_297: "$297 DEEP DIVE: senior strategist brief. Deep, numbers-driven, references their narrative answers. 3 gaps, 2 opportunities.",
 };
@@ -473,6 +474,29 @@ export default {
     } catch (err) {
       console.error("Assessment error:", err.message);
       return json({ success: false, error: err.message }, 500);
+    }
+
+    // Defensive gate: digital presence is a paid-tier reveal. Strip from FREE output
+    // even if the agent misfires, and scrub any digital-presence opportunity from
+    // the free report body so it isn't given away in the teaser.
+    if (tier === "free") {
+      agent.opportunityFlags = (agent.opportunityFlags || []).filter(
+        (f) => f !== "DIGITAL_PRESENCE_OPP"
+      );
+      const looksDigital = (s) => {
+        const t = String(s || "").toLowerCase();
+        return /google business profile|gbp\b|\bseo\b|online review|low reviews|few reviews|digital presence|search visibility|social presence/.test(t);
+      };
+      if (Array.isArray(agent.opportunities)) {
+        agent.opportunities = agent.opportunities.filter(
+          (o) => !looksDigital(o && (o.title + " " + o.desc))
+        );
+      }
+      if (Array.isArray(agent.gaps)) {
+        agent.gaps = agent.gaps.filter(
+          (g) => !looksDigital(g && (g.title + " " + g.impact))
+        );
+      }
     }
 
     // Resolve a GHL contactId from email if one wasn't passed in.
