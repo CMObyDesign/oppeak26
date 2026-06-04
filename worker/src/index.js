@@ -296,6 +296,68 @@ const TIER_REQUIRED_TAG = {
   paid_297: "swot_paid_297",
 };
 
+// POST /upload ‚Äî multipart/form-data with a "file" field.
+// Forwards to GHL Media Library and returns the hosted URL.
+// Optional form fields: contactId (for future per-contact organization).
+// Returns: { success, url, fileId, fileName, size }
+async function handleUpload(request, env) {
+  if (!env.GHL_API_KEY) {
+    return json({ success: false, error: "GHL not configured" }, 500);
+  }
+
+  let formData;
+  try {
+    formData = await request.formData();
+  } catch {
+    return json({ success: false, error: "Invalid multipart/form-data body" }, 400);
+  }
+
+  const file = formData.get("file");
+  // In Workers, file-typed parts come back as File. String would mean no file part.
+  if (!file || typeof file === "string") {
+    return json({ success: false, error: "Missing 'file' field" }, 400);
+  }
+
+  // Conservative size limit ‚Äî covers P&L PDFs, blocks accidental huge uploads.
+  const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
+  if (file.size > MAX_BYTES) {
+    return json({ success: false, error: "File too large (max 25 MB)" }, 413);
+  }
+
+  // Forward to GHL Media Library.
+  const ghlForm = new FormData();
+  ghlForm.append("file", file, file.name || "upload");
+  ghlForm.append("locationId", CONFIG.GHL_LOCATION_ID);
+  ghlForm.append("hosted", "false");
+
+  const res = await fetch(`${CONFIG.GHL_API_BASE}/medias/upload-file`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.GHL_API_KEY}`,
+      Version: "2021-07-28",
+      // Don't set Content-Type ‚Äî fetch sets it (with the multipart boundary) automatically.
+    },
+    body: ghlForm,
+  });
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    return json(
+      { success: false, error: `GHL upload failed (${res.status})`, detail: detail.slice(0, 300) },
+      502
+    );
+  }
+
+  const data = await res.json().catch(() => ({}));
+  return json({
+    success: true,
+    fileId:   data.fileId   || data.id      || null,
+    url:      data.url      || data.fileUrl || data.path || null,
+    fileName: file.name || "file",
+    size:     file.size,
+  });
+}
+
 // POST /verify ‚Äî confirm a contact has paid for a tier.
 // Body: { contactId, tier }
 // Returns: { verified: boolean, contact: {contactId, name, email} | null }
@@ -359,6 +421,12 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders() });
     if (request.method !== "POST") return json({ success: false, error: "POST only" }, 405);
 
+    // Route /upload BEFORE JSON parsing ‚Äî it expects multipart/form-data.
+    const path = new URL(request.url).pathname.replace(/\/+$/, "");
+    if (path === "/upload") {
+      return handleUpload(request, env);
+    }
+
     let body;
     try {
       body = await request.json();
@@ -366,8 +434,7 @@ export default {
       return json({ success: false, error: "Invalid JSON body" }, 400);
     }
 
-    // Route /verify separately ‚Äî verifies a contact's paid status by tag.
-    const path = new URL(request.url).pathname.replace(/\/+$/, "");
+    // /verify uses JSON like the main assessment endpoint.
     if (path === "/verify") {
       return handleVerify(body, env);
     }
