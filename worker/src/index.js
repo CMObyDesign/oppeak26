@@ -288,6 +288,57 @@ async function addGHLTag(contactId, tags, env) {
   return res.ok;
 }
 
+// Tag a paid tier requires before the front-end can show its survey.
+// GHL workflows add these tags on "Payment Successful" so they cannot
+// be added or spoofed by the front-end / URL params.
+const TIER_REQUIRED_TAG = {
+  paid_47:  "swot_paid_47",
+  paid_297: "swot_paid_297",
+};
+
+// POST /verify ‚Äî confirm a contact has paid for a tier.
+// Body: { contactId, tier }
+// Returns: { verified: boolean, contact: {contactId, name, email} | null }
+async function handleVerify(body, env) {
+  const contactId = body?.contactId;
+  const tier = body?.tier;
+  if (!contactId || !tier) {
+    return json({ verified: false, error: "Missing contactId or tier" }, 400);
+  }
+  const requiredTag = TIER_REQUIRED_TAG[tier];
+  if (!requiredTag) {
+    return json({ verified: false, error: `Tier "${tier}" does not require verification` }, 400);
+  }
+  if (!env.GHL_API_KEY) {
+    return json({ verified: false, error: "GHL not configured" }, 500);
+  }
+
+  const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}`, {
+    headers: {
+      Authorization: `Bearer ${env.GHL_API_KEY}`,
+      Version: "2021-07-28",
+    },
+  });
+  if (!res.ok) {
+    return json({ verified: false, error: "Contact not found" }, 404);
+  }
+  const data = await res.json().catch(() => ({}));
+  const c = data?.contact || {};
+  const tags = (c.tags || []).map((t) => String(t).toLowerCase());
+  const verified = tags.includes(requiredTag.toLowerCase());
+
+  return json({
+    verified,
+    contact: verified
+      ? {
+          contactId,
+          name: c.contactName || [c.firstName, c.lastName].filter(Boolean).join(" "),
+          email: c.email || "",
+        }
+      : null,
+  });
+}
+
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
@@ -313,6 +364,12 @@ export default {
       body = await request.json();
     } catch {
       return json({ success: false, error: "Invalid JSON body" }, 400);
+    }
+
+    // Route /verify separately ‚Äî verifies a contact's paid status by tag.
+    const path = new URL(request.url).pathname.replace(/\/+$/, "");
+    if (path === "/verify") {
+      return handleVerify(body, env);
     }
 
     const tier = body.tier || "free";
