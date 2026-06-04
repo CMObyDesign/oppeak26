@@ -1,5 +1,5 @@
 /**
- * CFO By Design ‚Äö√Ñ√Æ SWOT Engine Worker v3
+ * CFO By Design ‚Äö√Ñ√∂‚àö√ë‚àö√Ü SWOT Engine Worker v3
  * Agent-assessed funnel.
  *
  * Flow: form answers -> Claude assesses (Miguel's logic) + writes the report
@@ -22,7 +22,7 @@ const CONFIG = {
   PAYMENT_LINK_297: "https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0",
 };
 
-// How the agent assesses ‚Äö√Ñ√Æ Miguel Hernandez's actual diagnostic logic, grounded in the
+// How the agent assesses ‚Äö√Ñ√∂‚àö√ë‚àö√Ü Miguel Hernandez's actual diagnostic logic, grounded in the
 // May 27, 2026 session transcript. Phrasing kept close to his own words on purpose.
 const ASSESSMENT_RUBRIC = `You are a Senior Fractional CFO for CFO By Design, diagnosing a business from a SWOT intake.
 Diagnose the way Miguel Hernandez does. The whole assessment is about one thing: the owner's
@@ -30,37 +30,55 @@ Diagnose the way Miguel Hernandez does. The whole assessment is about one thing:
 
 THE TWO CRITICAL NUMBERS (Miguel: "those two numbers together are critical and they're very basic"):
 - Total corporate debt the business carries.
-- Monthly debt service ‚Äö√Ñ√Æ what they pay every month servicing that debt.
+- Monthly debt service ‚Äö√Ñ√∂‚àö√ë‚àö√Ü what they pay every month servicing that debt.
 Together these tell you whether cash flow can actually support the business.
 
 THE MAGIC QUESTION (Miguel's term): does the owner make decisions based on their real numbers,
-or on "what's in their bank account"? Most decide on bank balance without knowing net revenue ‚Äö√Ñ√Æ
+or on "what's in their bank account"? Most decide on bank balance without knowing net revenue ‚Äö√Ñ√∂‚àö√ë‚àö√Ü
 that is the core financial blind spot, and it is a strong driver toward the paid diagnosis.
 
 RED FLAGS THAT BLOCK FUNDING (push toward "rehab"):
-- Active judgments, tax liens, or tax defaults ‚Äö√Ñ√Æ debt that is UNRESOLVED, not merely "being managed."
+- Active judgments, tax liens, or tax defaults ‚Äö√Ñ√∂‚àö√ë‚àö√Ü debt that is UNRESOLVED, not merely "being managed."
 - Business tax returns for the last 2 years unfiled, or filed with an unresolved balance.
 
 CASH-FLOW STRESS SIGNALS:
-- Accounts receivable aging ‚Äö√Ñ√Æ 30 days is normal; 60+ days is when it becomes a problem.
+- Accounts receivable aging ‚Äö√Ñ√∂‚àö√ë‚àö√Ü 30 days is normal; 60+ days is when it becomes a problem.
 - Corporate debt whose status is stretched or unmanaged (it is "status," never "relationship").
 - No documented financial plan or budget; never had a financial audit or deep dive.
 
-PATH SELECTION ‚Äö√Ñ√Æ choose exactly one:
+PATH SELECTION ‚Äö√Ñ√∂‚àö√ë‚àö√Ü choose exactly one:
 - "rehab"  : active judgments / liens / tax defaults, OR unfiled-or-delinquent taxes. Stabilize the
              foundation before any growth strategy. The report becomes a resolution roadmap.
 - "urgent" : no legal/tax blocker, but the financial blind spot plus stacked stress signals
-             (stretched debt, heavy debt service, AR 60+, no budget). Real pressure ‚Äö√Ñ√Æ "critical exposure."
+             (stretched debt, heavy debt service, AR 60+, no budget). Real pressure ‚Äö√Ñ√∂‚àö√ë‚àö√Ü "critical exposure."
 - "growth" : a functioning business with momentum but real, fixable gaps under the surface.
 - "strong" : decisions made on real numbers, debt well-managed, taxes current, AR healthy.
              Here to optimize and scale ("untapped capacity"), not to fix.
 
-OPPORTUNITY FLAGS ‚Äö√Ñ√Æ list any that apply (these are services CFO By Design / Spark can sell):
-- Merchant processing never reviewed, or unknown cost / value / coverage -> "MERCHANT_PROCESSING_OPP"
-- Heavy or stretched corporate debt -> "DEBT_RESTRUCTURE_OPP"
-- Unfiled taxes or an outstanding balance -> "TAX_RESOLUTION_OPP"
-- Weak digital presence vs competitors (reviews, local visibility), or a local / e-commerce model
-  that depends on it -> "DIGITAL_PRESENCE_OPP"`;
+OPPORTUNITY FLAGS - list ONLY flags backed by EXPLICIT evidence in their answers.
+Do NOT infer flags from absence of data, generic financial pressure, or pattern-matching to
+similar businesses. If an answer doesn't explicitly establish the trigger, leave the flag off.
+
+- MERCHANT_PROCESSING_OPP: Fire ONLY if the business explicitly processes card or merchant
+  payments (retail, restaurant, e-commerce, service business charging cards) AND the answers
+  indicate the merchant cost/value/coverage has not been reviewed. Do NOT fire for B2B agencies,
+  consultancies, or service businesses billing via subscription, invoice, ACH, or wire - they
+  have no merchant exposure. "Vendor costs not reviewed" alone is NOT a trigger.
+
+- DEBT_RESTRUCTURE_OPP: Fire ONLY when there is EXPLICIT, current, non-zero corporate debt
+  AND the debt is described as heavy, stretched, unmanaged, or carrying high monthly debt
+  service relative to revenue. Do NOT fire when the answer states $0 debt, "no debt," "no LOC,"
+  or leaves debt unstated. Generic "revenue leaks," "cash pressure," or "tight margins" are
+  NOT debt signals.
+
+- TAX_RESOLUTION_OPP: Fire ONLY for explicitly unfiled tax returns, an outstanding tax balance,
+  an active tax lien, or a stated tax payment plan. Do NOT fire when taxes are stated as
+  filed and current.
+
+- DIGITAL_PRESENCE_OPP: Fire when the business explicitly signals weak digital visibility
+  (no/low reviews, no GBP, invisible in search/social, weak vs competitors) AND the business
+  model depends on local discovery or online acquisition. Do NOT fire for businesses whose
+  growth model is referral-only and explicitly so.`;
 
 const TIER_GUIDE = {
   free: "FREE tier: concise and punchy. Surface the gaps and create urgency to upgrade, without solving everything. 3 gaps, 2 opportunities.",
@@ -96,9 +114,9 @@ THEIR ANSWERS:
 ${answerBlock}
 
 TASK: Assess this business using the logic above. ${guide}
-Every sentence must reference THEIR actual answers ‚Äö√Ñ√Æ no generic filler, no invented numbers.
+Every sentence must reference THEIR actual answers ‚Äö√Ñ√∂‚àö√ë‚àö√Ü no generic filler, no invented numbers.
 
-Return ONLY valid JSON ‚Äö√Ñ√Æ no markdown code fences, no text before or after ‚Äö√Ñ√Æ in exactly this shape:
+Return ONLY valid JSON ‚Äö√Ñ√∂‚àö√ë‚àö√Ü no markdown code fences, no text before or after ‚Äö√Ñ√∂‚àö√ë‚àö√Ü in exactly this shape:
 {
   "path": "rehab | urgent | growth | strong",
   "badge": "SHORT UPPERCASE LABEL",
@@ -187,7 +205,7 @@ ${context}
 `.trim();
 }
 
-// Tolerant JSON extraction ‚Äö√Ñ√Æ strips fences / preamble if the model adds any.
+// Tolerant JSON extraction ‚Äö√Ñ√∂‚àö√ë‚àö√Ü strips fences / preamble if the model adds any.
 function parseAgentJson(text) {
   let t = text.trim();
   t = t.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
@@ -296,7 +314,7 @@ const TIER_REQUIRED_TAG = {
   paid_297: "swot_paid_297",
 };
 
-// POST /upload ‚Äî multipart/form-data with a "file" field.
+// POST /upload ‚Äö√Ñ√Æ multipart/form-data with a "file" field.
 // Forwards to GHL Media Library and returns the hosted URL.
 // Optional form fields: contactId (for future per-contact organization).
 // Returns: { success, url, fileId, fileName, size }
@@ -318,7 +336,7 @@ async function handleUpload(request, env) {
     return json({ success: false, error: "Missing 'file' field" }, 400);
   }
 
-  // Conservative size limit ‚Äî covers P&L PDFs, blocks accidental huge uploads.
+  // Conservative size limit ‚Äö√Ñ√Æ covers P&L PDFs, blocks accidental huge uploads.
   const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
   if (file.size > MAX_BYTES) {
     return json({ success: false, error: "File too large (max 25 MB)" }, 413);
@@ -335,7 +353,7 @@ async function handleUpload(request, env) {
     headers: {
       Authorization: `Bearer ${env.GHL_API_KEY}`,
       Version: "2021-07-28",
-      // Don't set Content-Type ‚Äî fetch sets it (with the multipart boundary) automatically.
+      // Don't set Content-Type ‚Äö√Ñ√Æ fetch sets it (with the multipart boundary) automatically.
     },
     body: ghlForm,
   });
@@ -358,7 +376,7 @@ async function handleUpload(request, env) {
   });
 }
 
-// POST /verify ‚Äî confirm a contact has paid for a tier.
+// POST /verify ‚Äö√Ñ√Æ confirm a contact has paid for a tier.
 // Body: { contactId, tier }
 // Returns: { verified: boolean, contact: {contactId, name, email} | null }
 async function handleVerify(body, env) {
@@ -421,7 +439,7 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders() });
     if (request.method !== "POST") return json({ success: false, error: "POST only" }, 405);
 
-    // Route /upload BEFORE JSON parsing ‚Äî it expects multipart/form-data.
+    // Route /upload BEFORE JSON parsing ‚Äö√Ñ√Æ it expects multipart/form-data.
     const path = new URL(request.url).pathname.replace(/\/+$/, "");
     if (path === "/upload") {
       return handleUpload(request, env);
@@ -464,10 +482,10 @@ export default {
     if (contactId) {
       const reportBody = buildReportHtml(agent);
 
-      // One report field per tier ‚Äö√Ñ√Æ no mirroring. Each tier has its own named deliverable:
-      //   free     ‚Äö√ú√≠ swot_free_report      (Free SWOT Report)
-      //   paid_47  ‚Äö√ú√≠ swot_full_report      (Full Diagnostic Report)
-      //   paid_297 ‚Äö√ú√≠ business_playbook     (Business Playbook ‚Äö√Ñ√Æ the $297 deliverable)
+      // One report field per tier ‚Äö√Ñ√∂‚àö√ë‚àö√Ü no mirroring. Each tier has its own named deliverable:
+      //   free     ‚Äö√Ñ√∂‚àö√∫‚àö‚â† swot_free_report      (Free SWOT Report)
+      //   paid_47  ‚Äö√Ñ√∂‚àö√∫‚àö‚â† swot_full_report      (Full Diagnostic Report)
+      //   paid_297 ‚Äö√Ñ√∂‚àö√∫‚àö‚â† business_playbook     (Business Playbook ‚Äö√Ñ√∂‚àö√ë‚àö√Ü the $297 deliverable)
       const reportFieldKey =
         tier === "paid_297" ? "business_playbook"
         : tier === "paid_47" ? "swot_full_report"
