@@ -83,14 +83,14 @@ These come AFTER the SKILL.md contracts are stable and the Solomon console is li
 
 ---
 
-## Other skills in this folder (outside CFOByDesign scope)
+## Other skills in this folder
 
-This `skills/` folder also contains skills that pre-date the Solomon expansion and are not part of the CFOByDesign analyst toolkit:
+This `skills/` folder also contains:
 
-- [`review-response-reputation/`](review-response-reputation/SKILL.md) — placeholder skill (separate workstream)
-- [`taste-skill/`](taste-skill/SKILL.md) — `design-taste-frontend` UI/UX skill (separate workstream)
+- [`taste-skill/`](taste-skill/SKILL.md) — `design-taste-frontend`. **Part of the Solomon ecosystem** — loaded when generating reports and visual deliverables so output stays on-brand and visually tasteful. Pair with `proposal-drafter` and the worker's `buildReportHtml` / `buildReportPage` rendering.
+- [`review-response-reputation/`](review-response-reputation/SKILL.md) — placeholder skill (separate workstream, pre-dates the CFO toolkit).
 
-The 7 CFO skills above form a coordinated set for the Solomon SWOT Engine. The other skills above are standalone.
+The 7 CFO skills above form the coordinated analyst toolkit for the SWOT Engine. The `taste-skill` is the visual/design counterpart that runs alongside them.
 
 ---
 
