@@ -10,13 +10,17 @@
  * pairs the form sends, so it works with the current questions and with v3.
  *
  * Endpoints:
- *   POST /            — main assessment
- *   POST /upload      — multipart file upload to GHL Media Library
- *   POST /verify      — confirm a contact has paid for a tier
- *   GET  /report/{id} — serve a contact's stored report as a styled standalone HTML page
+ *   POST /                  — main assessment
+ *   POST /upload            — multipart file upload to GHL Media Library
+ *   POST /verify            — confirm a contact has paid for a tier
+ *   GET  /report/{id}       — serve a contact's stored report as a styled standalone HTML page
+ *   GET  /asksolomon        — internal training & testing console (password-protected)
+ *   POST /asksolomon/run    — execute a test run without GHL writeback (password-protected)
+ *   GET  /asksolomon/rubric — return the current ASSESSMENT_RUBRIC (password-protected)
  *
- * Runtime secrets (set in Cloudflare dashboard): ANTHROPIC_API_KEY, GHL_API_KEY
+ * Runtime secrets (set in Cloudflare dashboard): ANTHROPIC_API_KEY, GHL_API_KEY, CONSOLE_PASSWORD
  */
+import { CONSOLE_PAGE } from "./console_page.js";
 
 const CONFIG = {
   CLAUDE_MODEL: "claude-sonnet-4-6",
@@ -550,11 +554,107 @@ async function handleReport(contactId, env) {
   });
 }
 
+// ----- Ask Solomon console (internal training & testing) -----
+
+// Validate the shared console password against env.CONSOLE_PASSWORD.
+// Constant-time-ish comparison: short string, low risk for timing attacks at our volume.
+function checkConsolePassword(request, env) {
+  const expected = env.CONSOLE_PASSWORD;
+  if (!expected) return false; // Console is locked if password isn't configured.
+  const provided = request.headers.get("x-console-password");
+  return Boolean(provided) && provided === expected;
+}
+
+// POST /asksolomon/run — runs the SWOT assessment without GHL writeback.
+// Supports `rubricOverride` to test rubric variants ephemerally.
+// Probe requests (body.probe === true) just validate the password and return 200.
+async function handleConsoleRun(request, env) {
+  if (!checkConsolePassword(request, env)) {
+    return json({ success: false, error: "Unauthorized" }, 401);
+  }
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+
+  // Auth probe — used by the gate to verify the password without a real run.
+  if (body && body.probe) return json({ success: true, probe: true });
+
+  const tier = body.tier || "free";
+  const contact = body.contact || {};
+  const businessProfile = body.businessProfile || {};
+  const answers = normalizeAnswers(body.answers);
+  if (!answers.length) return json({ success: false, error: "No answers provided" }, 400);
+
+  // Build the user prompt the normal way. Then call Claude with either the default
+  // rubric (cache-eligible) or the override (cache-busted but still works).
+  const prompt = buildPrompt(tier, answers, contact, businessProfile);
+  const rubric = (typeof body.rubricOverride === "string" && body.rubricOverride.trim())
+    ? body.rubricOverride
+    : ASSESSMENT_RUBRIC;
+
+  let agent;
+  try {
+    const raw = await callClaudeWithRubric(prompt, rubric, env);
+    agent = parseAgentJson(raw);
+  } catch (err) {
+    return json({ success: false, error: err.message }, 500);
+  }
+
+  // Free-tier digital-presence scrub matches production behavior.
+  if (tier === "free") {
+    agent.opportunityFlags = (agent.opportunityFlags || []).filter(f => f !== "DIGITAL_PRESENCE_OPP");
+  }
+
+  const reportHtml = buildReportHtml(agent);
+
+  return json({
+    success: true,
+    tier,
+    rubricUsed: rubric === ASSESSMENT_RUBRIC ? "default" : "override",
+    reportHtml,
+    ...agent,
+  });
+}
+
+// Like callClaude but accepts an explicit rubric (for the console's override path).
+// When the rubric is the default, cache_control still applies — repeated runs hit the cache.
+async function callClaudeWithRubric(prompt, rubric, env) {
+  const isDefault = rubric === ASSESSMENT_RUBRIC;
+  const systemBlock = [
+    isDefault
+      ? { type: "text", text: rubric, cache_control: { type: "ephemeral" } }
+      : { type: "text", text: rubric }
+  ];
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": env.ANTHROPIC_API_KEY,
+      "anthropic-version": CONFIG.ANTHROPIC_VERSION,
+    },
+    body: JSON.stringify({
+      model: CONFIG.CLAUDE_MODEL,
+      max_tokens: 2500,
+      system: systemBlock,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Claude API ${response.status}: ${detail.slice(0, 300)}`);
+  }
+  const data = await response.json();
+  return data.content[0].text;
+}
+
+// ----- end Ask Solomon console -----
+
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, x-console-password",
   };
 }
 
@@ -580,10 +680,21 @@ export default {
     const path = url.pathname.replace(/\/+$/, "");
 
     // GET /report/{contactId} — public-readable hosted report view.
+    // GET /asksolomon — internal training console (HTML page, password-protected at the API layer).
+    // GET /asksolomon/rubric — return the current ASSESSMENT_RUBRIC (password-protected).
     if (request.method === "GET") {
       const reportMatch = path.match(/^\/report\/([A-Za-z0-9_-]+)$/);
       if (reportMatch) {
         return handleReport(reportMatch[1], env);
+      }
+      if (path === "/asksolomon") {
+        return new Response(CONSOLE_PAGE, { status: 200, headers: htmlHeaders() });
+      }
+      if (path === "/asksolomon/rubric") {
+        if (!checkConsolePassword(request, env)) {
+          return json({ success: false, error: "Unauthorized" }, 401);
+        }
+        return json({ success: true, rubric: ASSESSMENT_RUBRIC });
       }
       return json({ success: false, error: "Not found" }, 404);
     }
@@ -593,6 +704,11 @@ export default {
     // Route /upload BEFORE JSON parsing — it expects multipart/form-data.
     if (path === "/upload") {
       return handleUpload(request, env);
+    }
+
+    // POST /asksolomon/run — console test runs. No GHL writeback, optional rubric override.
+    if (path === "/asksolomon/run") {
+      return handleConsoleRun(request, env);
     }
 
     let body;

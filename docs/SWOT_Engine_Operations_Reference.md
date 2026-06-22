@@ -157,6 +157,39 @@ The worker auto-applies these tags on every successful run. **GHL workflows trig
 
 ---
 
+## Ask Solomon Console — internal training & testing
+
+**URL:** `https://swot-engine.cfobydesign.workers.dev/asksolomon`
+
+Password-protected single-page console for Miguel's team to train and test Solomon. Run test inputs, see the full output (report + strategist brief + email blurb), tweak the rubric inline, and save learnings (rubric variants + bookmarked runs) to browser storage. **Test runs do NOT write to GHL.**
+
+### Auth
+
+- Single shared password set as Cloudflare secret `CONSOLE_PASSWORD`.
+- Browser holds it in `sessionStorage` for the tab session; logout clears it.
+- Every API request must include header `x-console-password: <password>`. Wrong → 401.
+
+### Endpoints
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/asksolomon` | Serves the console HTML page (page itself is unprotected; API gates the work) |
+| POST | `/asksolomon/run` | Runs an assessment with optional rubric override. **No GHL writeback.** |
+| GET | `/asksolomon/rubric` | Returns the current default `ASSESSMENT_RUBRIC` for loading into the override editor |
+
+### Browser-side storage
+- `sessionStorage.asksolomon_history` — last 20 runs (cleared on tab close)
+- `localStorage.asksolomon_saved_rubrics` — saved rubric variants (persist across sessions)
+- `localStorage.asksolomon_bookmarks` — bookmarked good runs (persist across sessions)
+- **Export / Import Learnings** — download/upload all saved rubrics + bookmarks as a JSON file for sharing or backup.
+
+### Promoting a rubric variant to production
+The console doesn't auto-deploy. Workflow when a tweaked rubric proves consistently better:
+1. Export your learnings JSON
+2. Open a PR replacing `ASSESSMENT_RUBRIC` in `worker/src/index.js` with the new text
+3. Merge → Cloudflare auto-deploys → new rubric is live for real traffic
+
+---
+
 ## Quick reference for GHL workflow triggers
 
 When you're building automations, use these as triggers:
