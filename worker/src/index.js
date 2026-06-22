@@ -27,6 +27,14 @@ const CONFIG = {
   BOOKING_LINK_297: "https://my.cfobydesign.com/widget/booking/VGdN6KoFBtbdnSvHKHTh",
   PAYMENT_LINK_47: "https://my.cfobydesign.com/payment-link/6a0db7aa1a6dcdeebb53b641",
   PAYMENT_LINK_297: "https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0",
+  // GHL custom field IDs — used by the /report endpoint to look up stored report content.
+  // The GHL v2 contact GET endpoint returns customFields keyed by `id`, NOT `fieldKey`,
+  // so we must match on the ID. These are the field IDs for location oLIENQCtGnt9U6gfLhE5.
+  REPORT_FIELD_IDS: {
+    swot_free_report: "Ys28pMUc82cURfnsbQzY",
+    swot_full_report: "pa6VF4GsufGuTAjlFVnf",
+    business_playbook: "XEuWL4vobueOpZGBFdLm",
+  },
 };
 
 // How the agent assesses — Miguel Hernandez's actual diagnostic logic, grounded in the
@@ -506,10 +514,14 @@ async function handleReport(contactId, env) {
     tierLabel = "SWOT Diagnostic";
   }
 
-  // Find the report content. GHL returns customFields as an array; the per-field key
-  // may be ".fieldKey" (with the contact. prefix) or ".key" (without). Try both.
+  // Find the report content. GHL v2 contact GET returns customFields keyed by `id`
+  // (not `fieldKey`), so we look up by the known field ID for this location.
+  // Fall back to fieldKey/key matching for forward-compatibility if a future API
+  // version starts returning those.
   const customFields = c.customFields || [];
+  const reportFieldId = CONFIG.REPORT_FIELD_IDS[reportFieldKey];
   const reportField = customFields.find((f) => {
+    if (reportFieldId && f.id === reportFieldId) return true;
     const key = f.fieldKey || f.key || "";
     return key === `contact.${reportFieldKey}` || key === reportFieldKey;
   });
