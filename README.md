@@ -41,10 +41,16 @@ oppeak26/
    - `cd oppeak26`
 2. Install dependencies (if/when `package.json` is added):
    - `npm install`
-3. Configure environment variables (Cloudflare Worker secrets or `.dev.vars`):
-   - `CLAUDE_API_KEY`
-   - `GHL_API_KEY`
-   - `ZOHO_API_KEY`
+3. Configure Cloudflare Worker variables and secrets:
+   - Secrets:
+     - `ANTHROPIC_API_KEY`
+     - `GHL_API_KEY`
+   - Non-sensitive variables (also committed as defaults in `wrangler.toml`, and overridable per environment):
+     - `GHL_LOCATION_ID`
+     - `BOOKING_LINK_47`
+     - `BOOKING_LINK_297`
+     - `PAYMENT_LINK_47`
+     - `PAYMENT_LINK_297`
 
 ## Run Scoring Logic Tests
 

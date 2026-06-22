@@ -1,5 +1,5 @@
 /**
- * CFO By Design ‚Äö√Ñ√∂‚àö√ë‚àö√Ü SWOT Engine Worker v3
+ * CFO By Design — SWOT Engine Worker v3
  * Agent-assessed funnel.
  *
  * Flow: form answers -> Claude assesses (Miguel's logic) + writes the report
@@ -22,7 +22,7 @@ const CONFIG = {
   PAYMENT_LINK_297: "https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0",
 };
 
-// How the agent assesses ‚Äö√Ñ√∂‚àö√ë‚àö√Ü Miguel Hernandez's actual diagnostic logic, grounded in the
+// How the agent assesses — Miguel Hernandez's actual diagnostic logic, grounded in the
 // May 27, 2026 session transcript. Phrasing kept close to his own words on purpose.
 const ASSESSMENT_RUBRIC = `You are a Senior Fractional CFO for CFO By Design, diagnosing a business from a SWOT intake.
 Diagnose the way Miguel Hernandez does. The whole assessment is about one thing: the owner's
@@ -30,27 +30,27 @@ Diagnose the way Miguel Hernandez does. The whole assessment is about one thing:
 
 THE TWO CRITICAL NUMBERS (Miguel: "those two numbers together are critical and they're very basic"):
 - Total corporate debt the business carries.
-- Monthly debt service ‚Äö√Ñ√∂‚àö√ë‚àö√Ü what they pay every month servicing that debt.
+- Monthly debt service — what they pay every month servicing that debt.
 Together these tell you whether cash flow can actually support the business.
 
 THE MAGIC QUESTION (Miguel's term): does the owner make decisions based on their real numbers,
-or on "what's in their bank account"? Most decide on bank balance without knowing net revenue ‚Äö√Ñ√∂‚àö√ë‚àö√Ü
+or on "what's in their bank account"? Most decide on bank balance without knowing net revenue —
 that is the core financial blind spot, and it is a strong driver toward the paid diagnosis.
 
 RED FLAGS THAT BLOCK FUNDING (push toward "rehab"):
-- Active judgments, tax liens, or tax defaults ‚Äö√Ñ√∂‚àö√ë‚àö√Ü debt that is UNRESOLVED, not merely "being managed."
+- Active judgments, tax liens, or tax defaults — debt that is UNRESOLVED, not merely "being managed."
 - Business tax returns for the last 2 years unfiled, or filed with an unresolved balance.
 
 CASH-FLOW STRESS SIGNALS:
-- Accounts receivable aging ‚Äö√Ñ√∂‚àö√ë‚àö√Ü 30 days is normal; 60+ days is when it becomes a problem.
+- Accounts receivable aging — 30 days is normal; 60+ days is when it becomes a problem.
 - Corporate debt whose status is stretched or unmanaged (it is "status," never "relationship").
 - No documented financial plan or budget; never had a financial audit or deep dive.
 
-PATH SELECTION ‚Äö√Ñ√∂‚àö√ë‚àö√Ü choose exactly one:
+PATH SELECTION — choose exactly one:
 - "rehab"  : active judgments / liens / tax defaults, OR unfiled-or-delinquent taxes. Stabilize the
              foundation before any growth strategy. The report becomes a resolution roadmap.
 - "urgent" : no legal/tax blocker, but the financial blind spot plus stacked stress signals
-             (stretched debt, heavy debt service, AR 60+, no budget). Real pressure ‚Äö√Ñ√∂‚àö√ë‚àö√Ü "critical exposure."
+             (stretched debt, heavy debt service, AR 60+, no budget). Real pressure — "critical exposure."
 - "growth" : a functioning business with momentum but real, fixable gaps under the surface.
 - "strong" : decisions made on real numbers, debt well-managed, taxes current, AR healthy.
              Here to optimize and scale ("untapped capacity"), not to fix.
@@ -78,11 +78,11 @@ similar businesses. If an answer doesn't explicitly establish the trigger, leave
 - DIGITAL_PRESENCE_OPP: Fire when the business explicitly signals weak digital visibility
   (no/low reviews, no GBP, invisible in search/social, weak vs competitors) AND the business
   model depends on local discovery or online acquisition. Do NOT fire for businesses whose
-  growth model is referral-only and explicitly so. NEVER fire on the FREE tier ‚Äî digital
+  growth model is referral-only and explicitly so. NEVER fire on the FREE tier — digital
   presence findings are a paid-tier reveal and must be held back from the free report.`;
 
 const TIER_GUIDE = {
-  free: "FREE tier: concise and punchy. Surface the gaps and create urgency to upgrade, without solving everything. 3 gaps, 2 opportunities. DO NOT use digital presence / Google Business Profile / reviews / SEO as a gap or opportunity in the FREE report ‚Äî that finding is reserved for the paid diagnostic. Focus the free tier on financial visibility, cash flow, decision-making, revenue concentration, and pipeline math.",
+  free: "FREE tier: concise and punchy. Surface the gaps and create urgency to upgrade, without solving everything. 3 gaps, 2 opportunities. DO NOT use digital presence / Google Business Profile / reviews / SEO as a gap or opportunity in the FREE report — that finding is reserved for the paid diagnostic. Focus the free tier on financial visibility, cash flow, decision-making, revenue concentration, and pipeline math.",
   paid_47: "$47 FULL DIAGNOSTIC: specific and prescriptive. Name exact gaps and what they cost. 3 gaps, 2 opportunities.",
   paid_297: "$297 DEEP DIVE: senior strategist brief. Deep, numbers-driven, references their narrative answers. 3 gaps, 2 opportunities.",
 };
@@ -115,9 +115,9 @@ THEIR ANSWERS:
 ${answerBlock}
 
 TASK: Assess this business using the logic above. ${guide}
-Every sentence must reference THEIR actual answers ‚Äö√Ñ√∂‚àö√ë‚àö√Ü no generic filler, no invented numbers.
+Every sentence must reference THEIR actual answers — no generic filler, no invented numbers.
 
-Return ONLY valid JSON ‚Äö√Ñ√∂‚àö√ë‚àö√Ü no markdown code fences, no text before or after ‚Äö√Ñ√∂‚àö√ë‚àö√Ü in exactly this shape:
+Return ONLY valid JSON — no markdown code fences, no text before or after — in exactly this shape:
 {
   "path": "rehab | urgent | growth | strong",
   "badge": "SHORT UPPERCASE LABEL",
@@ -206,7 +206,7 @@ ${context}
 `.trim();
 }
 
-// Tolerant JSON extraction ‚Äö√Ñ√∂‚àö√ë‚àö√Ü strips fences / preamble if the model adds any.
+// Tolerant JSON extraction — strips fences / preamble if the model adds any.
 function parseAgentJson(text) {
   let t = text.trim();
   t = t.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
@@ -248,7 +248,7 @@ async function updateGHLContact(contactId, fields, env) {
 // Find an existing contact by email in the configured location. Returns its id or null.
 async function findGHLContactByEmail(email, env) {
   if (!email || !env.GHL_API_KEY) return null;
-  const url = `${CONFIG.GHL_API_BASE}/contacts/search/duplicate?locationId=${CONFIG.GHL_LOCATION_ID}&email=${encodeURIComponent(email)}`;
+  const url = `${CONFIG.GHL_API_BASE}/contacts/search/duplicate?locationId=${(env.GHL_LOCATION_ID || CONFIG.GHL_LOCATION_ID)}&email=${encodeURIComponent(email)}`;
   const res = await fetch(url, {
     headers: {
       Authorization: `Bearer ${env.GHL_API_KEY}`,
@@ -264,7 +264,7 @@ async function findGHLContactByEmail(email, env) {
 async function createGHLContact(contact, env) {
   if (!env.GHL_API_KEY) return null;
   const body = {
-    locationId: CONFIG.GHL_LOCATION_ID,
+    locationId: (env.GHL_LOCATION_ID || CONFIG.GHL_LOCATION_ID),
     email: contact.email,
     firstName: (contact.name || "").split(" ")[0] || undefined,
     lastName: (contact.name || "").split(" ").slice(1).join(" ") || undefined,
@@ -315,7 +315,7 @@ const TIER_REQUIRED_TAG = {
   paid_297: "swot_paid_297",
 };
 
-// POST /upload ‚Äö√Ñ√Æ multipart/form-data with a "file" field.
+// POST /upload — multipart/form-data with a "file" field.
 // Forwards to GHL Media Library and returns the hosted URL.
 // Optional form fields: contactId (for future per-contact organization).
 // Returns: { success, url, fileId, fileName, size }
@@ -337,7 +337,7 @@ async function handleUpload(request, env) {
     return json({ success: false, error: "Missing 'file' field" }, 400);
   }
 
-  // Conservative size limit ‚Äö√Ñ√Æ covers P&L PDFs, blocks accidental huge uploads.
+  // Conservative size limit — covers P&L PDFs, blocks accidental huge uploads.
   const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
   if (file.size > MAX_BYTES) {
     return json({ success: false, error: "File too large (max 25 MB)" }, 413);
@@ -346,7 +346,7 @@ async function handleUpload(request, env) {
   // Forward to GHL Media Library.
   const ghlForm = new FormData();
   ghlForm.append("file", file, file.name || "upload");
-  ghlForm.append("locationId", CONFIG.GHL_LOCATION_ID);
+  ghlForm.append("locationId", (env.GHL_LOCATION_ID || CONFIG.GHL_LOCATION_ID));
   ghlForm.append("hosted", "false");
 
   const res = await fetch(`${CONFIG.GHL_API_BASE}/medias/upload-file`, {
@@ -354,7 +354,7 @@ async function handleUpload(request, env) {
     headers: {
       Authorization: `Bearer ${env.GHL_API_KEY}`,
       Version: "2021-07-28",
-      // Don't set Content-Type ‚Äö√Ñ√Æ fetch sets it (with the multipart boundary) automatically.
+      // Don't set Content-Type — fetch sets it (with the multipart boundary) automatically.
     },
     body: ghlForm,
   });
@@ -377,7 +377,7 @@ async function handleUpload(request, env) {
   });
 }
 
-// POST /verify ‚Äö√Ñ√Æ confirm a contact has paid for a tier.
+// POST /verify — confirm a contact has paid for a tier.
 // Body: { contactId, tier }
 // Returns: { verified: boolean, contact: {contactId, name, email} | null }
 async function handleVerify(body, env) {
@@ -440,7 +440,7 @@ export default {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders() });
     if (request.method !== "POST") return json({ success: false, error: "POST only" }, 405);
 
-    // Route /upload BEFORE JSON parsing ‚Äö√Ñ√Æ it expects multipart/form-data.
+    // Route /upload BEFORE JSON parsing — it expects multipart/form-data.
     const path = new URL(request.url).pathname.replace(/\/+$/, "");
     if (path === "/upload") {
       return handleUpload(request, env);
@@ -506,10 +506,10 @@ export default {
     if (contactId) {
       const reportBody = buildReportHtml(agent);
 
-      // One report field per tier ‚Äö√Ñ√∂‚àö√ë‚àö√Ü no mirroring. Each tier has its own named deliverable:
-      //   free     ‚Äö√Ñ√∂‚àö√∫‚àö‚â† swot_free_report      (Free SWOT Report)
-      //   paid_47  ‚Äö√Ñ√∂‚àö√∫‚àö‚â† swot_full_report      (Full Diagnostic Report)
-      //   paid_297 ‚Äö√Ñ√∂‚àö√∫‚àö‚â† business_playbook     (Business Playbook ‚Äö√Ñ√∂‚àö√ë‚àö√Ü the $297 deliverable)
+      // One report field per tier — no mirroring. Each tier has its own named deliverable:
+      //   free     -> swot_free_report      (Free SWOT Report)
+      //   paid_47  -> swot_full_report      (Full Diagnostic Report)
+      //   paid_297 -> business_playbook     (Business Playbook — the $297 deliverable)
       const reportFieldKey =
         tier === "paid_297" ? "business_playbook"
         : tier === "paid_47" ? "swot_full_report"
@@ -541,8 +541,8 @@ export default {
     }
 
     const bookingLink =
-      tier === "paid_297" ? CONFIG.BOOKING_LINK_297
-      : tier === "paid_47" ? CONFIG.BOOKING_LINK_47
+      tier === "paid_297" ? (env.BOOKING_LINK_297 || CONFIG.BOOKING_LINK_297)
+      : tier === "paid_47" ? (env.BOOKING_LINK_47 || CONFIG.BOOKING_LINK_47)
       : null;
 
     return json({ success: true, tier, ...agent, bookingLink });

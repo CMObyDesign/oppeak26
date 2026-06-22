@@ -14,6 +14,7 @@
 | GHL Location ID | `oLIENQCtGnt9U6gfLhE5` |
 | AI model | `claude-sonnet-4-6` |
 | Worker secrets *(set in Cloudflare dashboard)* | `ANTHROPIC_API_KEY` ✅ · `GHL_API_KEY` ✅ |
+| Worker vars *(override committed fallbacks as needed)* | `GHL_LOCATION_ID` · `BOOKING_LINK_47` · `BOOKING_LINK_297` · `PAYMENT_LINK_47` · `PAYMENT_LINK_297` |
 
 ---
 
