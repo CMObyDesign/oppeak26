@@ -696,6 +696,17 @@ export default {
         }
         return json({ success: true, rubric: ASSESSMENT_RUBRIC });
       }
+      // /asksolomon/diag — UNAUTHENTICATED diagnostic endpoint. Returns only whether
+      // CONSOLE_PASSWORD is configured and its character length. NEVER returns the value.
+      // Use during setup to confirm Cloudflare environment has the secret.
+      if (path === "/asksolomon/diag") {
+        const pw = env.CONSOLE_PASSWORD;
+        return json({
+          passwordConfigured: Boolean(pw),
+          passwordLength: typeof pw === "string" ? pw.length : 0,
+          hint: "The deployed worker expects password header 'x-console-password' to match env.CONSOLE_PASSWORD exactly (case-sensitive, no trim). If passwordConfigured is false, the secret isn't in this environment.",
+        });
+      }
       return json({ success: false, error: "Not found" }, 404);
     }
 
