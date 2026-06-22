@@ -4,9 +4,16 @@
  *
  * Flow: form answers -> Claude assesses (Miguel's logic) + writes the report
  *       -> structured JSON that the front-end renders directly.
+ *       -> async GHL writeback (tier-specific report field, blurb, strategist brief, hosted URL)
  *
  * The worker is QUESTION-AGNOSTIC: it accepts whatever labeled question/answer
  * pairs the form sends, so it works with the current questions and with v3.
+ *
+ * Endpoints:
+ *   POST /            — main assessment
+ *   POST /upload      — multipart file upload to GHL Media Library
+ *   POST /verify      — confirm a contact has paid for a tier
+ *   GET  /report/{id} — serve a contact's stored report as a styled standalone HTML page
  *
  * Runtime secrets (set in Cloudflare dashboard): ANTHROPIC_API_KEY, GHL_API_KEY
  */
@@ -24,6 +31,8 @@ const CONFIG = {
 
 // How the agent assesses — Miguel Hernandez's actual diagnostic logic, grounded in the
 // May 27, 2026 session transcript. Phrasing kept close to his own words on purpose.
+// Sent in Anthropic's `system` block with cache_control so it hits prompt cache on
+// repeat runs within a 5-minute window (~90% input-token cost savings on cache hits).
 const ASSESSMENT_RUBRIC = `You are a Senior Fractional CFO for CFO By Design, diagnosing a business from a SWOT intake.
 Diagnose the way Miguel Hernandez does. The whole assessment is about one thing: the owner's
 "ability to manage, or their ability to drown."
@@ -106,15 +115,15 @@ function buildPrompt(tier, answers, contact, businessProfile = {}) {
     ? `\nBUSINESS PROFILE:\n${profileLines.join("\n")}\n`
     : "";
 
-  return `${ASSESSMENT_RUBRIC}
-
-CLIENT: ${contact.name || "Business Owner"}${profileBlock}
+  // NOTE: ASSESSMENT_RUBRIC is sent in the Anthropic `system` block (with cache_control),
+  // NOT inlined here. Keep this user-message dynamic-only so cache hits land.
+  return `CLIENT: ${contact.name || "Business Owner"}${profileBlock}
 TIER: ${tier}
 
 THEIR ANSWERS:
 ${answerBlock}
 
-TASK: Assess this business using the logic above. ${guide}
+TASK: Assess this business using the methodology in your system instructions. ${guide}
 Every sentence must reference THEIR actual answers — no generic filler, no invented numbers.
 
 Return ONLY valid JSON — no markdown code fences, no text before or after — in exactly this shape:
@@ -122,7 +131,7 @@ Return ONLY valid JSON — no markdown code fences, no text before or after — 
   "path": "rehab | urgent | growth | strong",
   "badge": "SHORT UPPERCASE LABEL",
   "headline": "one bold sentence naming their reality",
-  "opener": "2-3 sentences describing their actual situation",
+  "opener": "2-3 sentences describing their actual situation (this is the personalized hook used in their delivery email — write it so it could stand alone as the first paragraph of a message TO them)",
   "context": "one sentence of perspective",
   "gaps": [
     { "title": "short", "impact": "the concrete cost/consequence", "priority": "CRITICAL | HIGH | MEDIUM" }
@@ -132,7 +141,8 @@ Return ONLY valid JSON — no markdown code fences, no text before or after — 
   ],
   "nextStepHeadline": "short",
   "nextStepBody": "2-3 sentences leading to a strategy call",
-  "opportunityFlags": ["MERCHANT_PROCESSING_OPP"]
+  "opportunityFlags": ["MERCHANT_PROCESSING_OPP"],
+  "strategistBrief": "INTERNAL-ONLY brief for the CFO consultant — NEVER shown to the client. 2-3 short paragraphs covering: (1) why this lead got their path verdict — which specific signals in their answers triggered it; (2) the top 2 upsell angles based on the opportunity flags fired and what's underneath their answers; (3) a single suggested opener question the consultant should use to open the strategy call. Write in consultant-to-consultant voice — direct, no fluff."
 }`;
 }
 
@@ -146,7 +156,10 @@ async function callClaude(prompt, env) {
     },
     body: JSON.stringify({
       model: CONFIG.CLAUDE_MODEL,
-      max_tokens: 2000,
+      max_tokens: 2500,
+      system: [
+        { type: "text", text: ASSESSMENT_RUBRIC, cache_control: { type: "ephemeral" } }
+      ],
       messages: [{ role: "user", content: prompt }],
     }),
   });
@@ -204,6 +217,41 @@ ${context}
 <h2 style="font-family:Georgia,serif;font-size:20px;font-weight:700;color:#1a1a1a;margin:32px 0 12px;">${e(agent.nextStepHeadline)}</h2>
 <p style="font-family:Georgia,serif;font-size:16px;color:#374151;line-height:1.6;font-style:italic;margin:0;">${e(agent.nextStepBody)}</p>
 `.trim();
+}
+
+// Wrap inline-styled report body in a full standalone HTML page for the /report endpoint.
+// Used when someone clicks "View Report Online" from an email.
+function buildReportPage(reportBody, tierLabel, contactName) {
+  const e = escapeHtml;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${e(tierLabel)} — CFO By Design</title>
+<style>
+  body { margin:0; background:#faf5e9; font-family:Georgia,serif; color:#1a1a1a; }
+  .container { max-width:720px; margin:0 auto; padding:40px 24px; }
+  .brand { text-align:center; margin-bottom:32px; padding-bottom:24px; border-bottom:1px solid #e5e7eb; }
+  .brand-name { font-family:Georgia,serif; font-size:22px; font-weight:700; color:#92400e; letter-spacing:1px; }
+  .brand-tagline { font-family:Arial,sans-serif; font-size:11px; color:#6b7280; letter-spacing:2px; text-transform:uppercase; margin-top:6px; }
+  .report { background:#ffffff; padding:32px; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.06); }
+  .footer { text-align:center; margin-top:32px; padding-top:24px; border-top:1px solid #e5e7eb; font-family:Arial,sans-serif; font-size:11px; color:#9ca3af; letter-spacing:1.5px; text-transform:uppercase; }
+</style>
+</head>
+<body>
+  <div class="container">
+    <div class="brand">
+      <div class="brand-name">CFO BY DESIGN</div>
+      <div class="brand-tagline">${e(tierLabel)} for ${e(contactName)}</div>
+    </div>
+    <div class="report">
+      ${reportBody}
+    </div>
+    <div class="footer">© CFO By Design · cfobydesign.com</div>
+  </div>
+</body>
+</html>`;
 }
 
 // Tolerant JSON extraction — strips fences / preamble if the model adds any.
@@ -420,11 +468,88 @@ async function handleVerify(body, env) {
   });
 }
 
+// GET /report/{contactId} — serve the contact's stored report as a styled standalone HTML page.
+// Tier is determined from the contact's tags (swot_paid_297 / swot_paid_47 / swot_free_lead).
+// Used by "View Report Online" links written to swot_report_path on every successful run.
+async function handleReport(contactId, env) {
+  if (!contactId) {
+    return new Response("Missing contact id", { status: 400, headers: htmlHeaders() });
+  }
+  if (!env.GHL_API_KEY) {
+    return new Response("Server not configured", { status: 500, headers: htmlHeaders() });
+  }
+
+  const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}`, {
+    headers: {
+      Authorization: `Bearer ${env.GHL_API_KEY}`,
+      Version: "2021-07-28",
+    },
+  });
+  if (!res.ok) {
+    return new Response("Report not found", { status: 404, headers: htmlHeaders() });
+  }
+
+  const data = await res.json().catch(() => ({}));
+  const c = data?.contact || {};
+  const tags = (c.tags || []).map((t) => String(t).toLowerCase());
+
+  // Determine tier from tags — highest paid tier wins if multiple are present.
+  let reportFieldKey, tierLabel;
+  if (tags.includes("swot_paid_297")) {
+    reportFieldKey = "business_playbook";
+    tierLabel = "Business Playbook";
+  } else if (tags.includes("swot_paid_47")) {
+    reportFieldKey = "swot_full_report";
+    tierLabel = "Full Diagnostic";
+  } else {
+    reportFieldKey = "swot_free_report";
+    tierLabel = "SWOT Diagnostic";
+  }
+
+  // Find the report content. GHL returns customFields as an array; the per-field key
+  // may be ".fieldKey" (with the contact. prefix) or ".key" (without). Try both.
+  const customFields = c.customFields || [];
+  const reportField = customFields.find((f) => {
+    const key = f.fieldKey || f.key || "";
+    return key === `contact.${reportFieldKey}` || key === reportFieldKey;
+  });
+  const reportContent = reportField?.value || reportField?.field_value || "";
+
+  if (!reportContent) {
+    const fallback = `
+      <p style="font-family:Georgia,serif;font-size:16px;color:#374151;line-height:1.65;">
+        Your report is being prepared. If you've just completed the assessment,
+        check back in a moment, or reach out to
+        <a href="mailto:hello@cfobydesign.com" style="color:#92400e;">hello@cfobydesign.com</a>
+        if it doesn't appear within a few minutes.
+      </p>`;
+    return new Response(buildReportPage(fallback, tierLabel, "Business Owner"), {
+      status: 200,
+      headers: htmlHeaders(),
+    });
+  }
+
+  const contactName =
+    c.firstName || c.contactName || [c.firstName, c.lastName].filter(Boolean).join(" ") || "Business Owner";
+
+  return new Response(buildReportPage(reportContent, tierLabel, contactName), {
+    status: 200,
+    headers: htmlHeaders(),
+  });
+}
+
 function corsHeaders() {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+  };
+}
+
+function htmlHeaders() {
+  return {
+    ...corsHeaders(),
+    "Content-Type": "text/html; charset=utf-8",
   };
 }
 
@@ -438,10 +563,22 @@ function json(body, status = 200) {
 export default {
   async fetch(request, env, ctx) {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders() });
+
+    const url = new URL(request.url);
+    const path = url.pathname.replace(/\/+$/, "");
+
+    // GET /report/{contactId} — public-readable hosted report view.
+    if (request.method === "GET") {
+      const reportMatch = path.match(/^\/report\/([A-Za-z0-9_-]+)$/);
+      if (reportMatch) {
+        return handleReport(reportMatch[1], env);
+      }
+      return json({ success: false, error: "Not found" }, 404);
+    }
+
     if (request.method !== "POST") return json({ success: false, error: "POST only" }, 405);
 
     // Route /upload BEFORE JSON parsing — it expects multipart/form-data.
-    const path = new URL(request.url).pathname.replace(/\/+$/, "");
     if (path === "/upload") {
       return handleUpload(request, env);
     }
@@ -520,6 +657,26 @@ export default {
         { key: "swot_rehab_flag", field_value: agent.path === "rehab" ? "true" : "false" },
         { key: reportFieldKey, field_value: reportBody },
       ];
+
+      // Personalized 1-paragraph hook for delivery emails ({{contact.swot_email_blurb}}).
+      // Pulled from the LLM's `opener` — it's already written as a per-lead intro.
+      if (agent.opener) {
+        fields.push({ key: "swot_email_blurb", field_value: String(agent.opener) });
+      }
+
+      // Internal-only consultant brief ({{contact.swot_strategist_brief}}) — path reasoning,
+      // upsell angles, opener question. Written on every tier so Miguel sees it before every call.
+      if (agent.strategistBrief) {
+        fields.push({ key: "swot_strategist_brief", field_value: String(agent.strategistBrief) });
+      }
+
+      // Hosted "View Report Online" URL — points at GET /report/{contactId} on this worker.
+      // Used in email "View Online" buttons via {{contact.swot_report_path}}.
+      fields.push({
+        key: "swot_report_path",
+        field_value: `${url.origin}/report/${contactId}`,
+      });
+
       if (tier === "paid_297") {
         fields.push({ key: "swot_deep_dive_booked", field_value: "true" });
       }
