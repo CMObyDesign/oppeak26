@@ -175,16 +175,16 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
 <div class="layout">
 
   <aside class="sidebar">
-    <h3>Session History (last 20)</h3>
+    <h3 id="history-header">Session History (last 20)</h3>
     <div id="history-list"></div>
     <div class="sidebar-actions">
       <button onclick="clearHistory()" class="danger">Clear history</button>
     </div>
 
-    <h3>Saved Rubrics</h3>
+    <h3 id="saved-rubrics-header">Saved Rubrics</h3>
     <div id="saved-rubrics-list"></div>
 
-    <h3>Bookmarked Runs</h3>
+    <h3 id="bookmarks-header">Bookmarked Runs</h3>
     <div id="bookmarks-list"></div>
   </aside>
 
@@ -207,8 +207,8 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
           <input type="text" id="contact-name" placeholder="Test Owner" value="Test Owner">
         </div>
         <div>
-          <label for="contact-email">Email (optional — used only for ID lookup, no writeback)</label>
-          <input type="email" id="contact-email" placeholder="test@example.com">
+          <label for="contact-email">Email — leave blank for pure test · fill to receive the actual workflow email</label>
+          <input type="email" id="contact-email" placeholder="your@email.com (will trigger the tier email workflow)">
         </div>
       </div>
 
@@ -419,6 +419,10 @@ function renderOutput(run) {
   const badgeClass = "badge " + path;
   const flags = (r.opportunityFlags || []).map(f => '<span class="flag-tag">' + escapeHtml(f) + '</span>').join("") || '<span style="color:#9ca3af;font-size:12px;">none</span>';
 
+  const emailBanner = r.emailedTo
+    ? '<div style="margin-bottom:12px;padding:10px 12px;background:#d1fae5;border-left:4px solid #065f46;border-radius:4px;font-size:12px;color:#065f46;"><strong>📧 Email triggered →</strong> ' + escapeHtml(r.emailedTo) + ' — GHL workflow for tier <code>' + escapeHtml(run.tier) + '</code> will deliver the production email within 1-2 min. Tagged <code>SWOT_CONSOLE_TEST</code> for cleanup.</div>'
+    : '<div style="margin-bottom:12px;padding:8px 12px;background:#f3f4f6;border-radius:4px;font-size:11px;color:#6b7280;">📭 No email sent — leave email field blank for pure preview, fill it to trigger the workflow.</div>';
+
   document.getElementById("output-area").innerHTML = \`
     <div class="panel">
       <h2>Output — \${escapeHtml(run.tier)} · \${escapeHtml(new Date(run.ts).toLocaleTimeString())}</h2>
@@ -427,6 +431,7 @@ function renderOutput(run) {
         <span style="margin-left: 8px; font-size: 12px; color: #6b7280;">Flags:</span> \${flags}
         <button style="float:right;font-size:11px;" onclick="bookmarkRun('\${run.id}')">⭐ Bookmark this run</button>
       </div>
+      \${emailBanner}
       <div class="output-grid">
         <div class="output-card">
           <h3>✉️ Email Blurb (\${(r.opener || "").length} chars)</h3>
@@ -464,6 +469,7 @@ function renderSidebar() {
       }).join("");
 
   const saved = readLocal(SAVED_RUBRICS_KEY, []);
+  document.getElementById("saved-rubrics-header").textContent = "Saved Rubrics (" + saved.length + ")";
   document.getElementById("saved-rubrics-list").innerHTML = saved.length === 0
     ? '<div class="sidebar-empty">No saved rubrics</div>'
     : saved.map((s, i) => \`<div class="sidebar-entry" onclick='loadRubric(\${i})'>
@@ -472,6 +478,8 @@ function renderSidebar() {
       </div>\`).join("");
 
   const bookmarks = readLocal(BOOKMARKS_KEY, []);
+  document.getElementById("bookmarks-header").textContent = "Bookmarked Runs (" + bookmarks.length + ")";
+  document.getElementById("history-header").textContent = "Session History (" + history.length + " · last " + HISTORY_LIMIT + ")";
   document.getElementById("bookmarks-list").innerHTML = bookmarks.length === 0
     ? '<div class="sidebar-empty">No bookmarks</div>'
     : bookmarks.map(b => \`<div class="sidebar-entry" onclick='loadBookmark("\${b.id}")'>
@@ -493,13 +501,28 @@ function loadBookmark(id) {
 function bookmarkRun(id) {
   const history = readSession(HISTORY_KEY, []);
   const run = history.find(r => r.id === id);
-  if (!run) return toast("Couldn't find that run.", "error");
-  const label = prompt("Label this bookmark:", run.tier + " · " + run.result.path);
-  if (label === null) return;
+  if (!run) return toast("Couldn't find that run in session history (it may have been cleared).", "error");
+  const defaultLabel = (run.tier || "run") + " · " + (run.result?.path || "—");
+  const label = prompt("Label this bookmark:", defaultLabel);
+  if (label === null) return; // user cancelled
   const bookmarks = readLocal(BOOKMARKS_KEY, []);
-  bookmarks.unshift({ ...run, label });
-  localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
-  toast("Bookmarked.", "success"); renderSidebar();
+  bookmarks.unshift({ ...run, label: label || defaultLabel });
+  try {
+    localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
+  } catch (e) {
+    console.error("Bookmark save failed:", e);
+    return toast("Save failed: " + (e.name === "QuotaExceededError" ? "browser storage full — export learnings then clear old bookmarks" : e.message), "error");
+  }
+  toast("✓ Bookmarked — see sidebar 'Bookmarked Runs (" + bookmarks.length + ")'", "success");
+  renderSidebar();
+  // Briefly highlight the bookmarks section so it's obvious where it landed
+  const header = document.getElementById("bookmarks-header");
+  if (header) {
+    header.style.transition = "background-color 0.3s";
+    header.style.backgroundColor = "#fef3c7";
+    header.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => header.style.backgroundColor = "", 1500);
+  }
 }
 function clearHistory() {
   if (!confirm("Clear all session history? Bookmarks and saved rubrics will stay.")) return;

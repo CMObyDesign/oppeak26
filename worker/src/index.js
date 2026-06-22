@@ -568,7 +568,7 @@ function checkConsolePassword(request, env) {
 // POST /asksolomon/run — runs the SWOT assessment without GHL writeback.
 // Supports `rubricOverride` to test rubric variants ephemerally.
 // Probe requests (body.probe === true) just validate the password and return 200.
-async function handleConsoleRun(request, env) {
+async function handleConsoleRun(request, env, ctx, requestUrl) {
   if (!checkConsolePassword(request, env)) {
     return json({ success: false, error: "Unauthorized" }, 401);
   }
@@ -607,11 +607,59 @@ async function handleConsoleRun(request, env) {
 
   const reportHtml = buildReportHtml(agent);
 
+  // OPT-IN GHL writeback: if an email is provided, treat this like a real submission —
+  // create/update the contact, populate fields, apply tags. The existing tier
+  // workflow in GHL (00 SWOT Free Report / 01 $47 / 02 $297) will then fire and send
+  // the production-style email to whoever's address was provided. Tag with
+  // SWOT_CONSOLE_TEST so these contacts can be distinguished from real leads.
+  let emailedTo = null;
+  if (contact.email && ctx && requestUrl) {
+    try {
+      const contactId = await resolveGHLContactId(contact, env);
+      if (contactId) {
+        const reportFieldKey =
+          tier === "paid_297" ? "business_playbook"
+          : tier === "paid_47" ? "swot_full_report"
+          : "swot_free_report";
+
+        const fields = [
+          { key: "swot_path", field_value: String(agent.path || "") },
+          { key: "swot_rehab_flag", field_value: agent.path === "rehab" ? "true" : "false" },
+          { key: reportFieldKey, field_value: reportHtml },
+        ];
+        if (agent.opener) fields.push({ key: "swot_email_blurb", field_value: String(agent.opener) });
+        if (agent.strategistBrief) fields.push({ key: "swot_strategist_brief", field_value: String(agent.strategistBrief) });
+        fields.push({ key: "swot_report_path", field_value: `${requestUrl.origin}/report/${contactId}` });
+        if (tier === "paid_297") fields.push({ key: "swot_deep_dive_booked", field_value: "true" });
+
+        const tierTag =
+          tier === "paid_297" ? "SWOT_PAID_297"
+          : tier === "paid_47" ? "SWOT_PAID_47"
+          : "SWOT_FREE_LEAD";
+        const tags = [
+          tierTag,
+          `SWOT_PATH_${(agent.path || "").toUpperCase()}`,
+          "SWOT_CONSOLE_TEST", // distinguishes test contacts from real leads
+          ...(agent.opportunityFlags || []),
+        ].filter(Boolean);
+
+        ctx.waitUntil(Promise.allSettled([
+          updateGHLContact(contactId, fields, env),
+          addGHLTag(contactId, tags, env),
+        ]));
+        emailedTo = contact.email;
+      }
+    } catch (err) {
+      console.error("Console GHL writeback failed:", err.message);
+    }
+  }
+
   return json({
     success: true,
     tier,
     rubricUsed: rubric === ASSESSMENT_RUBRIC ? "default" : "override",
     reportHtml,
+    emailedTo, // null if no email provided; otherwise the address that will receive the workflow email
     ...agent,
   });
 }
@@ -717,9 +765,11 @@ export default {
       return handleUpload(request, env);
     }
 
-    // POST /asksolomon/run — console test runs. No GHL writeback, optional rubric override.
+    // POST /asksolomon/run — console test runs.
+    // Optional rubric override + opt-in GHL writeback when contact.email is provided
+    // (so the production email workflow fires and the tester receives a real email).
     if (path === "/asksolomon/run") {
-      return handleConsoleRun(request, env);
+      return handleConsoleRun(request, env, ctx, url);
     }
 
     let body;
