@@ -217,10 +217,12 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
           <label for="answers" style="margin-bottom:0;">Business info</label>
           <div class="mode-tabs" role="tablist" style="display:inline-flex;gap:4px;font-size:11px;">
             <button type="button" class="mode-btn active" data-mode="story" onclick="setInputMode('story')">📖 Story</button>
+            <button type="button" class="mode-btn" data-mode="guided" onclick="setInputMode('guided')">📝 Guided</button>
             <button type="button" class="mode-btn" data-mode="qa" onclick="setInputMode('qa')">📋 Q&amp;A</button>
           </div>
         </div>
         <textarea id="answers" rows="10" data-mode="story" placeholder="Describe the business in your own words. Cover revenue, biggest challenges, debt picture, taxes, AR aging, financial visibility, growth plans — anything that gives Solomon a real picture. Example:&#10;&#10;A $2.5M B2B agency, mostly retainer work. Cash flow is the constant headache — invoices go out on net-30 but most clients pay closer to net-45 so we're always one slow month away from payroll stress. Carrying about $150K in a working capital line plus some equipment debt. Taxes filed but we're 60 days behind on payroll deposits — Miguel knows about this. No real budget — I look at the bank account to decide what to pay each Friday."></textarea>
+        <div id="guided-fields" style="display:none; max-height:600px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:6px; padding:12px; background:#fafafa;"></div>
         <div id="mode-hint" style="font-size:11px;color:#9ca3af;margin-top:4px;">
           📖 Story mode: describe the business in prose. Solomon extracts signals from the narrative.
         </div>
@@ -328,11 +330,15 @@ async function runSolomon() {
   const answersRaw = document.getElementById("answers").value.trim();
   const rubricOverride = document.getElementById("rubric-override").value.trim();
 
-  if (!answersRaw) return toast("Add some business info first.", "error");
-
   const mode = document.getElementById("answers").dataset.mode || "story";
   let answers;
-  if (mode === "story") {
+
+  if (mode === "guided") {
+    answers = collectGuidedAnswers();
+    if (!answers.length) return toast("Fill in at least one guided question.", "error");
+  } else if (!answersRaw) {
+    return toast("Add some business info first.", "error");
+  } else if (mode === "story") {
     // Story mode: pass the whole narrative as one rich answer.
     // The rubric already instructs Solomon to extract signals from prose.
     answers = [{
@@ -558,12 +564,16 @@ function importLearnings() {
   input.click();
 }
 
-// ---------- Input mode (Story vs Q&A) ----------
+// ---------- Input mode (Story / Guided / Q&A) ----------
 const MODE_CONFIG = {
   story: {
     label: "Business info",
     hint: "📖 Story mode: describe the business in prose. Solomon extracts signals from the narrative.",
     placeholder: "Describe the business in your own words. Cover revenue, biggest challenges, debt picture, taxes, AR aging, financial visibility, growth plans — anything that gives Solomon a real picture. Example:\\n\\nA $2.5M B2B agency, mostly retainer work. Cash flow is the constant headache — invoices go out on net-30 but most clients pay closer to net-45 so we're always one slow month away from payroll stress. Carrying about $150K in a working capital line plus some equipment debt. Taxes filed but we're 60 days behind on payroll deposits — Miguel knows about this. No real budget — I look at the bank account to decide what to pay each Friday.",
+  },
+  guided: {
+    label: "Guided intake — tier-specific questions",
+    hint: "📝 Guided mode: questions from the canonical SWOT intake (Miguel's voice). Skip any that don't apply. Switch tier above to see different question sets.",
   },
   qa: {
     label: "Answers (one per line)",
@@ -571,20 +581,132 @@ const MODE_CONFIG = {
     placeholder: "Annual revenue? $2.5M\\nBiggest challenge? Cash flow timing\\nActive debt? Yes — $150K in working capital lines\\nRecent financial audit? No, never had one",
   },
 };
+
+// ---------- Tier question sets (canonical SWOT intake from SWOT_Questions_v3_MiguelVoice.md) ----------
+const FREE_QUESTIONS = [
+  { key: "P1", text: "What best describes your business type?", hint: "Service-based / Product-based / Hybrid" },
+  { key: "P2", text: "How do you primarily reach your customers?", hint: "Local presence / Statewide / Regional multi-state / National / E-commerce" },
+  { key: "P3", text: "What industry or vertical best describes your business?" },
+  { key: "Q1", text: "Do you currently have any active judgments, tax liens, or corporate debt you're actively managing?", hint: "Yes / No / Not sure" },
+  { key: "Q2", text: "When you make business decisions, are you basing them on your actual numbers — or on what's in your bank account?", hint: "[Miguel's 'magic question'] Real numbers / bank balance / in between / not sure" },
+  { key: "Q3", text: "What does your business consistently deliver that your clients say they can't get anywhere else?" },
+  { key: "Q4", text: "When a client refers you, what specific words or outcome do they use to describe what you did for them?" },
+  { key: "Q5", text: "Where does revenue most often leak in your business — proposals that don't close, work that goes over budget, clients that churn, or invoices that don't get paid on time?" },
+  { key: "Q6", text: "What would change in your business if you had 20% more profit on the same revenue — and where do you think that 20% is hiding?" },
+  { key: "Q7", text: "Where do you see demand in your market that you're not yet positioned to capture?" },
+  { key: "Q8", text: "What would happen to your business if your single largest client, revenue source, or referral channel disappeared in the next 90 days?" },
+];
+const PAID_47_ADDITIONAL = [
+  { key: "Q9", text: "What is the total balance of your current corporate debt — across all loans, lines of credit, and outstanding obligations?", hint: "Approximate amount or range" },
+  { key: "Q10", text: "How much do you pay every month on servicing your corporate debt — your total monthly debt service?", hint: "Approximate monthly amount" },
+  { key: "Q11", text: "What is the status of your current corporate debt?", hint: "Current and well-managed / current but stretched / managing actively / active judgments or tax liens involved" },
+  { key: "Q12", text: "How much of your accounts receivable is currently 30+ days overdue?", hint: "[30 days is normal] Approximate amount or range" },
+  { key: "Q13", text: "How much is 60+ days overdue?", hint: "[60+ is when it becomes a problem]" },
+  { key: "Q14", text: "What is the status of your business tax returns for the last two years — are they filed and current?", hint: "Filed and current / filed with outstanding balance or plan / one or both not yet filed / working with an accountant" },
+  { key: "Q15", text: "When did you last review what you're paying for merchant processing — and whether you're getting real value and proper coverage for the cost?", hint: "Within 12 months / 1-3 years / never / don't know what I'm paying" },
+  { key: "Q16", text: "Have you ever had a formal financial audit, review, or deep dive conducted on your business?", hint: "Yes within 2 years / yes more than 2 years ago / never / in progress" },
+  { key: "Q17", text: "Do you currently have a documented financial plan or budget for this year?", hint: "Yes track actuals / yes but don't use it / no formal budget" },
+  { key: "Q18", text: "Which financial metrics are you not currently tracking that you suspect you should be?", hint: "Margin by line / CAC / LTV / close rate / AR aging / debt service vs net revenue / other" },
+  { key: "Q19", text: "Which of your products, services, or client segments produces your best margins — and do you actually know why?" },
+  { key: "Q20", text: "What proprietary process, methodology, or capability do you have that a competitor would struggle to replicate?" },
+  { key: "Q21", text: "What recurring revenue, retainer, or continuity offer could you realistically add to your current client base in the next 90 days?" },
+  { key: "Q22", text: "What bold move in the next 12-24 months could 2-3x the business — and what is specifically stopping you from starting it?" },
+  { key: "Q23", text: "Which automations, financial tools, or AI workflows could free up real capacity or cut real costs for your team this quarter?" },
+  { key: "Q24", text: "Who are your top 2-3 competitors right now, and what are they doing that you'd rather they weren't?" },
+  { key: "Q25", text: "Where are you losing deals — and what reason do prospects give when they choose someone else over you?" },
+  { key: "Q26", text: "How visible is your business compared to your top competitors in search, reviews, referrals, and social? Where are you winning attention, and where are you effectively invisible?" },
+];
+const PAID_297_ADDITIONAL = [
+  { key: "Q_A", text: "Walk through your top 3 client engagements or revenue wins in the last 12 months — what was the revenue, the margin, and what made each one work?" },
+  { key: "Q_B", text: "What are your gross and net margins by product, service line, or client segment? Which is your most profitable, and which is costing you the most to deliver?" },
+  { key: "Q_C", text: "How do your unit economics compare to what you believe is the benchmark for your industry — CAC, LTV, payback period, gross margin?" },
+  { key: "Q_D", text: "What is your current cash position and runway — and how would three consecutive months of below-average revenue impact the business?" },
+  { key: "Q_E", text: "Walk us through your current debt stack: total corporate debt, monthly debt service, and how comfortable you are with that level of leverage right now." },
+  { key: "Q_F", text: "What does your accounts receivable aging look like in detail — total AR, amount 30+ days overdue, and amount 60+ days overdue?" },
+  { key: "Q_G", text: "What is your close rate at each stage of your sales process — lead to qualified, qualified to proposal, proposal to closed — and where does it leak the most?" },
+  { key: "Q_H", text: "What is the single biggest 'we should have fixed this years ago' problem still on your list — and what has kept it there?" },
+  { key: "Q_I", text: "If you had to cut 20% of your services, clients, or overhead tomorrow, what would go first — and why hasn't it gone already?" },
+  { key: "Q_J", text: "What percentage of your revenue comes from your top 10% of clients — and what is your realistic exposure if any of them left in the next 6 months?" },
+  { key: "Q_K", text: "What regulatory, tax, compliance, or technology changes on the horizon could materially impact how your business operates or gets paid?" },
+  { key: "Q_L", text: "What geographic or vertical expansion has the lowest barrier to entry based on what you already do today — and what would it take to move on it?" },
+  { key: "Q_M", text: "What does success look like for your business three years from now — and what is the single biggest financial or operational obstacle standing between you and that picture today?" },
+];
+function questionsForTier(tier) {
+  if (tier === "paid_297") return [...FREE_QUESTIONS, ...PAID_47_ADDITIONAL, ...PAID_297_ADDITIONAL];
+  if (tier === "paid_47")  return [...FREE_QUESTIONS, ...PAID_47_ADDITIONAL];
+  return FREE_QUESTIONS;
+}
+
+function renderGuidedFields(tier) {
+  const container = document.getElementById("guided-fields");
+  if (!container) return;
+  const questions = questionsForTier(tier);
+  const count = { free: FREE_QUESTIONS.length, paid_47: FREE_QUESTIONS.length + PAID_47_ADDITIONAL.length, paid_297: FREE_QUESTIONS.length + PAID_47_ADDITIONAL.length + PAID_297_ADDITIONAL.length }[tier] || FREE_QUESTIONS.length;
+  container.innerHTML =
+    '<div style="font-size:11px;color:#6b7280;margin-bottom:10px;padding:6px 8px;background:#fef3c7;border-radius:4px;">'
+    + '<strong>' + escapeHtml(tier.toUpperCase()) + '</strong> tier · ' + count + ' questions · skip any that don\\'t apply'
+    + '</div>'
+    + questions.map(q => {
+        const id = "gq_" + q.key;
+        const hint = q.hint ? '<div style="font-size:10px;color:#9ca3af;margin-top:2px;">' + escapeHtml(q.hint) + '</div>' : "";
+        return '<div style="margin-bottom:12px;">'
+          + '<label for="' + id + '" style="font-size:12px;color:#374151;font-weight:500;display:block;margin-bottom:2px;">'
+          + '<span style="font-family:ui-monospace,monospace;font-size:10px;color:#92400e;margin-right:6px;">' + escapeHtml(q.key) + '</span>'
+          + escapeHtml(q.text)
+          + '</label>'
+          + hint
+          + '<textarea id="' + id + '" data-question="' + escapeHtml(q.text) + '" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;font-family:inherit;" placeholder="(skip if not applicable)"></textarea>'
+          + '</div>';
+      }).join("");
+}
+
+function collectGuidedAnswers() {
+  const container = document.getElementById("guided-fields");
+  if (!container) return [];
+  return Array.from(container.querySelectorAll("textarea")).map(ta => ({
+    question: ta.dataset.question || "",
+    answer: ta.value.trim(),
+  })).filter(a => a.question && a.answer);
+}
+
 function setInputMode(mode) {
   const cfg = MODE_CONFIG[mode] || MODE_CONFIG.story;
   document.querySelectorAll(".mode-btn").forEach(b => {
     b.classList.toggle("active", b.dataset.mode === mode);
   });
   const ta = document.getElementById("answers");
+  const guided = document.getElementById("guided-fields");
   ta.dataset.mode = mode;
-  ta.placeholder = cfg.placeholder;
-  // Update label and hint (label is the previous sibling div's first child)
+
+  if (mode === "guided") {
+    ta.style.display = "none";
+    guided.style.display = "block";
+    const tier = document.getElementById("tier").value;
+    renderGuidedFields(tier);
+  } else {
+    ta.style.display = "";
+    guided.style.display = "none";
+    if (cfg.placeholder) ta.placeholder = cfg.placeholder;
+  }
+
   const labelEl = document.querySelector('label[for="answers"]');
   if (labelEl) labelEl.textContent = cfg.label;
   const hintEl = document.getElementById("mode-hint");
   if (hintEl) hintEl.textContent = cfg.hint;
 }
+
+// Re-render guided fields when tier changes (only if in guided mode).
+window.addEventListener("DOMContentLoaded", () => {
+  const tierEl = document.getElementById("tier");
+  if (tierEl) {
+    tierEl.addEventListener("change", () => {
+      const ta = document.getElementById("answers");
+      if (ta && ta.dataset.mode === "guided") {
+        renderGuidedFields(tierEl.value);
+      }
+    });
+  }
+});
 
 // ---------- Helpers ----------
 function escapeHtml(s) {
