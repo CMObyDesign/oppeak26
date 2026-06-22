@@ -313,13 +313,19 @@ async function runSolomon() {
   const rubricOverride = document.getElementById("rubric-override").value.trim();
 
   if (!answersRaw) return toast("Add some answers first.", "error");
+  // Accept either "Question? answer" or "Question: answer" per line.
+  // Split on first separator (? or :) followed by whitespace.
   const answers = answersRaw.split(/\\n+/).map(line => {
-    const idx = line.indexOf(":");
-    if (idx === -1) return { question: line.trim(), answer: "" };
-    return { question: line.slice(0, idx).trim(), answer: line.slice(idx + 1).trim() };
+    const m = line.match(/^(.+?[?:])\\s+(.+)$/);
+    if (!m) {
+      const idx = line.indexOf(":");
+      if (idx === -1) return { question: line.trim(), answer: "" };
+      return { question: line.slice(0, idx).trim(), answer: line.slice(idx + 1).trim() };
+    }
+    return { question: m[1].trim(), answer: m[2].trim() };
   }).filter(a => a.question && a.answer);
 
-  if (!answers.length) return toast("Couldn't parse answers — use 'Question: answer' per line.", "error");
+  if (!answers.length) return toast("Couldn't parse. Use one per line: 'Annual revenue? $2.5M' or 'Annual revenue: $2.5M'", "error");
 
   const runBtn = document.getElementById("run-btn");
   const status = document.getElementById("run-status");
