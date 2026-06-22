@@ -93,6 +93,13 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
     font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #6b7280;
     margin: 0 0 8px; font-weight: 600;
   }
+  .mode-btn {
+    padding: 4px 10px; border-radius: 4px; border: 1px solid #d1d5db;
+    background: #ffffff; font-size: 11px; cursor: pointer; color: #6b7280;
+  }
+  .mode-btn:hover { background: #f3f4f6; }
+  .mode-btn.active { background: #1a1a1a; color: #ffffff; border-color: #1a1a1a; }
+
   .badge {
     display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 10px;
     font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
@@ -206,8 +213,17 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
       </div>
 
       <div>
-        <label for="answers">Answers (one per line — format: <code>Question: their answer</code>)</label>
-        <textarea id="answers" rows="8" placeholder="Annual revenue? $2.5M&#10;Biggest challenge? Cash flow timing&#10;Active debt? Yes — $150K in working capital lines"></textarea>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">
+          <label for="answers" style="margin-bottom:0;">Business info</label>
+          <div class="mode-tabs" role="tablist" style="display:inline-flex;gap:4px;font-size:11px;">
+            <button type="button" class="mode-btn active" data-mode="story" onclick="setInputMode('story')">📖 Story</button>
+            <button type="button" class="mode-btn" data-mode="qa" onclick="setInputMode('qa')">📋 Q&amp;A</button>
+          </div>
+        </div>
+        <textarea id="answers" rows="10" data-mode="story" placeholder="Describe the business in your own words. Cover revenue, biggest challenges, debt picture, taxes, AR aging, financial visibility, growth plans — anything that gives Solomon a real picture. Example:&#10;&#10;A $2.5M B2B agency, mostly retainer work. Cash flow is the constant headache — invoices go out on net-30 but most clients pay closer to net-45 so we're always one slow month away from payroll stress. Carrying about $150K in a working capital line plus some equipment debt. Taxes filed but we're 60 days behind on payroll deposits — Miguel knows about this. No real budget — I look at the bank account to decide what to pay each Friday."></textarea>
+        <div id="mode-hint" style="font-size:11px;color:#9ca3af;margin-top:4px;">
+          📖 Story mode: describe the business in prose. Solomon extracts signals from the narrative.
+        </div>
       </div>
 
       <details>
@@ -312,20 +328,30 @@ async function runSolomon() {
   const answersRaw = document.getElementById("answers").value.trim();
   const rubricOverride = document.getElementById("rubric-override").value.trim();
 
-  if (!answersRaw) return toast("Add some answers first.", "error");
-  // Accept either "Question? answer" or "Question: answer" per line.
-  // Split on first separator (? or :) followed by whitespace.
-  const answers = answersRaw.split(/\\n+/).map(line => {
-    const m = line.match(/^(.+?[?:])\\s+(.+)$/);
-    if (!m) {
-      const idx = line.indexOf(":");
-      if (idx === -1) return { question: line.trim(), answer: "" };
-      return { question: line.slice(0, idx).trim(), answer: line.slice(idx + 1).trim() };
-    }
-    return { question: m[1].trim(), answer: m[2].trim() };
-  }).filter(a => a.question && a.answer);
+  if (!answersRaw) return toast("Add some business info first.", "error");
 
-  if (!answers.length) return toast("Couldn't parse. Use one per line: 'Annual revenue? $2.5M' or 'Annual revenue: $2.5M'", "error");
+  const mode = document.getElementById("answers").dataset.mode || "story";
+  let answers;
+  if (mode === "story") {
+    // Story mode: pass the whole narrative as one rich answer.
+    // The rubric already instructs Solomon to extract signals from prose.
+    answers = [{
+      question: "Tell me about this business — situation, revenue, biggest challenges, debt picture, taxes, AR aging, financial visibility, growth plans, what's working and what isn't",
+      answer: answersRaw,
+    }];
+  } else {
+    // Q&A mode: accept either "Question? answer" or "Question: answer" per line.
+    answers = answersRaw.split(/\\n+/).map(line => {
+      const m = line.match(/^(.+?[?:])\\s+(.+)$/);
+      if (!m) {
+        const idx = line.indexOf(":");
+        if (idx === -1) return { question: line.trim(), answer: "" };
+        return { question: line.slice(0, idx).trim(), answer: line.slice(idx + 1).trim() };
+      }
+      return { question: m[1].trim(), answer: m[2].trim() };
+    }).filter(a => a.question && a.answer);
+    if (!answers.length) return toast("Couldn't parse. Use one per line: 'Annual revenue? $2.5M' or 'Annual revenue: $2.5M'", "error");
+  }
 
   const runBtn = document.getElementById("run-btn");
   const status = document.getElementById("run-status");
@@ -530,6 +556,34 @@ function importLearnings() {
     } catch (e) { toast("Invalid file: " + e.message, "error"); }
   };
   input.click();
+}
+
+// ---------- Input mode (Story vs Q&A) ----------
+const MODE_CONFIG = {
+  story: {
+    label: "Business info",
+    hint: "📖 Story mode: describe the business in prose. Solomon extracts signals from the narrative.",
+    placeholder: "Describe the business in your own words. Cover revenue, biggest challenges, debt picture, taxes, AR aging, financial visibility, growth plans — anything that gives Solomon a real picture. Example:\\n\\nA $2.5M B2B agency, mostly retainer work. Cash flow is the constant headache — invoices go out on net-30 but most clients pay closer to net-45 so we're always one slow month away from payroll stress. Carrying about $150K in a working capital line plus some equipment debt. Taxes filed but we're 60 days behind on payroll deposits — Miguel knows about this. No real budget — I look at the bank account to decide what to pay each Friday.",
+  },
+  qa: {
+    label: "Answers (one per line)",
+    hint: "📋 Q&A mode: 'Question? answer' or 'Question: answer' per line.",
+    placeholder: "Annual revenue? $2.5M\\nBiggest challenge? Cash flow timing\\nActive debt? Yes — $150K in working capital lines\\nRecent financial audit? No, never had one",
+  },
+};
+function setInputMode(mode) {
+  const cfg = MODE_CONFIG[mode] || MODE_CONFIG.story;
+  document.querySelectorAll(".mode-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.mode === mode);
+  });
+  const ta = document.getElementById("answers");
+  ta.dataset.mode = mode;
+  ta.placeholder = cfg.placeholder;
+  // Update label and hint (label is the previous sibling div's first child)
+  const labelEl = document.querySelector('label[for="answers"]');
+  if (labelEl) labelEl.textContent = cfg.label;
+  const hintEl = document.getElementById("mode-hint");
+  if (hintEl) hintEl.textContent = cfg.hint;
 }
 
 // ---------- Helpers ----------
