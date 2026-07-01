@@ -667,6 +667,73 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
   });
 }
 
+// POST /asksolomon/send-result — take a previously-generated agent output
+// and email it via the tier's GHL workflow to any specified address.
+// Does NOT invoke Solomon. Reuses production writeback path.
+async function handleConsoleSendResult(request, env, ctx, requestUrl) {
+  if (!checkConsolePassword(request, env)) {
+    return json({ success: false, error: "Unauthorized" }, 401);
+  }
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+
+  const tier = body.tier || "free";
+  const contact = body.contact || {};
+  const agent = body.agent || {};
+  const reportHtml = body.reportHtml || "";
+
+  if (!contact.email || !contact.email.includes("@")) {
+    return json({ success: false, error: "Valid recipient email required" }, 400);
+  }
+  if (!agent.path) {
+    return json({ success: false, error: "Missing agent output (path required)" }, 400);
+  }
+
+  const contactId = await resolveGHLContactId(contact, env);
+  if (!contactId) {
+    return json({ success: false, error: "Couldn't resolve or create GHL contact" }, 500);
+  }
+
+  const reportFieldKey =
+    tier === "paid_297" ? "business_playbook"
+    : tier === "paid_47" ? "swot_full_report"
+    : "swot_free_report";
+
+  const fields = [
+    { key: "swot_path", field_value: String(agent.path || "") },
+    { key: "swot_rehab_flag", field_value: agent.path === "rehab" ? "true" : "false" },
+    { key: reportFieldKey, field_value: reportHtml },
+  ];
+  if (agent.opener) fields.push({ key: "swot_email_blurb", field_value: String(agent.opener) });
+  if (agent.strategistBrief) fields.push({ key: "swot_strategist_brief", field_value: String(agent.strategistBrief) });
+  fields.push({ key: "swot_report_path", field_value: `${requestUrl.origin}/report/${contactId}` });
+  if (tier === "paid_297") fields.push({ key: "swot_deep_dive_booked", field_value: "true" });
+
+  const tierTag =
+    tier === "paid_297" ? "SWOT_PAID_297"
+    : tier === "paid_47" ? "SWOT_PAID_47"
+    : "SWOT_FREE_LEAD";
+  const tags = [
+    tierTag,
+    `SWOT_PATH_${(agent.path || "").toUpperCase()}`,
+    "SWOT_CONSOLE_MANUAL_SEND", // distinguishes from live leads and from SWOT_CONSOLE_TEST auto-runs
+    ...(agent.opportunityFlags || []),
+  ].filter(Boolean);
+
+  ctx.waitUntil(Promise.allSettled([
+    updateGHLContact(contactId, fields, env),
+    addGHLTag(contactId, tags, env),
+  ]));
+
+  return json({
+    success: true,
+    tier,
+    sentTo: contact.email,
+    contactId,
+  });
+}
+
 // Like callClaude but accepts an explicit rubric (for the console's override path).
 // When the rubric is the default, cache_control still applies — repeated runs hit the cache.
 async function callClaudeWithRubric(prompt, rubric, env) {
@@ -773,6 +840,14 @@ export default {
     // (so the production email workflow fires and the tester receives a real email).
     if (path === "/asksolomon/run") {
       return handleConsoleRun(request, env, ctx, url);
+    }
+
+    // POST /asksolomon/send-result — send a PREVIOUSLY GENERATED output to an email.
+    // Does NOT re-run Solomon. Writes the provided agent + reportHtml to GHL and
+    // applies tier tags, so the existing production workflow delivers the email.
+    // Tagged SWOT_CONSOLE_MANUAL_SEND to distinguish from real leads and test runs.
+    if (path === "/asksolomon/send-result") {
+      return handleConsoleSendResult(request, env, ctx, url);
     }
 
     let body;

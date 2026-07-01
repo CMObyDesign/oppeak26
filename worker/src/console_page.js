@@ -105,6 +105,41 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
     border-radius: 4px; cursor: pointer; font-family: inherit; font-weight: 500;
   }
   .copy-btn:hover { background: #f3f4f6; color: #1a1a1a; }
+  .mic-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 50%; border: 1px solid #d1d5db;
+    background: #ffffff; cursor: pointer; font-size: 13px; margin-left: 6px;
+    vertical-align: middle;
+  }
+  .mic-btn:hover { background: #f3f4f6; }
+  .mic-btn.recording { background: #fee2e2; border-color: #b91c1c; animation: micpulse 1.2s infinite; }
+  .mic-btn.disabled { opacity: 0.35; cursor: not-allowed; }
+  @keyframes micpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(185,28,28,0.4); } 50% { box-shadow: 0 0 0 6px rgba(185,28,28,0); } }
+  .guidance-panel {
+    background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px;
+    padding: 12px 14px; margin: 8px 0; font-size: 12px; color: #075985;
+    line-height: 1.55;
+  }
+  .guidance-panel strong { color: #0c4a6e; }
+  .guidance-panel code {
+    background: #ffffff; padding: 1px 5px; border-radius: 3px;
+    font-size: 11px; color: #92400e;
+  }
+  .guidance-panel ul { margin: 6px 0 0 0; padding-left: 20px; }
+  .guidance-panel li { margin-bottom: 3px; }
+  .send-result-box {
+    margin-top: 16px; padding: 14px; background: #f9fafb;
+    border: 1px dashed #d1d5db; border-radius: 6px;
+  }
+  .send-result-box input[type="email"] {
+    display: inline-block; width: auto; margin-right: 6px;
+    padding: 6px 10px; font-size: 12px;
+  }
+  .send-result-box button {
+    padding: 6px 14px; font-size: 12px; font-weight: 600;
+    background: #065f46; color: #ffffff; border-color: #065f46;
+  }
+  .send-result-box button:hover { background: #047857; border-color: #047857; }
 
   .badge {
     display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 10px;
@@ -220,7 +255,10 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
 
       <div>
         <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">
-          <label for="answers" style="margin-bottom:0;">Business info</label>
+          <label for="answers" style="margin-bottom:0;">
+            Business info
+            <button type="button" class="mic-btn" data-mic-target="answers" title="Dictate — click to start, click again to stop">🎤</button>
+          </label>
           <div class="mode-tabs" role="tablist" style="display:inline-flex;gap:4px;font-size:11px;">
             <button type="button" class="mode-btn active" data-mode="story" onclick="setInputMode('story')">📖 Story</button>
             <button type="button" class="mode-btn" data-mode="guided" onclick="setInputMode('guided')">📝 Guided</button>
@@ -237,11 +275,45 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
       <details>
         <summary>▸ Rubric override (advanced) — edit the system prompt for this run only</summary>
         <div style="margin-top: 8px;">
+          <div class="guidance-panel">
+            <strong>📖 Read before editing.</strong> The rubric is what tells Solomon HOW to diagnose. Small wording changes can meaningfully shift the output.
+            <ul>
+              <li><strong>Safe to tweak:</strong> the wording of individual sections (make more/less strict, add examples in Miguel's voice, tighten the tone).</li>
+              <li><strong>Preserve exactly:</strong> section headers in <code>ALL CAPS</code>, the four path names (<code>rehab</code> / <code>urgent</code> / <code>growth</code> / <code>strong</code>), the opportunity flag names (<code>MERCHANT_PROCESSING_OPP</code> etc.). Renaming these breaks tag emission and workflow triggers.</li>
+              <li><strong>Do NOT remove:</strong> the "return ONLY valid JSON" instruction in the user prompt (that's in <code>buildPrompt</code>, not this rubric — but changing rubric structure can cascade there).</li>
+              <li><strong>Format:</strong> plain text, no markdown syntax needed. Solomon is instructed elsewhere how to return JSON.</li>
+              <li><strong>Testing:</strong> hit "Load default rubric →" first so you're editing from a known baseline. Then bookmark good runs before making bigger changes so you can compare.</li>
+            </ul>
+          </div>
+          <label for="rubric-override" style="font-size:11px;color:#6b7280;">
+            Rubric text
+            <button type="button" class="mic-btn" data-mic-target="rubric-override" title="Dictate — click to start, click again to stop">🎤</button>
+          </label>
           <textarea id="rubric-override" rows="14" class="code" placeholder="Leave empty to use the deployed default rubric. Paste a modified version here to test it for this run only — won't affect production."></textarea>
           <div class="sidebar-actions" style="margin-top: 8px;">
             <button onclick="loadDefaultRubric()">Load default rubric →</button>
             <button onclick="saveCurrentRubric()">Save this rubric</button>
           </div>
+        </div>
+      </details>
+
+      <details style="margin-top:8px;">
+        <summary>▸ Reference material — what Solomon can learn from (uploads coming soon)</summary>
+        <div class="guidance-panel" style="margin-top:8px;">
+          <strong>📤 What to upload (when the library ships in the next release):</strong>
+          <ul>
+            <li><strong>Client meeting transcripts</strong> — from Fireflies / Gong / manual notes. Solomon extracts Miguel's exact phrasing, common diagnostic patterns, and real-world example scenarios.</li>
+            <li><strong>Testimonials</strong> — verbatim client quotes about outcomes. Solomon uses these to sharpen the "what's possible" framing in reports.</li>
+            <li><strong>Example analyses</strong> — past strategist briefs or growth plans Miguel is proud of. Solomon uses these as few-shot templates.</li>
+            <li><strong>Rubric fragments</strong> — small opinionated rules to layer onto the default rubric (e.g., "always ask about payroll frequency for retail businesses").</li>
+          </ul>
+          <strong>📄 Format expectations:</strong>
+          <ul>
+            <li>Plain <code>.txt</code> or <code>.md</code> files preferred. PDFs / .docx accepted but text-only content extracted.</li>
+            <li><strong>De-identify before upload</strong> — remove client names, dollar amounts specific to individual businesses, anything that could ID a real client (unless testimonial with permission).</li>
+            <li>Keep each file under 100KB (~15,000 words). Larger items should be split into thematic chunks.</li>
+            <li>Include a 1-sentence description at the top: <code>What this is + why Solomon should learn from it.</code></li>
+          </ul>
         </div>
       </details>
 
@@ -321,7 +393,58 @@ window.addEventListener("DOMContentLoaded", () => {
     if (el) el.addEventListener("input", saveInputsToLocal);
     if (el && id === "tier") el.addEventListener("change", saveInputsToLocal);
   });
+  initMicButtons();
 });
+
+// Wire every element with class .mic-btn to a Web Speech API recorder that
+// appends transcribed speech into the textarea named by data-mic-target.
+// Chrome/Edge/Safari support; Firefox falls back to a disabled button + tooltip.
+function initMicButtons() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  document.querySelectorAll(".mic-btn").forEach(btn => {
+    if (btn.dataset.wired) return;
+    btn.dataset.wired = "1";
+    if (!SR) {
+      btn.classList.add("disabled");
+      btn.title = "Speech recognition not supported in this browser — try Chrome or Edge";
+      btn.onclick = () => toast("Speech recognition not available. Try Chrome or Edge.", "error");
+      return;
+    }
+    let rec = null;
+    btn.onclick = () => {
+      const targetId = btn.dataset.micTarget;
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      if (rec) { try { rec.stop(); } catch {} return; }
+      rec = new SR();
+      rec.continuous = true;
+      rec.interimResults = false;
+      rec.lang = "en-US";
+      rec.onresult = (e) => {
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) {
+            const text = e.results[i][0].transcript.trim();
+            if (text) {
+              const cur = target.value ? target.value.trim() + " " : "";
+              target.value = cur + text;
+              target.dispatchEvent(new Event("input"));
+            }
+          }
+        }
+      };
+      rec.onerror = (e) => { toast("Mic error: " + e.error, "error"); rec = null; btn.classList.remove("recording"); btn.textContent = "🎤"; };
+      rec.onend = () => { rec = null; btn.classList.remove("recording"); btn.textContent = "🎤"; };
+      try {
+        rec.start();
+        btn.classList.add("recording");
+        btn.textContent = "🔴";
+      } catch (e) {
+        toast("Couldn't start mic: " + e.message, "error");
+        rec = null;
+      }
+    };
+  });
+}
 
 // Persist current form inputs to localStorage so refresh doesn't nuke work in progress.
 function saveInputsToLocal() {
@@ -527,8 +650,52 @@ function renderOutput(run) {
         <h3>Raw response JSON <button class="copy-btn" onclick="copyToClipboard(this, \\\`\${escapeAttr(JSON.stringify(r, null, 2))}\\\`)">📋</button></h3>
         <textarea rows="10" class="code" readonly>\${escapeHtml(JSON.stringify(r, null, 2))}</textarea>
       </div>
+
+      <!-- SEND THIS RESULT — email the CURRENT run to any address without re-running Solomon -->
+      <div class="send-result-box">
+        <div style="font-size:12px;color:#374151;margin-bottom:8px;">
+          <strong>✉️ Love this response? Send it.</strong> Delivers THIS run's output (not a fresh Solomon call) to any email via the tier's GHL workflow.
+        </div>
+        <input type="email" id="send-result-email-\${run.id}" placeholder="recipient@example.com" style="width:280px;">
+        <button onclick="sendResultToEmail('\${run.id}')">Send response →</button>
+        <span id="send-result-status-\${run.id}" style="margin-left:10px;font-size:11px;color:#6b7280;"></span>
+      </div>
     </div>
   \`;
+}
+
+// Send the exact output of a past run to a specific email via GHL.
+// Does NOT re-run Solomon — reuses the stored run.result verbatim.
+async function sendResultToEmail(runId) {
+  const history = readSession(HISTORY_KEY, []);
+  const bookmarks = readLocal(BOOKMARKS_KEY, []);
+  const run = history.find(r => r.id === runId) || bookmarks.find(r => r.id === runId);
+  if (!run) return toast("Couldn't find that run.", "error");
+  const emailEl = document.getElementById("send-result-email-" + runId);
+  const statusEl = document.getElementById("send-result-status-" + runId);
+  const email = (emailEl && emailEl.value || "").trim();
+  if (!email || !email.includes("@")) return toast("Enter a valid email address.", "error");
+  if (statusEl) statusEl.textContent = "Sending…";
+  try {
+    const res = await fetch("/asksolomon/send-result", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-console-password": getPassword() },
+      body: JSON.stringify({
+        tier: run.tier,
+        contact: { name: run.contact?.name || "", email },
+        agent: run.result,
+        reportHtml: run.result?.reportHtml || "",
+      }),
+    });
+    if (res.status === 401) { sessionStorage.removeItem(PASSWORD_KEY); return location.reload(); }
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || "Unknown error");
+    if (statusEl) statusEl.textContent = "✓ Sent to " + email + " · workflow will deliver in 1-2 min";
+    toast("Response sent to " + email, "success");
+  } catch (e) {
+    if (statusEl) statusEl.textContent = "✗ Failed: " + e.message;
+    toast("Send failed: " + e.message, "error");
+  }
 }
 
 // Escape a string for safe insertion into a JS backtick template literal.
@@ -804,9 +971,14 @@ function renderGuidedFields(tier) {
           + escapeHtml(q.text)
           + '</label>'
           + hint
-          + '<textarea id="' + id + '" data-question="' + escapeHtml(q.text) + '" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;font-family:inherit;" placeholder="(skip if not applicable)" oninput="saveInputsToLocal()">' + escapeHtml(savedVal) + '</textarea>'
+          + '<div style="position:relative;">'
+          +   '<textarea id="' + id + '" data-question="' + escapeHtml(q.text) + '" rows="2" style="width:100%;margin-top:4px;padding:6px 40px 6px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;font-family:inherit;" placeholder="(skip if not applicable)" oninput="saveInputsToLocal()">' + escapeHtml(savedVal) + '</textarea>'
+          +   '<button type="button" class="mic-btn" data-mic-target="' + id + '" style="position:absolute;top:6px;right:4px;width:24px;height:24px;font-size:11px;" title="Dictate">🎤</button>'
+          + '</div>'
           + '</div>';
       }).join("");
+  // Newly-rendered mic buttons need wiring.
+  initMicButtons();
 }
 
 function collectGuidedAnswers() {
