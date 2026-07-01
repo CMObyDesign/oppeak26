@@ -99,6 +99,12 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
   }
   .mode-btn:hover { background: #f3f4f6; }
   .mode-btn.active { background: #1a1a1a; color: #ffffff; border-color: #1a1a1a; }
+  .copy-btn {
+    float: right; padding: 2px 8px; font-size: 10px; margin-left: 8px;
+    border: 1px solid #d1d5db; background: #ffffff; color: #6b7280;
+    border-radius: 4px; cursor: pointer; font-family: inherit; font-weight: 500;
+  }
+  .copy-btn:hover { background: #f3f4f6; color: #1a1a1a; }
 
   .badge {
     display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 10px;
@@ -270,6 +276,8 @@ const HISTORY_KEY = "asksolomon_history";
 const SAVED_RUBRICS_KEY = "asksolomon_saved_rubrics";
 const BOOKMARKS_KEY = "asksolomon_bookmarks";
 const HISTORY_LIMIT = 20;
+const INPUT_DRAFT_KEY = "asksolomon_input_draft";
+const GUIDED_ANSWERS_KEY = "asksolomon_guided_answers"; // per-question values keyed by q.key, persist across tier switches
 
 // ---------- Auth gate ----------
 function checkPassword() {
@@ -300,13 +308,74 @@ function logout() {
 }
 function getPassword() { return sessionStorage.getItem(PASSWORD_KEY) || ""; }
 
-// On load: skip gate if password already in session
+// On load: skip gate if password already in session; restore any input draft.
 window.addEventListener("DOMContentLoaded", () => {
   if (getPassword()) {
     document.getElementById("gate").style.display = "none";
   }
+  restoreInputsFromLocal();
   renderSidebar();
+  // Wire auto-save on every meaningful input change.
+  ["tier", "contact-name", "contact-email", "answers", "rubric-override"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", saveInputsToLocal);
+    if (el && id === "tier") el.addEventListener("change", saveInputsToLocal);
+  });
 });
+
+// Persist current form inputs to localStorage so refresh doesn't nuke work in progress.
+function saveInputsToLocal() {
+  try {
+    const draft = {
+      tier: document.getElementById("tier")?.value || "free",
+      contactName: document.getElementById("contact-name")?.value || "",
+      contactEmail: document.getElementById("contact-email")?.value || "",
+      answersRaw: document.getElementById("answers")?.value || "",
+      rubricOverride: document.getElementById("rubric-override")?.value || "",
+      mode: document.getElementById("answers")?.dataset.mode || "story",
+      guided: collectGuidedAnswersMap(),
+      ts: new Date().toISOString(),
+    };
+    localStorage.setItem(INPUT_DRAFT_KEY, JSON.stringify(draft));
+    // Persist per-question guided answers too — merged into a growing map keyed by q.key
+    // so switching tiers keeps overlapping answers intact.
+    if (draft.mode === "guided") {
+      localStorage.setItem(GUIDED_ANSWERS_KEY, JSON.stringify(draft.guided));
+    }
+  } catch (e) { /* localStorage may be full — silent skip */ }
+}
+
+// Snapshot the current guided-mode textareas as {qKey: answer}.
+function collectGuidedAnswersMap() {
+  const container = document.getElementById("guided-fields");
+  if (!container) return {};
+  const map = {};
+  container.querySelectorAll("textarea[id^='gq_']").forEach(ta => {
+    const key = ta.id.replace(/^gq_/, "");
+    if (ta.value.trim()) map[key] = ta.value;
+  });
+  return map;
+}
+
+function restoreInputsFromLocal() {
+  try {
+    const draft = JSON.parse(localStorage.getItem(INPUT_DRAFT_KEY) || "null");
+    if (!draft) return;
+    if (draft.tier) document.getElementById("tier").value = draft.tier;
+    if (draft.contactName) document.getElementById("contact-name").value = draft.contactName;
+    if (draft.contactEmail) document.getElementById("contact-email").value = draft.contactEmail;
+    if (draft.answersRaw) document.getElementById("answers").value = draft.answersRaw;
+    if (draft.rubricOverride) {
+      document.getElementById("rubric-override").value = draft.rubricOverride;
+      // Open the rubric override <details> if content is present
+      const details = document.querySelector("#input-panel details");
+      if (details) details.open = true;
+    }
+    if (draft.mode === "guided" || draft.mode === "qa") {
+      setInputMode(draft.mode);
+    }
+  } catch { /* corrupted draft — silent skip */ }
+}
 
 // ---------- Storage helpers ----------
 function readJson(key, fallback) {
@@ -423,35 +492,89 @@ function renderOutput(run) {
     ? '<div style="margin-bottom:12px;padding:10px 12px;background:#d1fae5;border-left:4px solid #065f46;border-radius:4px;font-size:12px;color:#065f46;"><strong>📧 Email triggered →</strong> ' + escapeHtml(r.emailedTo) + ' — GHL workflow for tier <code>' + escapeHtml(run.tier) + '</code> will deliver the production email within 1-2 min. Tagged <code>SWOT_CONSOLE_TEST</code> for cleanup.</div>'
     : '<div style="margin-bottom:12px;padding:8px 12px;background:#f3f4f6;border-radius:4px;font-size:11px;color:#6b7280;">📭 No email sent — leave email field blank for pure preview, fill it to trigger the workflow.</div>';
 
+  const timingBadge = typeof r.elapsedMs === "number"
+    ? '<span style="font-size:11px;color:#6b7280;margin-left:12px;">⏱ ' + (r.elapsedMs < 1000 ? r.elapsedMs + "ms" : (r.elapsedMs / 1000).toFixed(1) + "s") + (r.rubricUsed === "default" ? " · cache-eligible" : " · override (no cache)") + '</span>'
+    : '';
+
   document.getElementById("output-area").innerHTML = \`
     <div class="panel">
-      <h2>Output — \${escapeHtml(run.tier)} · \${escapeHtml(new Date(run.ts).toLocaleTimeString())}</h2>
+      <h2>Output — \${escapeHtml(run.tier)} · \${escapeHtml(new Date(run.ts).toLocaleTimeString())} \${timingBadge}</h2>
       <div style="margin-bottom: 16px;">
         <span class="\${badgeClass}">PATH: \${escapeHtml(path)}</span>
         <span style="margin-left: 8px; font-size: 12px; color: #6b7280;">Flags:</span> \${flags}
-        <button style="float:right;font-size:11px;" onclick="bookmarkRun('\${run.id}')">⭐ Bookmark this run</button>
+        <span style="float:right;">
+          <button style="font-size:11px;margin-right:4px;" onclick="loadInputsFromRun('\${run.id}')">📝 Load inputs</button>
+          <button style="font-size:11px;margin-right:4px;" onclick="regenerateRun('\${run.id}')">🔄 Regenerate</button>
+          <button style="font-size:11px;" onclick="bookmarkRun('\${run.id}')">⭐ Bookmark</button>
+        </span>
       </div>
       \${emailBanner}
       <div class="output-grid">
         <div class="output-card">
-          <h3>✉️ Email Blurb (\${(r.opener || "").length} chars)</h3>
+          <h3>✉️ Email Blurb (\${(r.opener || "").length} chars) <button class="copy-btn" onclick="copyToClipboard(this, \\\`\${escapeAttr(r.opener || "")}\\\`)">📋</button></h3>
           <div class="email-blurb">\${escapeHtml(r.opener || "(empty)")}</div>
         </div>
         <div class="output-card">
-          <h3>🎯 Strategist Brief — INTERNAL (\${(r.strategistBrief || "").length} chars)</h3>
+          <h3>🎯 Strategist Brief — INTERNAL (\${(r.strategistBrief || "").length} chars) <button class="copy-btn" onclick="copyToClipboard(this, \\\`\${escapeAttr(r.strategistBrief || "")}\\\`)">📋</button></h3>
           <div class="strategist-brief">\${escapeHtml(r.strategistBrief || "(empty)")}</div>
         </div>
       </div>
       <div class="output-card" style="margin-bottom:12px;">
-        <h3>📄 Report (rendered preview)</h3>
+        <h3>📄 Report (rendered preview) <button class="copy-btn" onclick="copyToClipboard(this, \\\`\${escapeAttr(r.reportHtml || "")}\\\`)">📋 HTML</button></h3>
         <div class="report-preview">\${r.reportHtml || "(empty)"}</div>
       </div>
       <div class="output-card">
-        <h3>Raw response JSON</h3>
+        <h3>Raw response JSON <button class="copy-btn" onclick="copyToClipboard(this, \\\`\${escapeAttr(JSON.stringify(r, null, 2))}\\\`)">📋</button></h3>
         <textarea rows="10" class="code" readonly>\${escapeHtml(JSON.stringify(r, null, 2))}</textarea>
       </div>
     </div>
   \`;
+}
+
+// Escape a string for safe insertion into a JS backtick template literal.
+// Handles backticks, backslashes, and \${ interpolations.
+function escapeAttr(s) {
+  return String(s ?? "").replace(/\\\\/g, "\\\\\\\\").replace(/\`/g, "\\\\\`").replace(/\\\$/g, "\\\\\$");
+}
+
+// Copy given text to clipboard and give visual confirmation on the button.
+async function copyToClipboard(btn, text) {
+  try {
+    await navigator.clipboard.writeText(text || "");
+    const original = btn.textContent;
+    btn.textContent = "✓ Copied";
+    btn.style.background = "#d1fae5"; btn.style.color = "#065f46";
+    setTimeout(() => { btn.textContent = original; btn.style.background = ""; btn.style.color = ""; }, 1200);
+  } catch (e) {
+    toast("Copy failed: " + e.message, "error");
+  }
+}
+
+// Load a past run's inputs into the input form so you can tweak and re-run.
+function loadInputsFromRun(id) {
+  const history = readSession(HISTORY_KEY, []);
+  const bookmarks = readLocal(BOOKMARKS_KEY, []);
+  const run = history.find(r => r.id === id) || bookmarks.find(r => r.id === id);
+  if (!run) return toast("Couldn't find that run.", "error");
+  document.getElementById("tier").value = run.tier || "free";
+  document.getElementById("contact-name").value = run.contact?.name || "";
+  document.getElementById("contact-email").value = run.contact?.email || "";
+  document.getElementById("answers").value = run.answersRaw || "";
+  document.getElementById("rubric-override").value = run.rubricOverride || "";
+  saveInputsToLocal();
+  // Return to the top of the input panel so the user sees the loaded inputs.
+  document.getElementById("input-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+  toast("Inputs loaded from run — tweak and click Run.", "success");
+}
+
+// Regenerate a run using the same inputs (surface any nondeterminism).
+async function regenerateRun(id) {
+  const history = readSession(HISTORY_KEY, []);
+  const bookmarks = readLocal(BOOKMARKS_KEY, []);
+  const run = history.find(r => r.id === id) || bookmarks.find(r => r.id === id);
+  if (!run) return toast("Couldn't find that run.", "error");
+  loadInputsFromRun(id);
+  await runSolomon();
 }
 
 // ---------- Sidebar ----------
@@ -665,20 +788,23 @@ function renderGuidedFields(tier) {
   if (!container) return;
   const questions = questionsForTier(tier);
   const count = { free: FREE_QUESTIONS.length, paid_47: FREE_QUESTIONS.length + PAID_47_ADDITIONAL.length, paid_297: FREE_QUESTIONS.length + PAID_47_ADDITIONAL.length + PAID_297_ADDITIONAL.length }[tier] || FREE_QUESTIONS.length;
+  // Restore previously-typed answers keyed by q.key — persists across tier switches.
+  const saved = readLocal(GUIDED_ANSWERS_KEY, {});
   container.innerHTML =
     '<div style="font-size:11px;color:#6b7280;margin-bottom:10px;padding:6px 8px;background:#fef3c7;border-radius:4px;">'
-    + '<strong>' + escapeHtml(tier.toUpperCase()) + '</strong> tier · ' + count + ' questions · skip any that don\\'t apply'
+    + '<strong>' + escapeHtml(tier.toUpperCase()) + '</strong> tier · ' + count + ' questions · skip any that don\\'t apply · answers persist when you switch tier'
     + '</div>'
     + questions.map(q => {
         const id = "gq_" + q.key;
         const hint = q.hint ? '<div style="font-size:10px;color:#9ca3af;margin-top:2px;">' + escapeHtml(q.hint) + '</div>' : "";
+        const savedVal = saved[q.key] || "";
         return '<div style="margin-bottom:12px;">'
           + '<label for="' + id + '" style="font-size:12px;color:#374151;font-weight:500;display:block;margin-bottom:2px;">'
           + '<span style="font-family:ui-monospace,monospace;font-size:10px;color:#92400e;margin-right:6px;">' + escapeHtml(q.key) + '</span>'
           + escapeHtml(q.text)
           + '</label>'
           + hint
-          + '<textarea id="' + id + '" data-question="' + escapeHtml(q.text) + '" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;font-family:inherit;" placeholder="(skip if not applicable)"></textarea>'
+          + '<textarea id="' + id + '" data-question="' + escapeHtml(q.text) + '" rows="2" style="width:100%;margin-top:4px;padding:6px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;font-family:inherit;" placeholder="(skip if not applicable)" oninput="saveInputsToLocal()">' + escapeHtml(savedVal) + '</textarea>'
           + '</div>';
       }).join("");
 }

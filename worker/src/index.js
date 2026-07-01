@@ -593,12 +593,14 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
     : ASSESSMENT_RUBRIC;
 
   let agent;
+  const startedAt = Date.now();
   try {
     const raw = await callClaudeWithRubric(prompt, rubric, env);
     agent = parseAgentJson(raw);
   } catch (err) {
     return json({ success: false, error: err.message }, 500);
   }
+  const elapsedMs = Date.now() - startedAt;
 
   // Free-tier digital-presence scrub matches production behavior.
   if (tier === "free") {
@@ -660,6 +662,7 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
     rubricUsed: rubric === ASSESSMENT_RUBRIC ? "default" : "override",
     reportHtml,
     emailedTo, // null if no email provided; otherwise the address that will receive the workflow email
+    elapsedMs, // Anthropic API round-trip time in ms; ~drops after cache hits
     ...agent,
   });
 }
