@@ -107,14 +107,35 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
   .copy-btn:hover { background: #f3f4f6; color: #1a1a1a; }
   .mic-btn {
     display: inline-flex; align-items: center; justify-content: center;
-    width: 28px; height: 28px; border-radius: 50%; border: 1px solid #d1d5db;
-    background: #ffffff; cursor: pointer; font-size: 13px; margin-left: 6px;
-    vertical-align: middle;
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 2px solid #c4a647; background: #fef3c7; cursor: pointer;
+    font-size: 18px; margin-left: 8px; vertical-align: middle;
+    box-shadow: 0 2px 6px rgba(196, 166, 71, 0.25);
+    transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
   }
-  .mic-btn:hover { background: #f3f4f6; }
-  .mic-btn.recording { background: #fee2e2; border-color: #b91c1c; animation: micpulse 1.2s infinite; }
+  .mic-btn:hover { background: #fef9e6; transform: scale(1.08); box-shadow: 0 3px 10px rgba(196, 166, 71, 0.4); }
+  .mic-btn:active { transform: scale(0.94); }
+  .mic-btn.recording { background: #fecaca; border-color: #b91c1c; animation: micpulse 1.2s infinite; }
   .mic-btn.disabled { opacity: 0.35; cursor: not-allowed; }
-  @keyframes micpulse { 0%,100% { box-shadow: 0 0 0 0 rgba(185,28,28,0.4); } 50% { box-shadow: 0 0 0 6px rgba(185,28,28,0); } }
+  @keyframes micpulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(185,28,28,0.5); }
+    50% { box-shadow: 0 0 0 10px rgba(185,28,28,0); }
+  }
+  /* Smaller mic variant for guided-mode textarea corners */
+  .mic-btn[style*="24px"] {
+    background: #fef3c7 !important; border: 2px solid #c4a647 !important;
+    box-shadow: 0 1px 3px rgba(196, 166, 71, 0.25);
+  }
+  /* Thumbs feedback buttons on runs */
+  .feedback-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 1px solid #d1d5db; background: #ffffff; cursor: pointer;
+    font-size: 16px; margin-right: 6px; transition: transform 0.12s, background 0.15s;
+  }
+  .feedback-btn:hover { background: #f3f4f6; transform: scale(1.08); }
+  .feedback-btn.active-up { background: #d1fae5; border-color: #065f46; }
+  .feedback-btn.active-down { background: #fee2e2; border-color: #b91c1c; }
   .guidance-panel {
     background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px;
     padding: 12px 14px; margin: 8px 0; font-size: 12px; color: #075985;
@@ -827,6 +848,14 @@ function renderOutput(run) {
           <button style="font-size:11px;" onclick="bookmarkRun('\${run.id}')">⭐ Bookmark</button>
         </span>
       </div>
+
+      <!-- FEEDBACK ROW -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:10px 14px;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;">
+        <span style="font-size:12px;color:#374151;font-weight:600;">Rate this response:</span>
+        <button class="feedback-btn \${run.feedback === 'up' ? 'active-up' : ''}" onclick="setRunFeedback('\${run.id}', 'up')" title="Solomon nailed it">👍</button>
+        <button class="feedback-btn \${run.feedback === 'down' ? 'active-down' : ''}" onclick="setRunFeedback('\${run.id}', 'down')" title="Something's off">👎</button>
+        <input type="text" id="fb-note-\${run.id}" placeholder="Optional note — what worked or what's off" value="\${escapeAttr(run.feedbackNote || '')}" onblur="setRunFeedbackNote('\${run.id}', this.value)" style="flex:1;font-size:12px;padding:6px 10px;">
+      </div>
       \${emailBanner}
       <div class="output-grid">
         <div class="output-card">
@@ -984,6 +1013,31 @@ function loadBookmark(id) {
   const run = bookmarks.find(r => r.id === id);
   if (run) renderOutput(run);
 }
+
+// Set 👍 / 👎 rating on a run. Persists to session history AND to bookmarks
+// if the run was already bookmarked. Also gets included in "Export Learnings".
+function setRunFeedback(id, rating) {
+  const applied = updateRunEverywhere(id, r => ({ ...r, feedback: r.feedback === rating ? null : rating }));
+  if (!applied) return toast("Couldn't find that run.", "error");
+  toast(rating === "up" ? "Thanks — flagged as a good response" : "Noted — we'll learn from what's off", "success");
+  const cur = readSession(HISTORY_KEY, []).find(r => r.id === id) || readLocal(BOOKMARKS_KEY, []).find(r => r.id === id);
+  if (cur) renderOutput(cur);
+}
+function setRunFeedbackNote(id, note) {
+  updateRunEverywhere(id, r => ({ ...r, feedbackNote: String(note || "").slice(0, 500) }));
+}
+// Update a run wherever it lives — session history + bookmarks. Returns true if found.
+function updateRunEverywhere(id, mutator) {
+  let found = false;
+  const history = readSession(HISTORY_KEY, []);
+  const hIdx = history.findIndex(r => r.id === id);
+  if (hIdx !== -1) { history[hIdx] = mutator(history[hIdx]); sessionStorage.setItem(HISTORY_KEY, JSON.stringify(history)); found = true; }
+  const bookmarks = readLocal(BOOKMARKS_KEY, []);
+  const bIdx = bookmarks.findIndex(r => r.id === id);
+  if (bIdx !== -1) { bookmarks[bIdx] = mutator(bookmarks[bIdx]); localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks)); found = true; }
+  return found;
+}
+
 function bookmarkRun(id) {
   const history = readSession(HISTORY_KEY, []);
   const run = history.find(r => r.id === id);
