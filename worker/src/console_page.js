@@ -127,6 +127,29 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
   }
   .guidance-panel ul { margin: 6px 0 0 0; padding-left: 20px; }
   .guidance-panel li { margin-bottom: 3px; }
+  .start-here {
+    background: linear-gradient(135deg, #fef3c7 0%, #fef9e6 100%);
+    border-left: 4px solid #c4a647;
+    padding: 20px 24px; border-radius: 8px;
+    margin-bottom: 20px;
+  }
+  .start-here h2 {
+    font-size: 18px; color: #92400e; margin: 0 0 8px 0;
+    font-weight: 700; letter-spacing: -0.01em;
+  }
+  .start-here p {
+    font-size: 13px; color: #78350f; margin: 0 0 12px 0; line-height: 1.55;
+  }
+  .start-here ol {
+    margin: 0; padding-left: 22px; font-size: 12.5px; color: #78350f;
+  }
+  .start-here li {
+    margin-bottom: 6px; line-height: 1.6;
+  }
+  .start-here code {
+    background: #fef3c7; border: 1px solid #fcd34d; padding: 1px 5px;
+    border-radius: 3px; font-size: 11px; color: #92400e;
+  }
   .send-result-box {
     margin-top: 16px; padding: 14px; background: #f9fafb;
     border: 1px dashed #d1d5db; border-radius: 6px;
@@ -206,7 +229,7 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
     <span class="subbrand">Internal Training & Testing</span>
   </div>
   <div class="topbar-right">
-    <span id="connection-status" class="run-status">Idle</span>
+    <span id="connection-status" class="run-status"></span>
     <button onclick="exportLearnings()" title="Download your saved rubrics and bookmarks as JSON">📤 Export Learnings</button>
     <button onclick="importLearnings()" title="Load a previously exported JSON">📥 Import</button>
     <button onclick="logout()" class="danger">Logout</button>
@@ -231,8 +254,20 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
 
   <main class="main">
 
+    <div class="start-here">
+      <h2>👋 Start here — Ask Solomon (Beta)</h2>
+      <p>You're training <strong>Solomon</strong>, the CFO diagnostic behind CFO By Design's SWOT engine. Your test runs and feedback shape how it thinks. Every response is generated fresh — nothing is canned.</p>
+      <ol>
+        <li><strong>Pick a tier</strong> below (<code>free</code>, <code>paid_47</code>, or <code>paid_297</code>) — matches what a real client would go through.</li>
+        <li><strong>Describe a business scenario</strong> — free-form prose in <em>📖 Story</em>, or fill Miguel's canonical intake questions in <em>📝 Guided</em>. Both work; Guided gives Solomon more structure.</li>
+        <li><strong>Click Run ▶</strong> — Solomon returns a badge, opportunity flags, personalized email hook, internal strategist brief, and rendered client-facing report.</li>
+        <li><strong>Love the response?</strong> Type any email in "Send it" to receive the actual production email exactly as a client would see it via HighLevel.</li>
+        <li><strong>Bookmark great runs</strong>, save rubric variants, and export your learnings anytime — everything persists across sessions.</li>
+      </ol>
+      <p style="margin-top:12px;font-style:italic;font-size:11px;color:#78350f;">🎤 Prefer to speak? Mic buttons on textareas let you dictate.</p>
+    </div>
+
     <div class="panel" id="input-panel">
-      <h2>Inputs</h2>
 
       <div class="form-row">
         <div>
@@ -256,13 +291,12 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
       <div>
         <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">
           <label for="answers" style="margin-bottom:0;">
-            Business info
+            Business scenario
             <button type="button" class="mic-btn" data-mic-target="answers" title="Dictate — click to start, click again to stop">🎤</button>
           </label>
           <div class="mode-tabs" role="tablist" style="display:inline-flex;gap:4px;font-size:11px;">
             <button type="button" class="mode-btn active" data-mode="story" onclick="setInputMode('story')">📖 Story</button>
             <button type="button" class="mode-btn" data-mode="guided" onclick="setInputMode('guided')">📝 Guided</button>
-            <button type="button" class="mode-btn" data-mode="qa" onclick="setInputMode('qa')">📋 Q&amp;A</button>
           </div>
         </div>
         <textarea id="answers" rows="10" data-mode="story" placeholder="Describe the business in your own words. Cover revenue, biggest challenges, debt picture, taxes, AR aging, financial visibility, growth plans — anything that gives Solomon a real picture. Example:&#10;&#10;A $2.5M B2B agency, mostly retainer work. Cash flow is the constant headache — invoices go out on net-30 but most clients pay closer to net-45 so we're always one slow month away from payroll stress. Carrying about $150K in a working capital line plus some equipment debt. Taxes filed but we're 60 days behind on payroll deposits — Miguel knows about this. No real budget — I look at the bank account to decide what to pay each Friday."></textarea>
@@ -494,9 +528,8 @@ function restoreInputsFromLocal() {
       const details = document.querySelector("#input-panel details");
       if (details) details.open = true;
     }
-    if (draft.mode === "guided" || draft.mode === "qa") {
-      setInputMode(draft.mode);
-    }
+    // Restore mode — default to story for any legacy "qa" drafts saved before Q&A was removed.
+    if (draft.mode === "guided") setInputMode("guided");
   } catch { /* corrupted draft — silent skip */ }
 }
 
@@ -529,26 +562,14 @@ async function runSolomon() {
     answers = collectGuidedAnswers();
     if (!answers.length) return toast("Fill in at least one guided question.", "error");
   } else if (!answersRaw) {
-    return toast("Add some business info first.", "error");
-  } else if (mode === "story") {
+    return toast("Describe the business scenario first.", "error");
+  } else {
     // Story mode: pass the whole narrative as one rich answer.
-    // The rubric already instructs Solomon to extract signals from prose.
+    // The rubric instructs Solomon to extract signals from prose.
     answers = [{
       question: "Tell me about this business — situation, revenue, biggest challenges, debt picture, taxes, AR aging, financial visibility, growth plans, what's working and what isn't",
       answer: answersRaw,
     }];
-  } else {
-    // Q&A mode: accept either "Question? answer" or "Question: answer" per line.
-    answers = answersRaw.split(/\\n+/).map(line => {
-      const m = line.match(/^(.+?[?:])\\s+(.+)$/);
-      if (!m) {
-        const idx = line.indexOf(":");
-        if (idx === -1) return { question: line.trim(), answer: "" };
-        return { question: line.slice(0, idx).trim(), answer: line.slice(idx + 1).trim() };
-      }
-      return { question: m[1].trim(), answer: m[2].trim() };
-    }).filter(a => a.question && a.answer);
-    if (!answers.length) return toast("Couldn't parse. Use one per line: 'Annual revenue? $2.5M' or 'Annual revenue: $2.5M'", "error");
   }
 
   const runBtn = document.getElementById("run-btn");
@@ -877,21 +898,16 @@ function importLearnings() {
   input.click();
 }
 
-// ---------- Input mode (Story / Guided / Q&A) ----------
+// ---------- Input mode (Story / Guided) ----------
 const MODE_CONFIG = {
   story: {
-    label: "Business info",
+    label: "Business scenario",
     hint: "📖 Story mode: describe the business in prose. Solomon extracts signals from the narrative.",
     placeholder: "Describe the business in your own words. Cover revenue, biggest challenges, debt picture, taxes, AR aging, financial visibility, growth plans — anything that gives Solomon a real picture. Example:\\n\\nA $2.5M B2B agency, mostly retainer work. Cash flow is the constant headache — invoices go out on net-30 but most clients pay closer to net-45 so we're always one slow month away from payroll stress. Carrying about $150K in a working capital line plus some equipment debt. Taxes filed but we're 60 days behind on payroll deposits — Miguel knows about this. No real budget — I look at the bank account to decide what to pay each Friday.",
   },
   guided: {
     label: "Guided intake — tier-specific questions",
     hint: "📝 Guided mode: questions from the canonical SWOT intake (Miguel's voice). Skip any that don't apply. Switch tier above to see different question sets.",
-  },
-  qa: {
-    label: "Answers (one per line)",
-    hint: "📋 Q&A mode: 'Question? answer' or 'Question: answer' per line.",
-    placeholder: "Annual revenue? $2.5M\\nBiggest challenge? Cash flow timing\\nActive debt? Yes — $150K in working capital lines\\nRecent financial audit? No, never had one",
   },
 };
 
