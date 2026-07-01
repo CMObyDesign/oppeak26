@@ -11,5 +11,15 @@ BOOKING_LINK_297 = "https://my.cfobydesign.com/widget/booking/VGdN6KoFBtbdnSvHKH
 PAYMENT_LINK_47 = "https://my.cfobydesign.com/payment-link/6a0db7aa1a6dcdeebb53b641"
 PAYMENT_LINK_297 = "https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0"
 
-# Secrets (ANTHROPIC_API_KEY, GHL_API_KEY) are set in the
+# Secrets (ANTHROPIC_API_KEY, GHL_API_KEY, CONSOLE_PASSWORD) are set in the
 # Cloudflare dashboard under Settings > Variables and Secrets.
+
+# R2 bindings — Solomon reference library (transcripts, testimonials,
+# example analyses, rubric fragments) + soft-delete archive.
+[[r2_buckets]]
+binding = "SOLOMON_LIBRARY"
+bucket_name = "solomonlibrary"
+
+[[r2_buckets]]
+binding = "SOLOMON_LIBRARY_ARCHIVE"
+bucket_name = "solomon-library-archive"

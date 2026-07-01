@@ -250,6 +250,15 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
 
     <h3 id="bookmarks-header">Bookmarked Runs</h3>
     <div id="bookmarks-list"></div>
+
+    <h3 id="library-header" style="display:flex;align-items:center;justify-content:space-between;">
+      Reference Library
+      <button style="font-size:10px;padding:2px 6px;" onclick="showLibraryUpload()">+ Upload</button>
+    </h3>
+    <div id="library-context-summary" style="font-size:10px;color:#6b7280;margin-bottom:6px;padding:4px 8px;background:#f3f4f6;border-radius:4px;display:none;">
+      <span id="library-selected-count">0</span> items · <span id="library-selected-tokens">0</span> tokens will be added
+    </div>
+    <div id="library-list"></div>
   </aside>
 
   <main class="main">
@@ -384,6 +393,169 @@ const BOOKMARKS_KEY = "asksolomon_bookmarks";
 const HISTORY_LIMIT = 20;
 const INPUT_DRAFT_KEY = "asksolomon_input_draft";
 const GUIDED_ANSWERS_KEY = "asksolomon_guided_answers"; // per-question values keyed by q.key, persist across tier switches
+const LIBRARY_SELECTED_KEY = "asksolomon_library_selected"; // array of library item ids currently checked-in for the next run
+const LIBRARY_CATEGORIES = [
+  { key: "transcript", label: "🎙️ Transcripts", hint: "Client meeting transcripts (Fireflies, Gong, manual)" },
+  { key: "testimonial", label: "🗨️ Testimonials", hint: "Verbatim client quotes about outcomes" },
+  { key: "example", label: "📄 Example analyses", hint: "Past strategist briefs or growth plans Miguel is proud of" },
+  { key: "rubric_fragment", label: "🧩 Rubric fragments", hint: "Small opinionated diagnostic rules to layer on the default rubric" },
+];
+
+let LIBRARY_CACHE = { items: [], lastFetch: 0 };
+
+function getSelectedLibraryIds() { return readLocal(LIBRARY_SELECTED_KEY, []); }
+function setSelectedLibraryIds(ids) { localStorage.setItem(LIBRARY_SELECTED_KEY, JSON.stringify(ids)); }
+
+async function fetchLibrary(force) {
+  if (!force && LIBRARY_CACHE.items.length && (Date.now() - LIBRARY_CACHE.lastFetch < 30000)) {
+    return LIBRARY_CACHE.items;
+  }
+  try {
+    const res = await fetch("/asksolomon/library", { headers: { "x-console-password": getPassword() } });
+    if (res.status === 401) { sessionStorage.removeItem(PASSWORD_KEY); location.reload(); return []; }
+    const data = await res.json();
+    LIBRARY_CACHE = { items: data.items || [], lastFetch: Date.now() };
+    return LIBRARY_CACHE.items;
+  } catch (e) {
+    toast("Couldn't load library: " + e.message, "error");
+    return [];
+  }
+}
+
+async function renderLibrary() {
+  const items = await fetchLibrary(true);
+  const selected = new Set(getSelectedLibraryIds());
+  const list = document.getElementById("library-list");
+  const summary = document.getElementById("library-context-summary");
+  const header = document.getElementById("library-header");
+  if (header) header.firstChild.textContent = "Reference Library (" + items.length + ") ";
+
+  if (!items.length) {
+    list.innerHTML = '<div class="sidebar-empty">Empty — click <strong>+ Upload</strong> to add transcripts, testimonials, or examples for Solomon to learn from.</div>';
+    summary.style.display = "none";
+    return;
+  }
+
+  // Group by category
+  const grouped = {};
+  LIBRARY_CATEGORIES.forEach(c => grouped[c.key] = []);
+  items.forEach(i => { (grouped[i.category] || (grouped[i.category] = [])).push(i); });
+
+  list.innerHTML = LIBRARY_CATEGORIES.map(cat => {
+    const bucket = grouped[cat.key] || [];
+    if (!bucket.length) return "";
+    return '<div style="margin-bottom:8px;">'
+      + '<div style="font-size:10px;color:#92400e;font-weight:600;margin:6px 0 4px;">' + cat.label + '</div>'
+      + bucket.map(i => {
+          const checked = selected.has(i.id) ? "checked" : "";
+          return '<div class="sidebar-entry" style="display:flex;gap:6px;align-items:flex-start;">'
+            + '<input type="checkbox" ' + checked + ' data-lib-id="' + escapeHtml(i.id) + '" onchange="toggleLibrarySelection(\\'' + escapeHtml(i.id) + '\\')" style="margin-top:2px;flex:0 0 auto;">'
+            + '<div style="flex:1;min-width:0;">'
+              + '<div style="font-size:11px;color:#374151;word-wrap:break-word;">' + escapeHtml(i.name) + '</div>'
+              + '<div class="meta">' + escapeHtml(i.description || "") + '</div>'
+              + '<div class="meta">' + i.tokenEstimate + ' tokens · ' + Math.round((i.size || 0) / 1024) + 'KB</div>'
+            + '</div>'
+            + '<button style="font-size:10px;padding:1px 5px;color:#b91c1c;border-color:#fecaca;flex:0 0 auto;" onclick="deleteLibraryItem(\\'' + escapeHtml(i.id) + '\\', event)" title="Delete (soft — moves to archive)">×</button>'
+          + '</div>';
+        }).join("")
+      + '</div>';
+  }).join("");
+
+  updateLibrarySummary();
+}
+
+function updateLibrarySummary() {
+  const selected = getSelectedLibraryIds();
+  const items = LIBRARY_CACHE.items;
+  const selectedItems = items.filter(i => selected.includes(i.id));
+  const totalTokens = selectedItems.reduce((sum, i) => sum + (i.tokenEstimate || 0), 0);
+  const summary = document.getElementById("library-context-summary");
+  if (!selectedItems.length) { summary.style.display = "none"; return; }
+  summary.style.display = "block";
+  document.getElementById("library-selected-count").textContent = selectedItems.length;
+  document.getElementById("library-selected-tokens").textContent = totalTokens.toLocaleString();
+}
+
+function toggleLibrarySelection(id) {
+  const cur = getSelectedLibraryIds();
+  const idx = cur.indexOf(id);
+  if (idx === -1) cur.push(id); else cur.splice(idx, 1);
+  setSelectedLibraryIds(cur);
+  updateLibrarySummary();
+}
+
+async function deleteLibraryItem(id, evt) {
+  if (evt) evt.stopPropagation();
+  if (!confirm("Delete this library item? It moves to archive; not immediately recoverable from here.")) return;
+  try {
+    const res = await fetch("/asksolomon/library/" + encodeURIComponent(id), {
+      method: "DELETE",
+      headers: { "x-console-password": getPassword() },
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || "Delete failed");
+    // Drop from selection too
+    setSelectedLibraryIds(getSelectedLibraryIds().filter(x => x !== id));
+    toast("Deleted (soft — in archive).", "success");
+    renderLibrary();
+  } catch (e) { toast("Delete failed: " + e.message, "error"); }
+}
+
+function showLibraryUpload() {
+  const catOptions = LIBRARY_CATEGORIES.map(c => \`<option value="\${c.key}">\${c.label}</option>\`).join("");
+  const html = \`
+    <div id="upload-modal-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:300;display:flex;align-items:center;justify-content:center;">
+      <div style="background:#fff;padding:24px;border-radius:8px;max-width:480px;width:90%;">
+        <h2 style="font-size:16px;margin:0 0 12px;">Upload reference item</h2>
+        <div class="guidance-panel" style="margin-bottom:12px;">
+          <strong>Before you upload:</strong> plain <code>.txt</code> or <code>.md</code> preferred · under 512KB per file · de-identify client-specific details unless testimonial has permission.
+        </div>
+        <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:4px;">Category</label>
+        <select id="upload-category" style="margin-bottom:10px;">\${catOptions}</select>
+        <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:4px;">Description (1 sentence — what this is + why Solomon should learn from it)</label>
+        <input type="text" id="upload-description" placeholder="e.g., 'Kristi Q1 discovery call about cash flow timing patterns'" style="margin-bottom:10px;">
+        <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:4px;">File</label>
+        <input type="file" id="upload-file" accept=".txt,.md,.markdown,text/plain,text/markdown" style="margin-bottom:14px;">
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button onclick="closeUploadModal()">Cancel</button>
+          <button class="primary" onclick="submitLibraryUpload()">Upload</button>
+        </div>
+        <div id="upload-status" style="margin-top:8px;font-size:12px;color:#6b7280;"></div>
+      </div>
+    </div>
+  \`;
+  document.body.insertAdjacentHTML("beforeend", html);
+}
+function closeUploadModal() {
+  document.getElementById("upload-modal-backdrop")?.remove();
+}
+async function submitLibraryUpload() {
+  const category = document.getElementById("upload-category").value;
+  const description = document.getElementById("upload-description").value.trim();
+  const fileEl = document.getElementById("upload-file");
+  const statusEl = document.getElementById("upload-status");
+  if (!fileEl.files || !fileEl.files.length) return statusEl.textContent = "Pick a file first.";
+  statusEl.textContent = "Uploading…";
+  const fd = new FormData();
+  fd.append("category", category);
+  fd.append("description", description);
+  fd.append("file", fileEl.files[0]);
+  try {
+    const res = await fetch("/asksolomon/library", {
+      method: "POST",
+      headers: { "x-console-password": getPassword() },
+      body: fd,
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || "Upload failed");
+    toast("Uploaded — check the sidebar.", "success");
+    closeUploadModal();
+    renderLibrary();
+  } catch (e) {
+    statusEl.textContent = "✗ " + e.message;
+    toast("Upload failed: " + e.message, "error");
+  }
+}
 
 // ---------- Auth gate ----------
 function checkPassword() {
@@ -428,6 +600,8 @@ window.addEventListener("DOMContentLoaded", () => {
     if (el && id === "tier") el.addEventListener("change", saveInputsToLocal);
   });
   initMicButtons();
+  // Fetch + render the reference library on load.
+  renderLibrary();
 });
 
 // Wire every element with class .mic-btn to a Web Speech API recorder that
@@ -585,6 +759,7 @@ async function runSolomon() {
         contact: { name: contactName, email: contactEmail },
         answers,
         rubricOverride: rubricOverride || undefined,
+        libraryIds: getSelectedLibraryIds(),
       }),
     });
 

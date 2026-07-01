@@ -588,9 +588,17 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
   // Build the user prompt the normal way. Then call Claude with either the default
   // rubric (cache-eligible) or the override (cache-busted but still works).
   const prompt = buildPrompt(tier, answers, contact, businessProfile);
-  const rubric = (typeof body.rubricOverride === "string" && body.rubricOverride.trim())
+
+  // If the caller selected library items, fetch their content and append as
+  // reference material to the base rubric. Deliberately AFTER the rubric override
+  // check so a user can also test rubric variants + library items together.
+  const libraryIds = Array.isArray(body.libraryIds) ? body.libraryIds : [];
+  const libraryContext = libraryIds.length ? await buildLibraryContext(env, libraryIds) : "";
+
+  const baseRubric = (typeof body.rubricOverride === "string" && body.rubricOverride.trim())
     ? body.rubricOverride
     : ASSESSMENT_RUBRIC;
+  const rubric = libraryContext ? (baseRubric + libraryContext) : baseRubric;
 
   let agent;
   const startedAt = Date.now();
@@ -659,7 +667,9 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
   return json({
     success: true,
     tier,
-    rubricUsed: rubric === ASSESSMENT_RUBRIC ? "default" : "override",
+    rubricUsed: baseRubric === ASSESSMENT_RUBRIC ? "default" : "override",
+    libraryItemsIncluded: libraryIds.length,
+    libraryContextChars: libraryContext.length,
     reportHtml,
     emailedTo, // null if no email provided; otherwise the address that will receive the workflow email
     elapsedMs, // Anthropic API round-trip time in ms; ~drops after cache hits
@@ -733,6 +743,142 @@ async function handleConsoleSendResult(request, env, ctx, requestUrl) {
     contactId,
   });
 }
+
+// ----- Reference library (transcripts / testimonials / examples / rubric fragments) -----
+// Stored in R2 bucket SOLOMON_LIBRARY. Manifest at library/manifest.json is the index.
+// Soft-delete moves the object to SOLOMON_LIBRARY_ARCHIVE and drops it from the manifest.
+
+const LIBRARY_MANIFEST_KEY = "library/manifest.json";
+const LIBRARY_CATEGORIES = new Set(["transcript", "testimonial", "example", "rubric_fragment"]);
+const LIBRARY_MAX_BYTES = 512 * 1024; // 512KB per file
+
+async function readLibraryManifest(env) {
+  if (!env.SOLOMON_LIBRARY) return { items: [] };
+  const obj = await env.SOLOMON_LIBRARY.get(LIBRARY_MANIFEST_KEY);
+  if (!obj) return { items: [] };
+  try { return JSON.parse(await obj.text()); }
+  catch { return { items: [] }; }
+}
+
+async function writeLibraryManifest(env, manifest) {
+  await env.SOLOMON_LIBRARY.put(LIBRARY_MANIFEST_KEY, JSON.stringify(manifest));
+}
+
+function estimateTokens(text) {
+  // Rough: ~4 chars per token for English. Fine for cost visibility.
+  return Math.ceil(String(text || "").length / 4);
+}
+
+function randomLibraryId() {
+  return "lib_" + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+}
+
+// GET /asksolomon/library — return the manifest (list of items with metadata).
+async function handleLibraryList(request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "Library storage not configured" }, 500);
+  const manifest = await readLibraryManifest(env);
+  return json({ success: true, items: manifest.items || [] });
+}
+
+// POST /asksolomon/library — multipart upload with fields: category, description, file.
+// Stores the file in R2 and appends metadata to the manifest.
+async function handleLibraryUpload(request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "Library storage not configured" }, 500);
+
+  let formData;
+  try { formData = await request.formData(); }
+  catch { return json({ success: false, error: "Invalid multipart/form-data body" }, 400); }
+
+  const file = formData.get("file");
+  const category = String(formData.get("category") || "").trim();
+  const description = String(formData.get("description") || "").trim();
+
+  if (!file || typeof file === "string") return json({ success: false, error: "Missing 'file' field" }, 400);
+  if (!LIBRARY_CATEGORIES.has(category)) {
+    return json({ success: false, error: "Invalid category. Must be one of: " + [...LIBRARY_CATEGORIES].join(", ") }, 400);
+  }
+  if (file.size > LIBRARY_MAX_BYTES) return json({ success: false, error: "File too large (max 512KB per item)" }, 413);
+
+  // Read as text; if it's binary/PDF we still store the raw bytes but Solomon
+  // will need text — MVP treats everything as text and warns on decode failure.
+  let text;
+  try { text = await file.text(); }
+  catch { return json({ success: false, error: "Couldn't decode file as text — upload plain .txt or .md" }, 400); }
+
+  if (!text.trim()) return json({ success: false, error: "File is empty" }, 400);
+
+  const id = randomLibraryId();
+  const safeName = String(file.name || "unnamed").replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
+  const storagePath = `library/${category}/${id}-${safeName}`;
+
+  await env.SOLOMON_LIBRARY.put(storagePath, text, {
+    httpMetadata: { contentType: "text/plain; charset=utf-8" },
+  });
+
+  const manifest = await readLibraryManifest(env);
+  manifest.items = manifest.items || [];
+  manifest.items.unshift({
+    id,
+    name: safeName,
+    category,
+    description: description.slice(0, 500) || "(no description)",
+    size: text.length,
+    tokenEstimate: estimateTokens(text),
+    uploadedAt: new Date().toISOString(),
+    storagePath,
+  });
+  await writeLibraryManifest(env, manifest);
+
+  return json({ success: true, id, item: manifest.items[0] });
+}
+
+// DELETE /asksolomon/library/{id} — soft-delete: move to archive bucket, drop from manifest.
+async function handleLibraryDelete(id, request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "Library storage not configured" }, 500);
+
+  const manifest = await readLibraryManifest(env);
+  const idx = (manifest.items || []).findIndex(i => i.id === id);
+  if (idx === -1) return json({ success: false, error: "Item not found" }, 404);
+
+  const item = manifest.items[idx];
+  const obj = await env.SOLOMON_LIBRARY.get(item.storagePath);
+  if (obj && env.SOLOMON_LIBRARY_ARCHIVE) {
+    const text = await obj.text();
+    await env.SOLOMON_LIBRARY_ARCHIVE.put(
+      `archived/${new Date().toISOString().slice(0, 10)}/${item.storagePath.replace(/^library\//, "")}`,
+      text,
+      { httpMetadata: { contentType: "text/plain; charset=utf-8" } }
+    );
+  }
+  await env.SOLOMON_LIBRARY.delete(item.storagePath);
+  manifest.items.splice(idx, 1);
+  await writeLibraryManifest(env, manifest);
+  return json({ success: true, id });
+}
+
+// Given a list of library item ids, fetch their content and return a labeled
+// concatenated string to append to Solomon's system prompt.
+async function buildLibraryContext(env, ids) {
+  if (!env.SOLOMON_LIBRARY || !ids || !ids.length) return "";
+  const manifest = await readLibraryManifest(env);
+  const included = manifest.items.filter(i => ids.includes(i.id));
+  if (!included.length) return "";
+  const chunks = await Promise.all(included.map(async (item) => {
+    const obj = await env.SOLOMON_LIBRARY.get(item.storagePath);
+    if (!obj) return "";
+    const body = await obj.text();
+    const catLabel = item.category.replace("_", " ").toUpperCase();
+    return `\n=== ${catLabel}: ${item.name}${item.description && item.description !== "(no description)" ? " — " + item.description : ""} ===\n${body}\n=== END ${catLabel} ===\n`;
+  }));
+  const combined = chunks.filter(Boolean).join("\n");
+  return combined
+    ? `\n\n== REFERENCE MATERIAL from Miguel's library (transcripts, testimonials, examples). Learn from Miguel's voice + patterns. Do NOT quote verbatim to the client — use as internal reference only. ==${combined}\n== END REFERENCE MATERIAL ==\n`
+    : "";
+}
+// ----- end reference library -----
 
 // Like callClaude but accepts an explicit rubric (for the console's override path).
 // When the rubric is the default, cache_control still applies — repeated runs hit the cache.
@@ -825,6 +971,17 @@ export default {
           hint: "The deployed worker expects password header 'x-console-password' to match env.CONSOLE_PASSWORD exactly (case-sensitive, no trim). If passwordConfigured is false, the secret isn't in this environment.",
         });
       }
+      // GET /asksolomon/library — list library items with metadata.
+      if (path === "/asksolomon/library") {
+        return handleLibraryList(request, env);
+      }
+      return json({ success: false, error: "Not found" }, 404);
+    }
+
+    // DELETE /asksolomon/library/{id} — soft-delete a library item (moves to archive).
+    if (request.method === "DELETE") {
+      const libMatch = path.match(/^\/asksolomon\/library\/([A-Za-z0-9_-]+)$/);
+      if (libMatch) return handleLibraryDelete(libMatch[1], request, env);
       return json({ success: false, error: "Not found" }, 404);
     }
 
@@ -848,6 +1005,12 @@ export default {
     // Tagged SWOT_CONSOLE_MANUAL_SEND to distinguish from real leads and test runs.
     if (path === "/asksolomon/send-result") {
       return handleConsoleSendResult(request, env, ctx, url);
+    }
+
+    // POST /asksolomon/library — multipart upload of a reference item (transcript,
+    // testimonial, example analysis, rubric fragment).
+    if (path === "/asksolomon/library") {
+      return handleLibraryUpload(request, env);
     }
 
     let body;
