@@ -10,6 +10,7 @@ import { Checkbox } from "./ui/checkbox";
 import { ScrollArea } from "./ui/scroll-area";
 import { CountdownTimer } from "./CountdownTimer";
 import { OFFERS } from "@/lib/offerTiming";
+import { PAYMENT_LINK_297 } from "@/lib/ghl-config";
 
 interface PurchaseGateScreenProps {
   score: number;
@@ -69,7 +70,7 @@ export const PurchaseGateScreen = ({ score, path, onBack }: PurchaseGateScreenPr
     // window.location.href = session.url;
 
     setTimeout(() => {
-      window.open("https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0", "_blank", "width=500,height=700");
+      window.open(PAYMENT_LINK_297, "_blank", "width=500,height=700");
       setLoading(false);
     }, 1500);
   };

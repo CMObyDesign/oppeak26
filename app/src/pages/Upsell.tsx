@@ -4,6 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { CheckCircle2, TrendingUp, ShieldCheck, Target, ArrowRight, Star, Clock, Users, Zap, Award } from "lucide-react";
 import { BookingCalendar } from "@/components/BookingCalendar";
+import { IMAGE_STRATEGIST_BG } from "@/lib/ghl-config";
 
 const Upsell = () => {
   const [isBookingOpen, setIsBookingOpen] = useState(false);
@@ -30,7 +31,7 @@ const Upsell = () => {
         <section className="py-20 bg-secondary/20 relative overflow-hidden">
           <div className="absolute inset-0 z-0">
             <img 
-              src="https://vibe.filesafe.space/1777480070728873169/assets/9d17a320-b5c1-4205-b490-178385640b5b.png" 
+              src={IMAGE_STRATEGIST_BG}
               alt="Strategist" 
               className="w-full h-full object-cover opacity-20"
               style={{

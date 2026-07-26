@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { FREE_ASSESSMENT_SECTIONS, FreeAssessmentQuestion } from "@/data/freeAssessmentQuestions";
 import { getReadableAnswer } from "@/lib/assessment";
+import { GHL_SURVEY_SUBMIT_URL } from "@/lib/ghl-config";
 import { QuestionCard } from "./QuestionCard";
 import { ProgressBar } from "./ProgressBar";
 import { ArrowLeft } from "lucide-react";
@@ -90,7 +91,7 @@ export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
         }
       });
 
-      const response = await fetch("https://services.leadconnectorhq.com/surveys/submit/VUdK9oyo8nlsE1cOke3n", {
+      const response = await fetch(GHL_SURVEY_SUBMIT_URL, {
         method: "POST",
         body: formData,
       });
@@ -126,7 +127,7 @@ export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
         }
       });
 
-      const response = await fetch("https://services.leadconnectorhq.com/surveys/submit/VUdK9oyo8nlsE1cOke3n", {
+      const response = await fetch(GHL_SURVEY_SUBMIT_URL, {
         method: "POST",
         body: formData,
       });

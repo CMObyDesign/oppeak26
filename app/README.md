@@ -101,19 +101,33 @@ exposed — these are all public form/widget endpoints tied to location
   want to move them into `public/` for a self-hosted app with no runtime
   dependency on that CDN.
 
-## Regenerating shadcn/ui components
+## HighLevel config placeholders
 
-`src/components/ui/*` in this export was hand-recreated (the Vibe export
-intentionally excludes this folder — the `ui.shadcn.com` registry wasn't
-reachable in the environment this was migrated from). It currently covers
-exactly what the app imports: `badge`, `button`, `card`, `checkbox`,
-`dialog`, `input`, `label`, `scroll-area`, `select`, `sonner`, `textarea`,
-`toast`, `toaster`, `tooltip`. If you add a component that needs another
-primitive, regenerate with:
+Every hardcoded HighLevel/GHL identifier and link (location ID, calendar ID,
+tracking ID, survey submit URL, booking API base, custom field IDs, payment
+and booking widget links, and the two brand images previously hosted on
+Vibe's asset CDN) has been centralized in `src/lib/ghl-config.ts`, reading
+from `VITE_*` env vars with obvious placeholder fallbacks. Copy
+`.env.example` to `.env` and fill in the real values, or set them as
+Cloudflare Pages build environment variables (which take precedence). See
+the comments in `ghl-config.ts` for what each one does. `og:image`,
+`twitter:image`, and the favicon in `index.html` are static tags pointing
+at local files under `public/images/` / `public/favicon.svg` instead —
+replace those files directly (or edit the tags) once you have real assets.
+
+## shadcn/ui components
+
+`src/components/ui/*` matches the project's `components.json` (`style:
+"default"`, Tailwind v3) — the canonical pre-v4 shadcn output. If you add a
+component that needs another primitive, regenerate with:
 
 ```bash
 npx shadcn@latest add <component>
 ```
+
+(Note: `ui.shadcn.com` may be blocked by restrictive network/proxy setups —
+if `npx shadcn add` fails to reach the registry, run it from an
+unrestricted network instead.)
 
 ## Lockfile policy
 

@@ -15,10 +15,9 @@ import {
   verifyPayment,
   AgentReport,
 } from "@/lib/assessment";
+import { PAYMENT_LINK_47, IMAGE_LOGO } from "@/lib/ghl-config";
 
 type ScreenState = "verifying" | "not-paid" | "survey" | "analyzing" | "results";
-
-const PAYMENT_LINK_47 = "https://my.cfobydesign.com/payment-link/6a0db7aa1a6dcdeebb53b641";
 
 const PaidTier47 = () => {
   const navigate = useNavigate();
@@ -140,7 +139,7 @@ const PaidTier47 = () => {
         <div className="container mx-auto px-6 py-12 md:py-16 flex justify-center md:justify-start">
           <div className="flex flex-col items-center md:items-start pl-4 md:pl-8">
             <img
-              src="https://vibe.filesafe.space/1777480070728873169/attachments/788b1bf8-ad6b-4f56-be2a-bbbfcb80fb62.png"
+              src={IMAGE_LOGO}
               alt="CFO By Design"
               className="h-20 md:h-24 object-contain brightness-150"
             />

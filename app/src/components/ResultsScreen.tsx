@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import type { AgentReport } from "@/lib/assessment";
 import { CountdownTimer } from "./CountdownTimer";
 import { OFFERS, getRemainingTime } from "@/lib/offerTiming";
+import { PAYMENT_LINK_47, PAYMENT_LINK_297 } from "@/lib/ghl-config";
 
 interface ResultsScreenProps {
   report: AgentReport | null;
@@ -202,7 +203,7 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
               <Button
                 onClick={() => {
                   console.log("[Analytics] SWOT_UPGRADE_CLICK");
-                  window.open("https://my.cfobydesign.com/payment-link/6a0db7aa1a6dcdeebb53b641", "_blank");
+                  window.open(PAYMENT_LINK_47, "_blank");
                 }}
                 className="w-full h-20 text-xl font-bold rounded-xl shadow-glow-gold transition-all hover:-translate-y-1 active:translate-y-0 bg-primary hover:bg-primary/90 text-primary-foreground relative overflow-hidden group"
               >
@@ -224,7 +225,7 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
           <Button
             onClick={() => {
               console.log("[Analytics] SWOT_DEEP_DIVE_CLICK");
-              window.open("https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0", "_blank");
+              window.open(PAYMENT_LINK_297, "_blank");
             }}
             variant="ghost"
             className="w-full text-sm text-muted-foreground hover:text-foreground mt-4"
@@ -263,7 +264,7 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
             <Button
               onClick={() => {
                 console.log("[Analytics] SWOT_UPSELL_297_CLICK");
-                window.open("https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0", "_blank");
+                window.open(PAYMENT_LINK_297, "_blank");
               }}
               variant="ghost"
               className="w-full text-sm text-muted-foreground hover:text-foreground"

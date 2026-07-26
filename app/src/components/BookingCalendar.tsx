@@ -7,11 +7,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-
-const CALENDAR_ID = "0tH7HRpY6xqJyiDEpg2z";
-const LOCATION_ID = "oLIENQCtGnt9U6gfLhE5";
-const TRACKING_ID = "tk_4c1e49d2891c4a949b946b1158c534f6";
-const VIBE_API_URL = "https://backend.leadconnectorhq.com/vibe-ai";
+import {
+  GHL_CALENDAR_ID,
+  GHL_LOCATION_ID,
+  GHL_TRACKING_ID,
+  GHL_BOOKING_API_BASE,
+  GHL_CUSTOM_FIELD_REVENUE_ID,
+  GHL_CUSTOM_FIELD_GOAL_ID,
+  GHL_CUSTOM_FIELD_SCORE_ID,
+  GHL_CUSTOM_FIELD_REPORT_PATH_ID,
+} from "@/lib/ghl-config";
 
 interface BookingCalendarProps {
   totalScore: number;
@@ -49,7 +54,7 @@ export const BookingCalendar = ({ totalScore, reportPath }: BookingCalendarProps
       const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
       const response = await fetch(
-        `https://backend.leadconnectorhq.com/calendars/${CALENDAR_ID}/free-slots?startDate=${startDate}&endDate=${endDate}&timezone=${timezone}`
+        `https://backend.leadconnectorhq.com/calendars/${GHL_CALENDAR_ID}/free-slots?startDate=${startDate}&endDate=${endDate}&timezone=${timezone}`
       );
       const data = await response.json();
       setSlots(data);
@@ -68,8 +73,8 @@ export const BookingCalendar = ({ totalScore, reportPath }: BookingCalendarProps
     const sessionId = crypto.randomUUID();
 
     const bookingPayload = {
-      locationId: LOCATION_ID,
-      calendarId: CALENDAR_ID,
+      locationId: GHL_LOCATION_ID,
+      calendarId: GHL_CALENDAR_ID,
       firstName: formData.firstName,
       lastName: formData.lastName,
       email: formData.email,
@@ -78,10 +83,10 @@ export const BookingCalendar = ({ totalScore, reportPath }: BookingCalendarProps
       selectedTimezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       sessionId,
       customFields: [
-        { id: "GkK5Uh9SoD1Y9PAiYIuS", key: "contact.annual_business_revenue", field_value: formData.revenue },
-        { id: "EEsulhhHaCnY3Vv8k1hk", key: "contact.primary_goal", field_value: formData.goal },
-        { id: "erYYBz6vG9TbqEuqLxeb", key: "contact.swot_total_score", field_value: totalScore.toString() },
-        { id: "2tOTD1ifIR1G9ayA0Y8t", key: "contact.swot_report_path", field_value: reportPath },
+        { id: GHL_CUSTOM_FIELD_REVENUE_ID, key: "contact.annual_business_revenue", field_value: formData.revenue },
+        { id: GHL_CUSTOM_FIELD_GOAL_ID, key: "contact.primary_goal", field_value: formData.goal },
+        { id: GHL_CUSTOM_FIELD_SCORE_ID, key: "contact.swot_total_score", field_value: totalScore.toString() },
+        { id: GHL_CUSTOM_FIELD_REPORT_PATH_ID, key: "contact.swot_report_path", field_value: reportPath },
       ],
     };
 
@@ -113,8 +118,8 @@ export const BookingCalendar = ({ totalScore, reportPath }: BookingCalendarProps
       title: document.title,
       path: window.location.pathname,
       userAgent: navigator.userAgent,
-      trackingId: TRACKING_ID,
-      locationId: LOCATION_ID,
+      trackingId: GHL_TRACKING_ID,
+      locationId: GHL_LOCATION_ID,
       sessionId,
       properties: {
         deviceType: /Mobile|Android|iPhone/i.test(navigator.userAgent) ? "mobile" : "desktop",
@@ -123,7 +128,7 @@ export const BookingCalendar = ({ totalScore, reportPath }: BookingCalendarProps
 
     try {
       // 1. Submit Booking
-      const bookingResponse = await fetch(`${VIBE_API_URL}/booking/submit`, {
+      const bookingResponse = await fetch(`${GHL_BOOKING_API_BASE}/booking/submit`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(bookingPayload),

@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { CheckCircle2, FileText, Zap, Map, ArrowRight } from "lucide-react";
+import { BOOKING_LINK_297 } from "@/lib/ghl-config";
 
 export const Tier297SuccessScreen = () => {
   return (
@@ -18,10 +19,10 @@ export const Tier297SuccessScreen = () => {
 
       <div className="glass-card p-4 md:p-8 rounded-3xl border border-white/5">
         <iframe
-          src="https://my.cfobydesign.com/widget/booking/VGdN6KoFBtbdnSvHKHTh"
+          src={BOOKING_LINK_297}
           className="w-full h-[700px] rounded-2xl border border-white/10"
           scrolling="no"
-          id="VGdN6KoFBtbdnSvHKHTh_calendar"
+          id="tier297-booking-calendar"
         />
       </div>
 
