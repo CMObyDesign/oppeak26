@@ -6,6 +6,12 @@ This project powers a two-tier diagnostic funnel for CFO By Design, a fractional
 
 ```text
 oppeak26/
+├── app/
+│   └── ...                     — funnel frontend (React + Vite +
+│                                 Tailwind + shadcn/ui), migrated from
+│                                 HighLevel's Vibe builder so it can be
+│                                 built and deployed via Cloudflare
+│                                 Pages instead. See app/README.md.
 ├── logic/
 │   ├── question_mapping.json   — 14 questions, scoring config,
 │   │                             path thresholds
@@ -33,6 +39,18 @@ oppeak26/
 │                                 three-tier orchestration
 └── README.md
 ```
+
+## Two deploy targets, one repo
+
+- **`worker/`** — Cloudflare Worker (backend): assessment scoring via
+  Claude, GHL contact writeback, report hosting, Ask Solomon console.
+  Deployed with `wrangler deploy`, per `wrangler.toml` at the repo root.
+- **`app/`** — the funnel frontend the visitor actually sees, deployed
+  separately as a Cloudflare Pages project with **root directory `app`**,
+  build command `npm run build`, output directory `dist`. It POSTs to the
+  worker and to HighLevel directly for lead capture/booking. See
+  `app/README.md` for the full HighLevel-coupling notes and Cloudflare
+  Pages setup.
 
 ## Setup
 
