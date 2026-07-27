@@ -1009,8 +1009,16 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
     tier === "paid_297" ? "SWOT_PAID_297"
     : tier === "paid_47" ? "SWOT_PAID_47"
     : "SWOT_FREE_LEAD";
+  // Tier-specific "report ready" tag — fires AFTER Solomon has written the
+  // report + blurb. Trigger tier email workflows on THIS tag, not on the
+  // payment tag (payment fires before the report exists → empty email risk).
+  const reportReadyTag =
+    tier === "paid_297" ? "SWOT_REPORT_READY_297"
+    : tier === "paid_47" ? "SWOT_REPORT_READY_47"
+    : "SWOT_REPORT_READY_FREE";
   const tags = [
     tierTag,
+    reportReadyTag,
     `SWOT_PATH_${(agent.path || "").toUpperCase()}`,
     ...(agent.opportunityFlags || []),
   ].filter(Boolean);
