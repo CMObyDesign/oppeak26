@@ -609,6 +609,17 @@ function getPassword() { return sessionStorage.getItem(PASSWORD_KEY) || ""; }
 
 // On load: skip gate if password already in session; restore any input draft.
 window.addEventListener("DOMContentLoaded", () => {
+  // Embed-token auto-auth: ?token=xxx in the URL is treated as the password.
+  // Used when embedding Ask Solomon inside another page (e.g., GHL dashboard iframe).
+  // Worker accepts CONSOLE_EMBED_TOKEN via the same x-console-password header.
+  var urlParams = new URLSearchParams(window.location.search);
+  var embedToken = urlParams.get("token");
+  if (embedToken) {
+    sessionStorage.setItem(PASSWORD_KEY, embedToken);
+    // Optional: hide the topbar controls (logout / export / import) in embed mode
+    var topbarRight = document.querySelector(".topbar-right");
+    if (topbarRight) topbarRight.style.display = "none";
+  }
   if (getPassword()) {
     document.getElementById("gate").style.display = "none";
   }

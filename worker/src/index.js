@@ -556,13 +556,17 @@ async function handleReport(contactId, env) {
 
 // ----- Ask Solomon console (internal training & testing) -----
 
-// Validate the shared console password against env.CONSOLE_PASSWORD.
-// Constant-time-ish comparison: short string, low risk for timing attacks at our volume.
+// Validate console access. Accepts EITHER:
+//   1. Password via x-console-password header (matches env.CONSOLE_PASSWORD) — normal login
+//   2. Embed token via x-console-password header (matches env.CONSOLE_EMBED_TOKEN) — for
+//      iframe embeds (e.g., inside GHL dashboard). Bypasses the gate when passed in the URL.
+// Constant-time-ish comparison: short strings, low risk for timing attacks at our volume.
 function checkConsolePassword(request, env) {
-  const expected = env.CONSOLE_PASSWORD;
-  if (!expected) return false; // Console is locked if password isn't configured.
   const provided = request.headers.get("x-console-password");
-  return Boolean(provided) && provided === expected;
+  if (!provided) return false;
+  if (env.CONSOLE_PASSWORD && provided === env.CONSOLE_PASSWORD) return true;
+  if (env.CONSOLE_EMBED_TOKEN && provided === env.CONSOLE_EMBED_TOKEN) return true;
+  return false;
 }
 
 // POST /asksolomon/run — runs the SWOT assessment without GHL writeback.
