@@ -433,7 +433,7 @@ async function fetchLibrary(force) {
   }
   try {
     const res = await fetch("/asksolomon/library", { headers: { "x-console-password": getPassword() } });
-    if (res.status === 401) { sessionStorage.removeItem(PASSWORD_KEY); location.reload(); return []; }
+    if (res.status === 401) { handleAuthFailure(); return []; }
     const data = await res.json();
     LIBRARY_CACHE = { items: data.items || [], lastFetch: Date.now() };
     return LIBRARY_CACHE.items;
@@ -606,6 +606,22 @@ function logout() {
   location.reload();
 }
 function getPassword() { return sessionStorage.getItem(PASSWORD_KEY) || ""; }
+// True when the console was loaded via ?token=... (embedded iframe mode).
+// In embed mode, we NEVER auto-reload on 401 — that would infinite-loop the iframe.
+function isEmbedMode() { return new URLSearchParams(window.location.search).has("token"); }
+// Guarded 401 handler: reloads in normal mode, toasts (once) in embed mode.
+var __authErrorShown = false;
+function handleAuthFailure() {
+  if (isEmbedMode()) {
+    if (!__authErrorShown) {
+      __authErrorShown = true;
+      try { toast("Auth token rejected. Check parent page URL includes ?token=…", "error"); } catch {}
+    }
+    return;
+  }
+  sessionStorage.removeItem(PASSWORD_KEY);
+  location.reload();
+}
 
 // On load: skip gate if password already in session; restore any input draft.
 window.addEventListener("DOMContentLoaded", () => {
@@ -923,7 +939,7 @@ async function sendResultToEmail(runId) {
         reportHtml: run.result?.reportHtml || "",
       }),
     });
-    if (res.status === 401) { sessionStorage.removeItem(PASSWORD_KEY); return location.reload(); }
+    if (res.status === 401) { handleAuthFailure(); return; }
     const data = await res.json();
     if (!data.success) throw new Error(data.error || "Unknown error");
     if (statusEl) statusEl.textContent = "✓ Sent to " + email + " · workflow will deliver in 1-2 min";
@@ -1084,7 +1100,7 @@ function clearHistory() {
 async function loadDefaultRubric() {
   try {
     const res = await fetch("/asksolomon/rubric", { headers: { "x-console-password": getPassword() } });
-    if (res.status === 401) { sessionStorage.removeItem(PASSWORD_KEY); return location.reload(); }
+    if (res.status === 401) { handleAuthFailure(); return; }
     const data = await res.json();
     document.getElementById("rubric-override").value = data.rubric || "";
     toast("Loaded default rubric. Edit and Run to test variants.", "success");
