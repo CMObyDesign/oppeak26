@@ -880,6 +880,159 @@ async function buildLibraryContext(env, ids) {
 }
 // ----- end reference library -----
 
+// ----- GHL survey webhook — the "no more Vibe" bridge -----
+// GHL surveys write answers into contact custom fields. This endpoint receives
+// a GHL workflow webhook after a survey submits, fetches the contact, maps
+// field IDs to human-readable questions, runs Solomon, and writes back.
+// Solomon lives on Cloudflare Worker — nothing hits Vibe.
+
+// Maps GHL custom-field IDs → the labeled question Solomon should see.
+// Free-tier IDs known from the Vibe app export (AssessmentScreen.tsx).
+// $47 and $297 fields fall back to whatever value+ID pair GHL returns; the
+// worker synthesizes a question from the field ID if not in the map (Solomon
+// figures out semantics from the answer text at that point).
+const SURVEY_FIELD_MAP = {
+  // FREE tier (P1-P3 + Q1-Q8)
+  "5VWVNRrQYcLqXhckh4f4": "What best describes your business type?",
+  "nCRqWH0x1sdJIgUPDr2E": "How do you primarily reach your customers?",
+  "nbPL6APmjrjr43J6urVb": "What industry or vertical best describes your business?",
+  "OyQjw4nGNHJYADsq5ggg": "Do you currently have any active judgments, tax liens, or corporate debt you're actively managing?",
+  "8sSKohKtQZZzJEtM2ju0": "When you make business decisions, are you basing them on your actual numbers or on what's in your bank account?",
+  "deItnw0p1H7sO1okRjGS": "What does your business consistently deliver that your clients say they can't get anywhere else?",
+  "hV9yij5uFitztZzanSaa": "When a client refers you, what specific words or outcome do they use to describe what you did for them?",
+  "ngBePHf4iKPhaHm2OtSv": "Where does revenue most often leak in your business?",
+  "cvuAgfuL94eBahOrnTY0": "What would change in your business if you had 20% more profit on the same revenue?",
+  "cdlV9zqJxztcxfXgD4J0": "Where do you see demand in your market that you're not yet positioned to capture?",
+  "qKRvCyjprebbK75tC05h": "What would happen to your business if your single largest client, revenue source, or referral channel disappeared in the next 90 days?",
+};
+
+// Fields Solomon writes to and should never re-consume as "answers" — otherwise
+// a re-triggered run would feed the previous report back as an intake answer.
+const SOLOMON_OWNED_FIELDS = new Set([
+  "Ys28pMUc82cURfnsbQzY", // swot_free_report
+  "pa6VF4GsufGuTAjlFVnf", // swot_full_report
+  "XEuWL4vobueOpZGBFdLm", // business_playbook
+  "UnnWDCV53D8UZp1QHs6M", // swot_path
+  "v8aZ5KjE8GDXDX0S8z0d", // swot_rehab_flag
+  "OnB1KqsPr0OHHidW3K3g", // swot_deep_dive_booked
+  "kmZcNfFytZzwd6PbE7AT", // swot_strategist_brief
+  "wjWicVUPs2IiXSl7gzBs", // swot_email_blurb
+  "2tOTD1ifIR1G9ayA0Y8t", // swot_report_path
+]);
+
+async function fetchGHLContact(contactId, env) {
+  if (!contactId || !env.GHL_API_KEY) return null;
+  const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}`, {
+    headers: {
+      Authorization: `Bearer ${env.GHL_API_KEY}`,
+      Version: "2021-07-28",
+    },
+  });
+  if (!res.ok) return null;
+  const data = await res.json().catch(() => ({}));
+  return data?.contact || null;
+}
+
+// Build the {question, answer} array Solomon expects from the contact's
+// custom fields, skipping Solomon-owned fields and empty values.
+function answersFromContactFields(contact) {
+  const cfs = contact?.customFields || [];
+  return cfs
+    .filter(f => f && f.value && String(f.value).trim() && !SOLOMON_OWNED_FIELDS.has(f.id))
+    .map(f => ({
+      question: SURVEY_FIELD_MAP[f.id] || ("field:" + f.id),
+      answer: String(f.value).trim(),
+    }));
+}
+
+// POST /from-ghl-survey — GHL workflow webhook after a survey submits.
+// Body: { contactId, tier } — tier is "free" | "paid_47" | "paid_297"
+// Optional: rubricOverride (for testing new rubrics against real submissions)
+async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+
+  const contactId = body.contactId || body.contact_id || body.contact?.id;
+  const tier = body.tier || "free";
+
+  if (!contactId) return json({ success: false, error: "Missing contactId in webhook body" }, 400);
+  if (!env.GHL_API_KEY) return json({ success: false, error: "GHL not configured" }, 500);
+
+  const contact = await fetchGHLContact(contactId, env);
+  if (!contact) return json({ success: false, error: "Contact not found in GHL" }, 404);
+
+  const answers = answersFromContactFields(contact);
+  if (!answers.length) return json({ success: false, error: "No answers on this contact yet" }, 400);
+
+  const contactPayload = {
+    name: [contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.contactName || "Business Owner",
+    email: contact.email || "",
+    contactId: contact.id,
+  };
+
+  const businessProfile = {}; // Reserved for future paid-tier profile fields.
+  const prompt = buildPrompt(tier, answers, contactPayload, businessProfile);
+  const rubric = ASSESSMENT_RUBRIC;
+
+  let agent;
+  const startedAt = Date.now();
+  try {
+    const raw = await callClaudeWithRubric(prompt, rubric, env);
+    agent = parseAgentJson(raw);
+  } catch (err) {
+    return json({ success: false, error: "Solomon error: " + err.message }, 500);
+  }
+  const elapsedMs = Date.now() - startedAt;
+
+  if (tier === "free") {
+    agent.opportunityFlags = (agent.opportunityFlags || []).filter(f => f !== "DIGITAL_PRESENCE_OPP");
+  }
+
+  const reportHtml = buildReportHtml(agent);
+  const reportFieldKey =
+    tier === "paid_297" ? "business_playbook"
+    : tier === "paid_47" ? "swot_full_report"
+    : "swot_free_report";
+
+  const fields = [
+    { key: "swot_path", field_value: String(agent.path || "") },
+    { key: "swot_rehab_flag", field_value: agent.path === "rehab" ? "true" : "false" },
+    { key: reportFieldKey, field_value: reportHtml },
+  ];
+  if (agent.opener) fields.push({ key: "swot_email_blurb", field_value: String(agent.opener) });
+  if (agent.strategistBrief) fields.push({ key: "swot_strategist_brief", field_value: String(agent.strategistBrief) });
+  fields.push({ key: "swot_report_path", field_value: `${requestUrl.origin}/report/${contactId}` });
+  if (tier === "paid_297") fields.push({ key: "swot_deep_dive_booked", field_value: "true" });
+
+  const tierTag =
+    tier === "paid_297" ? "SWOT_PAID_297"
+    : tier === "paid_47" ? "SWOT_PAID_47"
+    : "SWOT_FREE_LEAD";
+  const tags = [
+    tierTag,
+    `SWOT_PATH_${(agent.path || "").toUpperCase()}`,
+    ...(agent.opportunityFlags || []),
+  ].filter(Boolean);
+
+  // Fire writeback + tags asynchronously so the webhook can respond fast.
+  ctx.waitUntil(Promise.allSettled([
+    updateGHLContact(contactId, fields, env),
+    addGHLTag(contactId, tags, env),
+  ]));
+
+  return json({
+    success: true,
+    tier,
+    contactId,
+    path: agent.path,
+    flags: agent.opportunityFlags || [],
+    elapsedMs,
+    tagsAppliedAsync: tags,
+  });
+}
+// ----- end GHL survey webhook -----
+
 // Like callClaude but accepts an explicit rubric (for the console's override path).
 // When the rubric is the default, cache_control still applies — repeated runs hit the cache.
 async function callClaudeWithRubric(prompt, rubric, env) {
@@ -1011,6 +1164,14 @@ export default {
     // testimonial, example analysis, rubric fragment).
     if (path === "/asksolomon/library") {
       return handleLibraryUpload(request, env);
+    }
+
+    // POST /from-ghl-survey — the "no more Vibe" bridge.
+    // GHL workflow fires this webhook after a survey submits with { contactId, tier }.
+    // Worker fetches the contact, runs Solomon, writes results + applies tier tag →
+    // GHL's tier email workflow (00 / 01 / 02) then fires the delivery email.
+    if (path === "/from-ghl-survey") {
+      return handleGHLSurveyWebhook(request, env, ctx, url);
     }
 
     let body;
