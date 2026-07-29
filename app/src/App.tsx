@@ -8,6 +8,9 @@ import Upsell from "./pages/Upsell";
 import PaidTier47 from "./pages/PaidTier47";
 import PaidTier297 from "./pages/PaidTier297";
 import AuditConfirmed from "./pages/AuditConfirmed";
+import Thanks from "./pages/Thanks";
+import BetaThanks from "./pages/BetaThanks";
+import BetaFeedback from "./pages/BetaFeedback";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -20,10 +23,14 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
+          <Route path="/beta" element={<Index />} />
           <Route path="/paid-47" element={<PaidTier47 />} />
           <Route path="/paid-297" element={<PaidTier297 />} />
           <Route path="/upsell" element={<Upsell />} />
           <Route path="/audit-confirmed" element={<AuditConfirmed />} />
+          <Route path="/thanks" element={<Thanks />} />
+          <Route path="/beta-thanks" element={<BetaThanks />} />
+          <Route path="/beta-feedback" element={<BetaFeedback />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

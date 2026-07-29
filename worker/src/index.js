@@ -237,7 +237,7 @@ ${context}
 
 // Wrap inline-styled report body in a full standalone HTML page for the /report endpoint.
 // Used when someone clicks "View Report Online" from an email.
-function buildReportPage(reportBody, tierLabel, contactName, tier, env, contactEmail) {
+function buildReportPage(reportBody, tierLabel, contactName, tier, env, contactEmail, contactId) {
   const e = escapeHtml;
   const paymentLink47 = (env && env.PAYMENT_LINK_47) || CONFIG.PAYMENT_LINK_47;
   const paymentLink297 = (env && env.PAYMENT_LINK_297) || CONFIG.PAYMENT_LINK_297;
@@ -280,6 +280,7 @@ function buildReportPage(reportBody, tierLabel, contactName, tier, env, contactE
             var micro = document.getElementById('upgrade-micro');
             var chip = document.querySelector('.cta-panel .upgrade-chip');
             var VALID = { 'SOLOMON50': { href: cta.dataset.betaHref, label: 'Claim My Beta Access — Full Diagnostic', micro: 'Beta cohort · SOLOMON50 applied · skip payment, go straight to intake.' } };
+            var CONTACT_ID = ${JSON.stringify(contactId || "")};
             function tryCoupon() {
               var code = (input.value || '').trim().toUpperCase();
               if (!code) return;
@@ -294,6 +295,13 @@ function buildReportPage(reportBody, tierLabel, contactName, tier, env, contactE
                 input.disabled = true;
                 apply.disabled = true;
                 apply.textContent = 'Applied';
+                if (CONTACT_ID) {
+                  fetch('/apply-solomon50', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ contactId: CONTACT_ID, code: code })
+                  }).catch(function () { /* tag write is best-effort; UX proceeds regardless */ });
+                }
               } else {
                 msg.textContent = 'That code isn\\'t recognized. Double-check spelling.';
                 msg.className = 'coupon-msg err';
@@ -903,7 +911,7 @@ async function handleReport(contactId, env) {
           setTimeout(poll, 2000);
         })();
       </script>`;
-    return new Response(buildReportPage(fallback, tierLabel, "Business Owner", tier, env, c.email || ""), {
+    return new Response(buildReportPage(fallback, tierLabel, "Business Owner", tier, env, c.email || "", contactId), {
       status: 200,
       headers: htmlHeaders(),
     });
@@ -916,10 +924,29 @@ async function handleReport(contactId, env) {
   const contactName =
     c.firstName || c.contactName || [c.firstName, c.lastName].filter(Boolean).join(" ") || "Business Owner";
 
-  return new Response(buildReportPage(reportWithReset, tierLabel, contactName, tier, env, c.email || ""), {
+  return new Response(buildReportPage(reportWithReset, tierLabel, contactName, tier, env, c.email || "", contactId), {
     status: 200,
     headers: htmlHeaders(),
   });
+}
+
+// POST /apply-solomon50 — tag a contact when they redeem the SOLOMON50 beta code
+// on the free report page. Fires from the report page's coupon-apply JS. Best-effort:
+// UX proceeds regardless of tag-write success. No auth needed — worst case is a
+// contactId + tag write, no data exfiltration or paid-tier escalation.
+async function handleApplySolomon50(request, env) {
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+
+  const contactId = body.contactId || body.contact_id;
+  const code = String(body.code || "").trim().toUpperCase();
+  if (!contactId) return json({ success: false, error: "Missing contactId" }, 400);
+  if (code !== "SOLOMON50") return json({ success: false, error: "Unrecognized code" }, 400);
+  if (!env.GHL_API_KEY) return json({ success: false, error: "GHL not configured" }, 500);
+
+  const ok = await addGHLTag(contactId, ["swot_solomon50_applied"], env);
+  return json({ success: ok });
 }
 
 // ----- Ask Solomon console (internal training & testing) -----
@@ -1586,6 +1613,17 @@ export default {
       if (path === "/asksolomon/library") {
         return handleLibraryList(request, env);
       }
+      // GET /diag/webhook-secret — confirm WEBHOOK_SECRET is present on this deploy
+      // without ever revealing its value. Use this after setting the secret in
+      // Cloudflare and before wiring the GHL webhook headers.
+      if (path === "/diag/webhook-secret") {
+        const s = env.WEBHOOK_SECRET;
+        return json({
+          configured: Boolean(s),
+          length: typeof s === "string" ? s.length : 0,
+          hint: "Both the worker (WEBHOOK_SECRET env) and each GHL webhook action's x-webhook-secret header must match exactly. If configured is false, add the secret in Cloudflare → Workers → swot-engine → Settings → Variables and redeploy.",
+        });
+      }
       return json({ success: false, error: "Not found" }, 404);
     }
 
@@ -1624,6 +1662,15 @@ export default {
       return handleLibraryUpload(request, env);
     }
 
+    // POST /apply-solomon50 — tag a contact when they apply the SOLOMON50 beta code
+    // on the free report page. Fired by client-side JS in buildReportPage's coupon script.
+    if (path === "/apply-solomon50") {
+      return handleApplySolomon50(request, env);
+    }
+
+    // GET /diag/webhook-secret — verify WEBHOOK_SECRET is set without revealing its value.
+    // Returns { configured: true|false, length: N }. Use to confirm the secret exists on
+    // this deploy before firing test webhooks from GHL.
     // POST /from-ghl-survey — the "no more Vibe" bridge.
     // GHL workflow fires this webhook after a survey submits with { contactId, tier }.
     // Worker fetches the contact, runs Solomon, writes results + applies tier tag →
