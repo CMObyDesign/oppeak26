@@ -93,6 +93,98 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
     font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: #6b7280;
     margin: 0 0 8px; font-weight: 600;
   }
+  .mode-btn {
+    padding: 4px 10px; border-radius: 4px; border: 1px solid #d1d5db;
+    background: #ffffff; font-size: 11px; cursor: pointer; color: #6b7280;
+  }
+  .mode-btn:hover { background: #f3f4f6; }
+  .mode-btn.active { background: #1a1a1a; color: #ffffff; border-color: #1a1a1a; }
+  .copy-btn {
+    float: right; padding: 2px 8px; font-size: 10px; margin-left: 8px;
+    border: 1px solid #d1d5db; background: #ffffff; color: #6b7280;
+    border-radius: 4px; cursor: pointer; font-family: inherit; font-weight: 500;
+  }
+  .copy-btn:hover { background: #f3f4f6; color: #1a1a1a; }
+  .mic-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; border-radius: 50%;
+    border: 2px solid #c4a647; background: #fef3c7; cursor: pointer;
+    font-size: 18px; margin-left: 8px; vertical-align: middle;
+    box-shadow: 0 2px 6px rgba(196, 166, 71, 0.25);
+    transition: transform 0.15s, box-shadow 0.15s, background 0.15s;
+  }
+  .mic-btn:hover { background: #fef9e6; transform: scale(1.08); box-shadow: 0 3px 10px rgba(196, 166, 71, 0.4); }
+  .mic-btn:active { transform: scale(0.94); }
+  .mic-btn.recording { background: #fecaca; border-color: #b91c1c; animation: micpulse 1.2s infinite; }
+  .mic-btn.disabled { opacity: 0.35; cursor: not-allowed; }
+  @keyframes micpulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(185,28,28,0.5); }
+    50% { box-shadow: 0 0 0 10px rgba(185,28,28,0); }
+  }
+  /* Smaller mic variant for guided-mode textarea corners */
+  .mic-btn[style*="24px"] {
+    background: #fef3c7 !important; border: 2px solid #c4a647 !important;
+    box-shadow: 0 1px 3px rgba(196, 166, 71, 0.25);
+  }
+  /* Thumbs feedback buttons on runs */
+  .feedback-btn {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border-radius: 50%;
+    border: 1px solid #d1d5db; background: #ffffff; cursor: pointer;
+    font-size: 16px; margin-right: 6px; transition: transform 0.12s, background 0.15s;
+  }
+  .feedback-btn:hover { background: #f3f4f6; transform: scale(1.08); }
+  .feedback-btn.active-up { background: #d1fae5; border-color: #065f46; }
+  .feedback-btn.active-down { background: #fee2e2; border-color: #b91c1c; }
+  .guidance-panel {
+    background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 6px;
+    padding: 12px 14px; margin: 8px 0; font-size: 12px; color: #075985;
+    line-height: 1.55;
+  }
+  .guidance-panel strong { color: #0c4a6e; }
+  .guidance-panel code {
+    background: #ffffff; padding: 1px 5px; border-radius: 3px;
+    font-size: 11px; color: #92400e;
+  }
+  .guidance-panel ul { margin: 6px 0 0 0; padding-left: 20px; }
+  .guidance-panel li { margin-bottom: 3px; }
+  .start-here {
+    background: linear-gradient(135deg, #fef3c7 0%, #fef9e6 100%);
+    border-left: 4px solid #c4a647;
+    padding: 20px 24px; border-radius: 8px;
+    margin-bottom: 20px;
+  }
+  .start-here h2 {
+    font-size: 18px; color: #92400e; margin: 0 0 8px 0;
+    font-weight: 700; letter-spacing: -0.01em;
+  }
+  .start-here p {
+    font-size: 13px; color: #78350f; margin: 0 0 12px 0; line-height: 1.55;
+  }
+  .start-here ol {
+    margin: 0; padding-left: 22px; font-size: 12.5px; color: #78350f;
+  }
+  .start-here li {
+    margin-bottom: 6px; line-height: 1.6;
+  }
+  .start-here code {
+    background: #fef3c7; border: 1px solid #fcd34d; padding: 1px 5px;
+    border-radius: 3px; font-size: 11px; color: #92400e;
+  }
+  .send-result-box {
+    margin-top: 16px; padding: 14px; background: #f9fafb;
+    border: 1px dashed #d1d5db; border-radius: 6px;
+  }
+  .send-result-box input[type="email"] {
+    display: inline-block; width: auto; margin-right: 6px;
+    padding: 6px 10px; font-size: 12px;
+  }
+  .send-result-box button {
+    padding: 6px 14px; font-size: 12px; font-weight: 600;
+    background: #065f46; color: #ffffff; border-color: #065f46;
+  }
+  .send-result-box button:hover { background: #047857; border-color: #047857; }
+
   .badge {
     display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 10px;
     font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
@@ -158,7 +250,7 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
     <span class="subbrand">Internal Training & Testing</span>
   </div>
   <div class="topbar-right">
-    <span id="connection-status" class="run-status">Idle</span>
+    <span id="connection-status" class="run-status"></span>
     <button onclick="exportLearnings()" title="Download your saved rubrics and bookmarks as JSON">📤 Export Learnings</button>
     <button onclick="importLearnings()" title="Load a previously exported JSON">📥 Import</button>
     <button onclick="logout()" class="danger">Logout</button>
@@ -168,23 +260,44 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
 <div class="layout">
 
   <aside class="sidebar">
-    <h3>Session History (last 20)</h3>
+    <h3 id="history-header">Session History (last 20)</h3>
     <div id="history-list"></div>
     <div class="sidebar-actions">
       <button onclick="clearHistory()" class="danger">Clear history</button>
     </div>
 
-    <h3>Saved Rubrics</h3>
+    <h3 id="saved-rubrics-header">Saved Rubrics</h3>
     <div id="saved-rubrics-list"></div>
 
-    <h3>Bookmarked Runs</h3>
+    <h3 id="bookmarks-header">Bookmarked Runs</h3>
     <div id="bookmarks-list"></div>
+
+    <h3 id="library-header" style="display:flex;align-items:center;justify-content:space-between;">
+      Reference Library
+      <button style="font-size:10px;padding:2px 6px;" onclick="showLibraryUpload()">+ Upload</button>
+    </h3>
+    <div id="library-context-summary" style="font-size:10px;color:#6b7280;margin-bottom:6px;padding:4px 8px;background:#f3f4f6;border-radius:4px;display:none;">
+      <span id="library-selected-count">0</span> items · <span id="library-selected-tokens">0</span> tokens will be added
+    </div>
+    <div id="library-list"></div>
   </aside>
 
   <main class="main">
 
+    <div class="start-here">
+      <h2>👋 Start here — Ask Solomon (Beta)</h2>
+      <p>You're training <strong>Solomon</strong>, the CFO diagnostic behind CFO By Design's SWOT engine. Your test runs and feedback shape how it thinks. Every response is generated fresh — nothing is canned.</p>
+      <ol>
+        <li><strong>Pick a tier</strong> below (<code>free</code>, <code>paid_47</code>, or <code>paid_297</code>) — matches what a real client would go through.</li>
+        <li><strong>Describe a business scenario</strong> — free-form prose in <em>📖 Story</em>, or fill Miguel's canonical intake questions in <em>📝 Guided</em>. Both work; Guided gives Solomon more structure.</li>
+        <li><strong>Click Run ▶</strong> — Solomon returns a badge, opportunity flags, personalized email hook, internal strategist brief, and rendered client-facing report.</li>
+        <li><strong>Love the response?</strong> Type any email in "Send it" to receive the actual production email exactly as a client would see it via HighLevel.</li>
+        <li><strong>Bookmark great runs</strong>, save rubric variants, and export your learnings anytime — everything persists across sessions.</li>
+      </ol>
+      <p style="margin-top:12px;font-style:italic;font-size:11px;color:#78350f;">🎤 Prefer to speak? Mic buttons on textareas let you dictate.</p>
+    </div>
+
     <div class="panel" id="input-panel">
-      <h2>Inputs</h2>
 
       <div class="form-row">
         <div>
@@ -200,24 +313,71 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
           <input type="text" id="contact-name" placeholder="Test Owner" value="Test Owner">
         </div>
         <div>
-          <label for="contact-email">Email (optional — used only for ID lookup, no writeback)</label>
-          <input type="email" id="contact-email" placeholder="test@example.com">
+          <label for="contact-email">Email — leave blank for pure test · fill to receive the actual workflow email</label>
+          <input type="email" id="contact-email" placeholder="your@email.com (will trigger the tier email workflow)">
         </div>
       </div>
 
       <div>
-        <label for="answers">Answers (one per line — format: <code>Question: their answer</code>)</label>
-        <textarea id="answers" rows="8" placeholder="Annual revenue? $2.5M&#10;Biggest challenge? Cash flow timing&#10;Active debt? Yes — $150K in working capital lines"></textarea>
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px;">
+          <label for="answers" style="margin-bottom:0;">
+            Business scenario
+            <button type="button" class="mic-btn" data-mic-target="answers" title="Dictate — click to start, click again to stop">🎤</button>
+          </label>
+          <div class="mode-tabs" role="tablist" style="display:inline-flex;gap:4px;font-size:11px;">
+            <button type="button" class="mode-btn active" data-mode="story" onclick="setInputMode('story')">📖 Story</button>
+            <button type="button" class="mode-btn" data-mode="guided" onclick="setInputMode('guided')">📝 Guided</button>
+          </div>
+        </div>
+        <textarea id="answers" rows="10" data-mode="story" placeholder="Describe the business in your own words. Cover revenue, biggest challenges, debt picture, taxes, AR aging, financial visibility, growth plans — anything that gives Solomon a real picture. Example:&#10;&#10;A $2.5M B2B agency, mostly retainer work. Cash flow is the constant headache — invoices go out on net-30 but most clients pay closer to net-45 so we're always one slow month away from payroll stress. Carrying about $150K in a working capital line plus some equipment debt. Taxes filed but we're 60 days behind on payroll deposits — Miguel knows about this. No real budget — I look at the bank account to decide what to pay each Friday."></textarea>
+        <div id="guided-fields" style="display:none; max-height:600px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:6px; padding:12px; background:#fafafa;"></div>
+        <div id="mode-hint" style="font-size:11px;color:#9ca3af;margin-top:4px;">
+          📖 Story mode: describe the business in prose. Solomon extracts signals from the narrative.
+        </div>
       </div>
 
       <details>
         <summary>▸ Rubric override (advanced) — edit the system prompt for this run only</summary>
         <div style="margin-top: 8px;">
+          <div class="guidance-panel">
+            <strong>📖 Read before editing.</strong> The rubric is what tells Solomon HOW to diagnose. Small wording changes can meaningfully shift the output.
+            <ul>
+              <li><strong>Safe to tweak:</strong> the wording of individual sections (make more/less strict, add examples in Miguel's voice, tighten the tone).</li>
+              <li><strong>Preserve exactly:</strong> section headers in <code>ALL CAPS</code>, the four path names (<code>rehab</code> / <code>urgent</code> / <code>growth</code> / <code>strong</code>), the opportunity flag names (<code>MERCHANT_PROCESSING_OPP</code> etc.). Renaming these breaks tag emission and workflow triggers.</li>
+              <li><strong>Do NOT remove:</strong> the "return ONLY valid JSON" instruction in the user prompt (that's in <code>buildPrompt</code>, not this rubric — but changing rubric structure can cascade there).</li>
+              <li><strong>Format:</strong> plain text, no markdown syntax needed. Solomon is instructed elsewhere how to return JSON.</li>
+              <li><strong>Testing:</strong> hit "Load default rubric →" first so you're editing from a known baseline. Then bookmark good runs before making bigger changes so you can compare.</li>
+            </ul>
+          </div>
+          <label for="rubric-override" style="font-size:11px;color:#6b7280;">
+            Rubric text
+            <button type="button" class="mic-btn" data-mic-target="rubric-override" title="Dictate — click to start, click again to stop">🎤</button>
+          </label>
           <textarea id="rubric-override" rows="14" class="code" placeholder="Leave empty to use the deployed default rubric. Paste a modified version here to test it for this run only — won't affect production."></textarea>
           <div class="sidebar-actions" style="margin-top: 8px;">
             <button onclick="loadDefaultRubric()">Load default rubric →</button>
             <button onclick="saveCurrentRubric()">Save this rubric</button>
           </div>
+        </div>
+      </details>
+
+      <details style="margin-top:8px;">
+        <summary>▸ Reference material — what Solomon can learn from (uploads coming soon)</summary>
+        <div class="guidance-panel" style="margin-top:8px;">
+          <strong>📤 What to upload (when the library ships in the next release):</strong>
+          <ul>
+            <li><strong>Client meeting transcripts</strong> — from Fireflies / Gong / manual notes. Solomon extracts Miguel's exact phrasing, common diagnostic patterns, and real-world example scenarios.</li>
+            <li><strong>Testimonials</strong> — verbatim client quotes about outcomes. Solomon uses these to sharpen the "what's possible" framing in reports.</li>
+            <li><strong>Example analyses</strong> — past strategist briefs or growth plans Miguel is proud of. Solomon uses these as few-shot templates.</li>
+            <li><strong>Rubric fragments</strong> — small opinionated rules to layer onto the default rubric (e.g., "always ask about payroll frequency for retail businesses").</li>
+          </ul>
+          <strong>📄 Format expectations:</strong>
+          <ul>
+            <li>Plain <code>.txt</code> or <code>.md</code> files preferred. PDFs / .docx accepted but text-only content extracted.</li>
+            <li><strong>De-identify before upload</strong> — remove client names, dollar amounts specific to individual businesses, anything that could ID a real client (unless testimonial with permission).</li>
+            <li>Keep each file under 100KB (~15,000 words). Larger items should be split into thematic chunks.</li>
+            <li>Include a 1-sentence description at the top: <code>What this is + why Solomon should learn from it.</code></li>
+          </ul>
         </div>
       </details>
 
@@ -252,6 +412,171 @@ const HISTORY_KEY = "asksolomon_history";
 const SAVED_RUBRICS_KEY = "asksolomon_saved_rubrics";
 const BOOKMARKS_KEY = "asksolomon_bookmarks";
 const HISTORY_LIMIT = 20;
+const INPUT_DRAFT_KEY = "asksolomon_input_draft";
+const GUIDED_ANSWERS_KEY = "asksolomon_guided_answers"; // per-question values keyed by q.key, persist across tier switches
+const LIBRARY_SELECTED_KEY = "asksolomon_library_selected"; // array of library item ids currently checked-in for the next run
+const LIBRARY_CATEGORIES = [
+  { key: "transcript", label: "🎙️ Transcripts", hint: "Client meeting transcripts (Fireflies, Gong, manual)" },
+  { key: "testimonial", label: "🗨️ Testimonials", hint: "Verbatim client quotes about outcomes" },
+  { key: "example", label: "📄 Example analyses", hint: "Past strategist briefs or growth plans Miguel is proud of" },
+  { key: "rubric_fragment", label: "🧩 Rubric fragments", hint: "Small opinionated diagnostic rules to layer on the default rubric" },
+];
+
+let LIBRARY_CACHE = { items: [], lastFetch: 0 };
+
+function getSelectedLibraryIds() { return readLocal(LIBRARY_SELECTED_KEY, []); }
+function setSelectedLibraryIds(ids) { localStorage.setItem(LIBRARY_SELECTED_KEY, JSON.stringify(ids)); }
+
+async function fetchLibrary(force) {
+  if (!force && LIBRARY_CACHE.items.length && (Date.now() - LIBRARY_CACHE.lastFetch < 30000)) {
+    return LIBRARY_CACHE.items;
+  }
+  try {
+    const res = await fetch("/asksolomon/library", { headers: { "x-console-password": getPassword() } });
+    if (res.status === 401) { handleAuthFailure(); return []; }
+    const data = await res.json();
+    LIBRARY_CACHE = { items: data.items || [], lastFetch: Date.now() };
+    return LIBRARY_CACHE.items;
+  } catch (e) {
+    toast("Couldn't load library: " + e.message, "error");
+    return [];
+  }
+}
+
+async function renderLibrary() {
+  const items = await fetchLibrary(true);
+  const selected = new Set(getSelectedLibraryIds());
+  const list = document.getElementById("library-list");
+  const summary = document.getElementById("library-context-summary");
+  const header = document.getElementById("library-header");
+  if (header) header.firstChild.textContent = "Reference Library (" + items.length + ") ";
+
+  if (!items.length) {
+    list.innerHTML = '<div class="sidebar-empty">Empty — click <strong>+ Upload</strong> to add transcripts, testimonials, or examples for Solomon to learn from.</div>';
+    summary.style.display = "none";
+    return;
+  }
+
+  // Group by category
+  const grouped = {};
+  LIBRARY_CATEGORIES.forEach(c => grouped[c.key] = []);
+  items.forEach(i => { (grouped[i.category] || (grouped[i.category] = [])).push(i); });
+
+  list.innerHTML = LIBRARY_CATEGORIES.map(cat => {
+    const bucket = grouped[cat.key] || [];
+    if (!bucket.length) return "";
+    return '<div style="margin-bottom:8px;">'
+      + '<div style="font-size:10px;color:#92400e;font-weight:600;margin:6px 0 4px;">' + cat.label + '</div>'
+      + bucket.map(i => {
+          const checked = selected.has(i.id) ? "checked" : "";
+          return '<div class="sidebar-entry" style="display:flex;gap:6px;align-items:flex-start;">'
+            + '<input type="checkbox" ' + checked + ' data-lib-id="' + escapeHtml(i.id) + '" onchange="toggleLibrarySelection(\\'' + escapeHtml(i.id) + '\\')" style="margin-top:2px;flex:0 0 auto;">'
+            + '<div style="flex:1;min-width:0;">'
+              + '<div style="font-size:11px;color:#374151;word-wrap:break-word;">' + escapeHtml(i.name) + '</div>'
+              + '<div class="meta">' + escapeHtml(i.description || "") + '</div>'
+              + '<div class="meta">' + i.tokenEstimate + ' tokens · ' + Math.round((i.size || 0) / 1024) + 'KB</div>'
+            + '</div>'
+            + '<button style="font-size:10px;padding:1px 5px;color:#b91c1c;border-color:#fecaca;flex:0 0 auto;" onclick="deleteLibraryItem(\\'' + escapeHtml(i.id) + '\\', event)" title="Delete (soft — moves to archive)">×</button>'
+          + '</div>';
+        }).join("")
+      + '</div>';
+  }).join("");
+
+  updateLibrarySummary();
+}
+
+function updateLibrarySummary() {
+  const selected = getSelectedLibraryIds();
+  const items = LIBRARY_CACHE.items;
+  const selectedItems = items.filter(i => selected.includes(i.id));
+  const totalTokens = selectedItems.reduce((sum, i) => sum + (i.tokenEstimate || 0), 0);
+  const summary = document.getElementById("library-context-summary");
+  if (!selectedItems.length) { summary.style.display = "none"; return; }
+  summary.style.display = "block";
+  document.getElementById("library-selected-count").textContent = selectedItems.length;
+  document.getElementById("library-selected-tokens").textContent = totalTokens.toLocaleString();
+}
+
+function toggleLibrarySelection(id) {
+  const cur = getSelectedLibraryIds();
+  const idx = cur.indexOf(id);
+  if (idx === -1) cur.push(id); else cur.splice(idx, 1);
+  setSelectedLibraryIds(cur);
+  updateLibrarySummary();
+}
+
+async function deleteLibraryItem(id, evt) {
+  if (evt) evt.stopPropagation();
+  if (!confirm("Delete this library item? It moves to archive; not immediately recoverable from here.")) return;
+  try {
+    const res = await fetch("/asksolomon/library/" + encodeURIComponent(id), {
+      method: "DELETE",
+      headers: { "x-console-password": getPassword() },
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || "Delete failed");
+    // Drop from selection too
+    setSelectedLibraryIds(getSelectedLibraryIds().filter(x => x !== id));
+    toast("Deleted (soft — in archive).", "success");
+    renderLibrary();
+  } catch (e) { toast("Delete failed: " + e.message, "error"); }
+}
+
+function showLibraryUpload() {
+  const catOptions = LIBRARY_CATEGORIES.map(c => \`<option value="\${c.key}">\${c.label}</option>\`).join("");
+  const html = \`
+    <div id="upload-modal-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.4);z-index:300;display:flex;align-items:center;justify-content:center;">
+      <div style="background:#fff;padding:24px;border-radius:8px;max-width:480px;width:90%;">
+        <h2 style="font-size:16px;margin:0 0 12px;">Upload reference item</h2>
+        <div class="guidance-panel" style="margin-bottom:12px;">
+          <strong>Before you upload:</strong> plain <code>.txt</code> or <code>.md</code> preferred · under 512KB per file · de-identify client-specific details unless testimonial has permission.
+        </div>
+        <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:4px;">Category</label>
+        <select id="upload-category" style="margin-bottom:10px;">\${catOptions}</select>
+        <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:4px;">Description (1 sentence — what this is + why Solomon should learn from it)</label>
+        <input type="text" id="upload-description" placeholder="e.g., 'Kristi Q1 discovery call about cash flow timing patterns'" style="margin-bottom:10px;">
+        <label style="font-size:11px;color:#6b7280;display:block;margin-bottom:4px;">File</label>
+        <input type="file" id="upload-file" accept=".txt,.md,.markdown,text/plain,text/markdown" style="margin-bottom:14px;">
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+          <button onclick="closeUploadModal()">Cancel</button>
+          <button class="primary" onclick="submitLibraryUpload()">Upload</button>
+        </div>
+        <div id="upload-status" style="margin-top:8px;font-size:12px;color:#6b7280;"></div>
+      </div>
+    </div>
+  \`;
+  document.body.insertAdjacentHTML("beforeend", html);
+}
+function closeUploadModal() {
+  document.getElementById("upload-modal-backdrop")?.remove();
+}
+async function submitLibraryUpload() {
+  const category = document.getElementById("upload-category").value;
+  const description = document.getElementById("upload-description").value.trim();
+  const fileEl = document.getElementById("upload-file");
+  const statusEl = document.getElementById("upload-status");
+  if (!fileEl.files || !fileEl.files.length) return statusEl.textContent = "Pick a file first.";
+  statusEl.textContent = "Uploading…";
+  const fd = new FormData();
+  fd.append("category", category);
+  fd.append("description", description);
+  fd.append("file", fileEl.files[0]);
+  try {
+    const res = await fetch("/asksolomon/library", {
+      method: "POST",
+      headers: { "x-console-password": getPassword() },
+      body: fd,
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || "Upload failed");
+    toast("Uploaded — check the sidebar.", "success");
+    closeUploadModal();
+    renderLibrary();
+  } catch (e) {
+    statusEl.textContent = "✗ " + e.message;
+    toast("Upload failed: " + e.message, "error");
+  }
+}
 
 // ---------- Auth gate ----------
 function checkPassword() {
@@ -281,14 +606,154 @@ function logout() {
   location.reload();
 }
 function getPassword() { return sessionStorage.getItem(PASSWORD_KEY) || ""; }
+// True when the console was loaded via ?token=... (embedded iframe mode).
+// In embed mode, we NEVER auto-reload on 401 — that would infinite-loop the iframe.
+function isEmbedMode() { return new URLSearchParams(window.location.search).has("token"); }
+// Guarded 401 handler: reloads in normal mode, toasts (once) in embed mode.
+var __authErrorShown = false;
+function handleAuthFailure() {
+  if (isEmbedMode()) {
+    if (!__authErrorShown) {
+      __authErrorShown = true;
+      try { toast("Auth token rejected. Check parent page URL includes ?token=…", "error"); } catch {}
+    }
+    return;
+  }
+  sessionStorage.removeItem(PASSWORD_KEY);
+  location.reload();
+}
 
-// On load: skip gate if password already in session
+// On load: skip gate if password already in session; restore any input draft.
 window.addEventListener("DOMContentLoaded", () => {
+  // Embed-token auto-auth: ?token=xxx in the URL is treated as the password.
+  // Used when embedding Ask Solomon inside another page (e.g., GHL dashboard iframe).
+  // Worker accepts CONSOLE_EMBED_TOKEN via the same x-console-password header.
+  var urlParams = new URLSearchParams(window.location.search);
+  var embedToken = urlParams.get("token");
+  if (embedToken) {
+    sessionStorage.setItem(PASSWORD_KEY, embedToken);
+    // Optional: hide the topbar controls (logout / export / import) in embed mode
+    var topbarRight = document.querySelector(".topbar-right");
+    if (topbarRight) topbarRight.style.display = "none";
+  }
   if (getPassword()) {
     document.getElementById("gate").style.display = "none";
   }
+  restoreInputsFromLocal();
   renderSidebar();
+  // Wire auto-save on every meaningful input change.
+  ["tier", "contact-name", "contact-email", "answers", "rubric-override"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener("input", saveInputsToLocal);
+    if (el && id === "tier") el.addEventListener("change", saveInputsToLocal);
+  });
+  initMicButtons();
+  // Fetch + render the reference library on load.
+  renderLibrary();
 });
+
+// Wire every element with class .mic-btn to a Web Speech API recorder that
+// appends transcribed speech into the textarea named by data-mic-target.
+// Chrome/Edge/Safari support; Firefox falls back to a disabled button + tooltip.
+function initMicButtons() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  document.querySelectorAll(".mic-btn").forEach(btn => {
+    if (btn.dataset.wired) return;
+    btn.dataset.wired = "1";
+    if (!SR) {
+      btn.classList.add("disabled");
+      btn.title = "Speech recognition not supported in this browser — try Chrome or Edge";
+      btn.onclick = () => toast("Speech recognition not available. Try Chrome or Edge.", "error");
+      return;
+    }
+    let rec = null;
+    btn.onclick = () => {
+      const targetId = btn.dataset.micTarget;
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      if (rec) { try { rec.stop(); } catch {} return; }
+      rec = new SR();
+      rec.continuous = true;
+      rec.interimResults = false;
+      rec.lang = "en-US";
+      rec.onresult = (e) => {
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          if (e.results[i].isFinal) {
+            const text = e.results[i][0].transcript.trim();
+            if (text) {
+              const cur = target.value ? target.value.trim() + " " : "";
+              target.value = cur + text;
+              target.dispatchEvent(new Event("input"));
+            }
+          }
+        }
+      };
+      rec.onerror = (e) => { toast("Mic error: " + e.error, "error"); rec = null; btn.classList.remove("recording"); btn.textContent = "🎤"; };
+      rec.onend = () => { rec = null; btn.classList.remove("recording"); btn.textContent = "🎤"; };
+      try {
+        rec.start();
+        btn.classList.add("recording");
+        btn.textContent = "🔴";
+      } catch (e) {
+        toast("Couldn't start mic: " + e.message, "error");
+        rec = null;
+      }
+    };
+  });
+}
+
+// Persist current form inputs to localStorage so refresh doesn't nuke work in progress.
+function saveInputsToLocal() {
+  try {
+    const draft = {
+      tier: document.getElementById("tier")?.value || "free",
+      contactName: document.getElementById("contact-name")?.value || "",
+      contactEmail: document.getElementById("contact-email")?.value || "",
+      answersRaw: document.getElementById("answers")?.value || "",
+      rubricOverride: document.getElementById("rubric-override")?.value || "",
+      mode: document.getElementById("answers")?.dataset.mode || "story",
+      guided: collectGuidedAnswersMap(),
+      ts: new Date().toISOString(),
+    };
+    localStorage.setItem(INPUT_DRAFT_KEY, JSON.stringify(draft));
+    // Persist per-question guided answers too — merged into a growing map keyed by q.key
+    // so switching tiers keeps overlapping answers intact.
+    if (draft.mode === "guided") {
+      localStorage.setItem(GUIDED_ANSWERS_KEY, JSON.stringify(draft.guided));
+    }
+  } catch (e) { /* localStorage may be full — silent skip */ }
+}
+
+// Snapshot the current guided-mode textareas as {qKey: answer}.
+function collectGuidedAnswersMap() {
+  const container = document.getElementById("guided-fields");
+  if (!container) return {};
+  const map = {};
+  container.querySelectorAll("textarea[id^='gq_']").forEach(ta => {
+    const key = ta.id.replace(/^gq_/, "");
+    if (ta.value.trim()) map[key] = ta.value;
+  });
+  return map;
+}
+
+function restoreInputsFromLocal() {
+  try {
+    const draft = JSON.parse(localStorage.getItem(INPUT_DRAFT_KEY) || "null");
+    if (!draft) return;
+    if (draft.tier) document.getElementById("tier").value = draft.tier;
+    if (draft.contactName) document.getElementById("contact-name").value = draft.contactName;
+    if (draft.contactEmail) document.getElementById("contact-email").value = draft.contactEmail;
+    if (draft.answersRaw) document.getElementById("answers").value = draft.answersRaw;
+    if (draft.rubricOverride) {
+      document.getElementById("rubric-override").value = draft.rubricOverride;
+      // Open the rubric override <details> if content is present
+      const details = document.querySelector("#input-panel details");
+      if (details) details.open = true;
+    }
+    // Restore mode — default to story for any legacy "qa" drafts saved before Q&A was removed.
+    if (draft.mode === "guided") setInputMode("guided");
+  } catch { /* corrupted draft — silent skip */ }
+}
 
 // ---------- Storage helpers ----------
 function readJson(key, fallback) {
@@ -312,20 +777,22 @@ async function runSolomon() {
   const answersRaw = document.getElementById("answers").value.trim();
   const rubricOverride = document.getElementById("rubric-override").value.trim();
 
-  if (!answersRaw) return toast("Add some answers first.", "error");
-  // Accept either "Question? answer" or "Question: answer" per line.
-  // Split on first separator (? or :) followed by whitespace.
-  const answers = answersRaw.split(/\\n+/).map(line => {
-    const m = line.match(/^(.+?[?:])\\s+(.+)$/);
-    if (!m) {
-      const idx = line.indexOf(":");
-      if (idx === -1) return { question: line.trim(), answer: "" };
-      return { question: line.slice(0, idx).trim(), answer: line.slice(idx + 1).trim() };
-    }
-    return { question: m[1].trim(), answer: m[2].trim() };
-  }).filter(a => a.question && a.answer);
+  const mode = document.getElementById("answers").dataset.mode || "story";
+  let answers;
 
-  if (!answers.length) return toast("Couldn't parse. Use one per line: 'Annual revenue? $2.5M' or 'Annual revenue: $2.5M'", "error");
+  if (mode === "guided") {
+    answers = collectGuidedAnswers();
+    if (!answers.length) return toast("Fill in at least one guided question.", "error");
+  } else if (!answersRaw) {
+    return toast("Describe the business scenario first.", "error");
+  } else {
+    // Story mode: pass the whole narrative as one rich answer.
+    // The rubric instructs Solomon to extract signals from prose.
+    answers = [{
+      question: "Tell me about this business — situation, revenue, biggest challenges, debt picture, taxes, AR aging, financial visibility, growth plans, what's working and what isn't",
+      answer: answersRaw,
+    }];
+  }
 
   const runBtn = document.getElementById("run-btn");
   const status = document.getElementById("run-status");
@@ -340,6 +807,7 @@ async function runSolomon() {
         contact: { name: contactName, email: contactEmail },
         answers,
         rubricOverride: rubricOverride || undefined,
+        libraryIds: getSelectedLibraryIds(),
       }),
     });
 
@@ -387,34 +855,145 @@ function renderOutput(run) {
   const badgeClass = "badge " + path;
   const flags = (r.opportunityFlags || []).map(f => '<span class="flag-tag">' + escapeHtml(f) + '</span>').join("") || '<span style="color:#9ca3af;font-size:12px;">none</span>';
 
+  const emailBanner = r.emailedTo
+    ? '<div style="margin-bottom:12px;padding:10px 12px;background:#d1fae5;border-left:4px solid #065f46;border-radius:4px;font-size:12px;color:#065f46;"><strong>📧 Email triggered →</strong> ' + escapeHtml(r.emailedTo) + ' — GHL workflow for tier <code>' + escapeHtml(run.tier) + '</code> will deliver the production email within 1-2 min. Tagged <code>SWOT_CONSOLE_TEST</code> for cleanup.</div>'
+    : '<div style="margin-bottom:12px;padding:8px 12px;background:#f3f4f6;border-radius:4px;font-size:11px;color:#6b7280;">📭 No email sent — leave email field blank for pure preview, fill it to trigger the workflow.</div>';
+
+  const timingBadge = typeof r.elapsedMs === "number"
+    ? '<span style="font-size:11px;color:#6b7280;margin-left:12px;">⏱ ' + (r.elapsedMs < 1000 ? r.elapsedMs + "ms" : (r.elapsedMs / 1000).toFixed(1) + "s") + (r.rubricUsed === "default" ? " · cache-eligible" : " · override (no cache)") + '</span>'
+    : '';
+
   document.getElementById("output-area").innerHTML = \`
     <div class="panel">
-      <h2>Output — \${escapeHtml(run.tier)} · \${escapeHtml(new Date(run.ts).toLocaleTimeString())}</h2>
+      <h2>Output — \${escapeHtml(run.tier)} · \${escapeHtml(new Date(run.ts).toLocaleTimeString())} \${timingBadge}</h2>
       <div style="margin-bottom: 16px;">
         <span class="\${badgeClass}">PATH: \${escapeHtml(path)}</span>
         <span style="margin-left: 8px; font-size: 12px; color: #6b7280;">Flags:</span> \${flags}
-        <button style="float:right;font-size:11px;" onclick="bookmarkRun('\${run.id}')">⭐ Bookmark this run</button>
+        <span style="float:right;">
+          <button style="font-size:11px;margin-right:4px;" onclick="loadInputsFromRun('\${run.id}')">📝 Load inputs</button>
+          <button style="font-size:11px;margin-right:4px;" onclick="regenerateRun('\${run.id}')">🔄 Regenerate</button>
+          <button style="font-size:11px;" onclick="bookmarkRun('\${run.id}')">⭐ Bookmark</button>
+        </span>
       </div>
+
+      <!-- FEEDBACK ROW -->
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding:10px 14px;background:#f9fafb;border-radius:6px;border:1px solid #e5e7eb;">
+        <span style="font-size:12px;color:#374151;font-weight:600;">Rate this response:</span>
+        <button class="feedback-btn \${run.feedback === 'up' ? 'active-up' : ''}" onclick="setRunFeedback('\${run.id}', 'up')" title="Solomon nailed it">👍</button>
+        <button class="feedback-btn \${run.feedback === 'down' ? 'active-down' : ''}" onclick="setRunFeedback('\${run.id}', 'down')" title="Something's off">👎</button>
+        <input type="text" id="fb-note-\${run.id}" placeholder="Optional note — what worked or what's off" value="\${escapeAttr(run.feedbackNote || '')}" onblur="setRunFeedbackNote('\${run.id}', this.value)" style="flex:1;font-size:12px;padding:6px 10px;">
+      </div>
+      \${emailBanner}
       <div class="output-grid">
         <div class="output-card">
-          <h3>✉️ Email Blurb (\${(r.opener || "").length} chars)</h3>
+          <h3>✉️ Email Blurb (\${(r.opener || "").length} chars) <button class="copy-btn" onclick="copyToClipboard(this, \\\`\${escapeAttr(r.opener || "")}\\\`)">📋</button></h3>
           <div class="email-blurb">\${escapeHtml(r.opener || "(empty)")}</div>
         </div>
         <div class="output-card">
-          <h3>🎯 Strategist Brief — INTERNAL (\${(r.strategistBrief || "").length} chars)</h3>
+          <h3>🎯 Strategist Brief — INTERNAL (\${(r.strategistBrief || "").length} chars) <button class="copy-btn" onclick="copyToClipboard(this, \\\`\${escapeAttr(r.strategistBrief || "")}\\\`)">📋</button></h3>
           <div class="strategist-brief">\${escapeHtml(r.strategistBrief || "(empty)")}</div>
         </div>
       </div>
       <div class="output-card" style="margin-bottom:12px;">
-        <h3>📄 Report (rendered preview)</h3>
+        <h3>📄 Report (rendered preview) <button class="copy-btn" onclick="copyToClipboard(this, \\\`\${escapeAttr(r.reportHtml || "")}\\\`)">📋 HTML</button></h3>
         <div class="report-preview">\${r.reportHtml || "(empty)"}</div>
       </div>
       <div class="output-card">
-        <h3>Raw response JSON</h3>
+        <h3>Raw response JSON <button class="copy-btn" onclick="copyToClipboard(this, \\\`\${escapeAttr(JSON.stringify(r, null, 2))}\\\`)">📋</button></h3>
         <textarea rows="10" class="code" readonly>\${escapeHtml(JSON.stringify(r, null, 2))}</textarea>
+      </div>
+
+      <!-- SEND THIS RESULT — email the CURRENT run to any address without re-running Solomon -->
+      <div class="send-result-box">
+        <div style="font-size:12px;color:#374151;margin-bottom:8px;">
+          <strong>✉️ Love this response? Send it.</strong> Delivers THIS run's output (not a fresh Solomon call) to any email via the tier's GHL workflow.
+        </div>
+        <input type="email" id="send-result-email-\${run.id}" placeholder="recipient@example.com" style="width:280px;">
+        <button onclick="sendResultToEmail('\${run.id}')">Send response →</button>
+        <span id="send-result-status-\${run.id}" style="margin-left:10px;font-size:11px;color:#6b7280;"></span>
       </div>
     </div>
   \`;
+}
+
+// Send the exact output of a past run to a specific email via GHL.
+// Does NOT re-run Solomon — reuses the stored run.result verbatim.
+async function sendResultToEmail(runId) {
+  const history = readSession(HISTORY_KEY, []);
+  const bookmarks = readLocal(BOOKMARKS_KEY, []);
+  const run = history.find(r => r.id === runId) || bookmarks.find(r => r.id === runId);
+  if (!run) return toast("Couldn't find that run.", "error");
+  const emailEl = document.getElementById("send-result-email-" + runId);
+  const statusEl = document.getElementById("send-result-status-" + runId);
+  const email = (emailEl && emailEl.value || "").trim();
+  if (!email || !email.includes("@")) return toast("Enter a valid email address.", "error");
+  if (statusEl) statusEl.textContent = "Sending…";
+  try {
+    const res = await fetch("/asksolomon/send-result", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-console-password": getPassword() },
+      body: JSON.stringify({
+        tier: run.tier,
+        contact: { name: run.contact?.name || "", email },
+        agent: run.result,
+        reportHtml: run.result?.reportHtml || "",
+      }),
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || "Unknown error");
+    if (statusEl) statusEl.textContent = "✓ Sent to " + email + " · workflow will deliver in 1-2 min";
+    toast("Response sent to " + email, "success");
+  } catch (e) {
+    if (statusEl) statusEl.textContent = "✗ Failed: " + e.message;
+    toast("Send failed: " + e.message, "error");
+  }
+}
+
+// Escape a string for safe insertion into a JS backtick template literal.
+// Handles backticks, backslashes, and \${ interpolations.
+function escapeAttr(s) {
+  return String(s ?? "").replace(/\\\\/g, "\\\\\\\\").replace(/\`/g, "\\\\\`").replace(/\\\$/g, "\\\\\$");
+}
+
+// Copy given text to clipboard and give visual confirmation on the button.
+async function copyToClipboard(btn, text) {
+  try {
+    await navigator.clipboard.writeText(text || "");
+    const original = btn.textContent;
+    btn.textContent = "✓ Copied";
+    btn.style.background = "#d1fae5"; btn.style.color = "#065f46";
+    setTimeout(() => { btn.textContent = original; btn.style.background = ""; btn.style.color = ""; }, 1200);
+  } catch (e) {
+    toast("Copy failed: " + e.message, "error");
+  }
+}
+
+// Load a past run's inputs into the input form so you can tweak and re-run.
+function loadInputsFromRun(id) {
+  const history = readSession(HISTORY_KEY, []);
+  const bookmarks = readLocal(BOOKMARKS_KEY, []);
+  const run = history.find(r => r.id === id) || bookmarks.find(r => r.id === id);
+  if (!run) return toast("Couldn't find that run.", "error");
+  document.getElementById("tier").value = run.tier || "free";
+  document.getElementById("contact-name").value = run.contact?.name || "";
+  document.getElementById("contact-email").value = run.contact?.email || "";
+  document.getElementById("answers").value = run.answersRaw || "";
+  document.getElementById("rubric-override").value = run.rubricOverride || "";
+  saveInputsToLocal();
+  // Return to the top of the input panel so the user sees the loaded inputs.
+  document.getElementById("input-panel").scrollIntoView({ behavior: "smooth", block: "start" });
+  toast("Inputs loaded from run — tweak and click Run.", "success");
+}
+
+// Regenerate a run using the same inputs (surface any nondeterminism).
+async function regenerateRun(id) {
+  const history = readSession(HISTORY_KEY, []);
+  const bookmarks = readLocal(BOOKMARKS_KEY, []);
+  const run = history.find(r => r.id === id) || bookmarks.find(r => r.id === id);
+  if (!run) return toast("Couldn't find that run.", "error");
+  loadInputsFromRun(id);
+  await runSolomon();
 }
 
 // ---------- Sidebar ----------
@@ -432,6 +1011,7 @@ function renderSidebar() {
       }).join("");
 
   const saved = readLocal(SAVED_RUBRICS_KEY, []);
+  document.getElementById("saved-rubrics-header").textContent = "Saved Rubrics (" + saved.length + ")";
   document.getElementById("saved-rubrics-list").innerHTML = saved.length === 0
     ? '<div class="sidebar-empty">No saved rubrics</div>'
     : saved.map((s, i) => \`<div class="sidebar-entry" onclick='loadRubric(\${i})'>
@@ -440,6 +1020,8 @@ function renderSidebar() {
       </div>\`).join("");
 
   const bookmarks = readLocal(BOOKMARKS_KEY, []);
+  document.getElementById("bookmarks-header").textContent = "Bookmarked Runs (" + bookmarks.length + ")";
+  document.getElementById("history-header").textContent = "Session History (" + history.length + " · last " + HISTORY_LIMIT + ")";
   document.getElementById("bookmarks-list").innerHTML = bookmarks.length === 0
     ? '<div class="sidebar-empty">No bookmarks</div>'
     : bookmarks.map(b => \`<div class="sidebar-entry" onclick='loadBookmark("\${b.id}")'>
@@ -458,16 +1040,56 @@ function loadBookmark(id) {
   const run = bookmarks.find(r => r.id === id);
   if (run) renderOutput(run);
 }
+
+// Set 👍 / 👎 rating on a run. Persists to session history AND to bookmarks
+// if the run was already bookmarked. Also gets included in "Export Learnings".
+function setRunFeedback(id, rating) {
+  const applied = updateRunEverywhere(id, r => ({ ...r, feedback: r.feedback === rating ? null : rating }));
+  if (!applied) return toast("Couldn't find that run.", "error");
+  toast(rating === "up" ? "Thanks — flagged as a good response" : "Noted — we'll learn from what's off", "success");
+  const cur = readSession(HISTORY_KEY, []).find(r => r.id === id) || readLocal(BOOKMARKS_KEY, []).find(r => r.id === id);
+  if (cur) renderOutput(cur);
+}
+function setRunFeedbackNote(id, note) {
+  updateRunEverywhere(id, r => ({ ...r, feedbackNote: String(note || "").slice(0, 500) }));
+}
+// Update a run wherever it lives — session history + bookmarks. Returns true if found.
+function updateRunEverywhere(id, mutator) {
+  let found = false;
+  const history = readSession(HISTORY_KEY, []);
+  const hIdx = history.findIndex(r => r.id === id);
+  if (hIdx !== -1) { history[hIdx] = mutator(history[hIdx]); sessionStorage.setItem(HISTORY_KEY, JSON.stringify(history)); found = true; }
+  const bookmarks = readLocal(BOOKMARKS_KEY, []);
+  const bIdx = bookmarks.findIndex(r => r.id === id);
+  if (bIdx !== -1) { bookmarks[bIdx] = mutator(bookmarks[bIdx]); localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks)); found = true; }
+  return found;
+}
+
 function bookmarkRun(id) {
   const history = readSession(HISTORY_KEY, []);
   const run = history.find(r => r.id === id);
-  if (!run) return toast("Couldn't find that run.", "error");
-  const label = prompt("Label this bookmark:", run.tier + " · " + run.result.path);
-  if (label === null) return;
+  if (!run) return toast("Couldn't find that run in session history (it may have been cleared).", "error");
+  const defaultLabel = (run.tier || "run") + " · " + (run.result?.path || "—");
+  const label = prompt("Label this bookmark:", defaultLabel);
+  if (label === null) return; // user cancelled
   const bookmarks = readLocal(BOOKMARKS_KEY, []);
-  bookmarks.unshift({ ...run, label });
-  localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
-  toast("Bookmarked.", "success"); renderSidebar();
+  bookmarks.unshift({ ...run, label: label || defaultLabel });
+  try {
+    localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
+  } catch (e) {
+    console.error("Bookmark save failed:", e);
+    return toast("Save failed: " + (e.name === "QuotaExceededError" ? "browser storage full — export learnings then clear old bookmarks" : e.message), "error");
+  }
+  toast("✓ Bookmarked — see sidebar 'Bookmarked Runs (" + bookmarks.length + ")'", "success");
+  renderSidebar();
+  // Briefly highlight the bookmarks section so it's obvious where it landed
+  const header = document.getElementById("bookmarks-header");
+  if (header) {
+    header.style.transition = "background-color 0.3s";
+    header.style.backgroundColor = "#fef3c7";
+    header.scrollIntoView({ behavior: "smooth", block: "center" });
+    setTimeout(() => header.style.backgroundColor = "", 1500);
+  }
 }
 function clearHistory() {
   if (!confirm("Clear all session history? Bookmarks and saved rubrics will stay.")) return;
@@ -478,7 +1100,7 @@ function clearHistory() {
 async function loadDefaultRubric() {
   try {
     const res = await fetch("/asksolomon/rubric", { headers: { "x-console-password": getPassword() } });
-    if (res.status === 401) { sessionStorage.removeItem(PASSWORD_KEY); return location.reload(); }
+    if (res.status === 401) { handleAuthFailure(); return; }
     const data = await res.json();
     document.getElementById("rubric-override").value = data.rubric || "";
     toast("Loaded default rubric. Edit and Run to test variants.", "success");
@@ -531,6 +1153,153 @@ function importLearnings() {
   };
   input.click();
 }
+
+// ---------- Input mode (Story / Guided) ----------
+const MODE_CONFIG = {
+  story: {
+    label: "Business scenario",
+    hint: "📖 Story mode: describe the business in prose. Solomon extracts signals from the narrative.",
+    placeholder: "Describe the business in your own words. Cover revenue, biggest challenges, debt picture, taxes, AR aging, financial visibility, growth plans — anything that gives Solomon a real picture. Example:\\n\\nA $2.5M B2B agency, mostly retainer work. Cash flow is the constant headache — invoices go out on net-30 but most clients pay closer to net-45 so we're always one slow month away from payroll stress. Carrying about $150K in a working capital line plus some equipment debt. Taxes filed but we're 60 days behind on payroll deposits — Miguel knows about this. No real budget — I look at the bank account to decide what to pay each Friday.",
+  },
+  guided: {
+    label: "Guided intake — tier-specific questions",
+    hint: "📝 Guided mode: questions from the canonical SWOT intake (Miguel's voice). Skip any that don't apply. Switch tier above to see different question sets.",
+  },
+};
+
+// ---------- Tier question sets (canonical SWOT intake from SWOT_Questions_v3_MiguelVoice.md) ----------
+const FREE_QUESTIONS = [
+  { key: "P1", text: "What best describes your business type?", hint: "Service-based / Product-based / Hybrid" },
+  { key: "P2", text: "How do you primarily reach your customers?", hint: "Local presence / Statewide / Regional multi-state / National / E-commerce" },
+  { key: "P3", text: "What industry or vertical best describes your business?" },
+  { key: "Q1", text: "Do you currently have any active judgments, tax liens, or corporate debt you're actively managing?", hint: "Yes / No / Not sure" },
+  { key: "Q2", text: "When you make business decisions, are you basing them on your actual numbers — or on what's in your bank account?", hint: "[Miguel's 'magic question'] Real numbers / bank balance / in between / not sure" },
+  { key: "Q3", text: "What does your business consistently deliver that your clients say they can't get anywhere else?" },
+  { key: "Q4", text: "When a client refers you, what specific words or outcome do they use to describe what you did for them?" },
+  { key: "Q5", text: "Where does revenue most often leak in your business — proposals that don't close, work that goes over budget, clients that churn, or invoices that don't get paid on time?" },
+  { key: "Q6", text: "What would change in your business if you had 20% more profit on the same revenue — and where do you think that 20% is hiding?" },
+  { key: "Q7", text: "Where do you see demand in your market that you're not yet positioned to capture?" },
+  { key: "Q8", text: "What would happen to your business if your single largest client, revenue source, or referral channel disappeared in the next 90 days?" },
+];
+const PAID_47_ADDITIONAL = [
+  { key: "Q9", text: "What is the total balance of your current corporate debt — across all loans, lines of credit, and outstanding obligations?", hint: "Approximate amount or range" },
+  { key: "Q10", text: "How much do you pay every month on servicing your corporate debt — your total monthly debt service?", hint: "Approximate monthly amount" },
+  { key: "Q11", text: "What is the status of your current corporate debt?", hint: "Current and well-managed / current but stretched / managing actively / active judgments or tax liens involved" },
+  { key: "Q12", text: "How much of your accounts receivable is currently 30+ days overdue?", hint: "[30 days is normal] Approximate amount or range" },
+  { key: "Q13", text: "How much is 60+ days overdue?", hint: "[60+ is when it becomes a problem]" },
+  { key: "Q14", text: "What is the status of your business tax returns for the last two years — are they filed and current?", hint: "Filed and current / filed with outstanding balance or plan / one or both not yet filed / working with an accountant" },
+  { key: "Q15", text: "When did you last review what you're paying for merchant processing — and whether you're getting real value and proper coverage for the cost?", hint: "Within 12 months / 1-3 years / never / don't know what I'm paying" },
+  { key: "Q16", text: "Have you ever had a formal financial audit, review, or deep dive conducted on your business?", hint: "Yes within 2 years / yes more than 2 years ago / never / in progress" },
+  { key: "Q17", text: "Do you currently have a documented financial plan or budget for this year?", hint: "Yes track actuals / yes but don't use it / no formal budget" },
+  { key: "Q18", text: "Which financial metrics are you not currently tracking that you suspect you should be?", hint: "Margin by line / CAC / LTV / close rate / AR aging / debt service vs net revenue / other" },
+  { key: "Q19", text: "Which of your products, services, or client segments produces your best margins — and do you actually know why?" },
+  { key: "Q20", text: "What proprietary process, methodology, or capability do you have that a competitor would struggle to replicate?" },
+  { key: "Q21", text: "What recurring revenue, retainer, or continuity offer could you realistically add to your current client base in the next 90 days?" },
+  { key: "Q22", text: "What bold move in the next 12-24 months could 2-3x the business — and what is specifically stopping you from starting it?" },
+  { key: "Q23", text: "Which automations, financial tools, or AI workflows could free up real capacity or cut real costs for your team this quarter?" },
+  { key: "Q24", text: "Who are your top 2-3 competitors right now, and what are they doing that you'd rather they weren't?" },
+  { key: "Q25", text: "Where are you losing deals — and what reason do prospects give when they choose someone else over you?" },
+  { key: "Q26", text: "How visible is your business compared to your top competitors in search, reviews, referrals, and social? Where are you winning attention, and where are you effectively invisible?" },
+];
+const PAID_297_ADDITIONAL = [
+  { key: "Q_A", text: "Walk through your top 3 client engagements or revenue wins in the last 12 months — what was the revenue, the margin, and what made each one work?" },
+  { key: "Q_B", text: "What are your gross and net margins by product, service line, or client segment? Which is your most profitable, and which is costing you the most to deliver?" },
+  { key: "Q_C", text: "How do your unit economics compare to what you believe is the benchmark for your industry — CAC, LTV, payback period, gross margin?" },
+  { key: "Q_D", text: "What is your current cash position and runway — and how would three consecutive months of below-average revenue impact the business?" },
+  { key: "Q_E", text: "Walk us through your current debt stack: total corporate debt, monthly debt service, and how comfortable you are with that level of leverage right now." },
+  { key: "Q_F", text: "What does your accounts receivable aging look like in detail — total AR, amount 30+ days overdue, and amount 60+ days overdue?" },
+  { key: "Q_G", text: "What is your close rate at each stage of your sales process — lead to qualified, qualified to proposal, proposal to closed — and where does it leak the most?" },
+  { key: "Q_H", text: "What is the single biggest 'we should have fixed this years ago' problem still on your list — and what has kept it there?" },
+  { key: "Q_I", text: "If you had to cut 20% of your services, clients, or overhead tomorrow, what would go first — and why hasn't it gone already?" },
+  { key: "Q_J", text: "What percentage of your revenue comes from your top 10% of clients — and what is your realistic exposure if any of them left in the next 6 months?" },
+  { key: "Q_K", text: "What regulatory, tax, compliance, or technology changes on the horizon could materially impact how your business operates or gets paid?" },
+  { key: "Q_L", text: "What geographic or vertical expansion has the lowest barrier to entry based on what you already do today — and what would it take to move on it?" },
+  { key: "Q_M", text: "What does success look like for your business three years from now — and what is the single biggest financial or operational obstacle standing between you and that picture today?" },
+];
+function questionsForTier(tier) {
+  if (tier === "paid_297") return [...FREE_QUESTIONS, ...PAID_47_ADDITIONAL, ...PAID_297_ADDITIONAL];
+  if (tier === "paid_47")  return [...FREE_QUESTIONS, ...PAID_47_ADDITIONAL];
+  return FREE_QUESTIONS;
+}
+
+function renderGuidedFields(tier) {
+  const container = document.getElementById("guided-fields");
+  if (!container) return;
+  const questions = questionsForTier(tier);
+  const count = { free: FREE_QUESTIONS.length, paid_47: FREE_QUESTIONS.length + PAID_47_ADDITIONAL.length, paid_297: FREE_QUESTIONS.length + PAID_47_ADDITIONAL.length + PAID_297_ADDITIONAL.length }[tier] || FREE_QUESTIONS.length;
+  // Restore previously-typed answers keyed by q.key — persists across tier switches.
+  const saved = readLocal(GUIDED_ANSWERS_KEY, {});
+  container.innerHTML =
+    '<div style="font-size:11px;color:#6b7280;margin-bottom:10px;padding:6px 8px;background:#fef3c7;border-radius:4px;">'
+    + '<strong>' + escapeHtml(tier.toUpperCase()) + '</strong> tier · ' + count + ' questions · skip any that don\\'t apply · answers persist when you switch tier'
+    + '</div>'
+    + questions.map(q => {
+        const id = "gq_" + q.key;
+        const hint = q.hint ? '<div style="font-size:10px;color:#9ca3af;margin-top:2px;">' + escapeHtml(q.hint) + '</div>' : "";
+        const savedVal = saved[q.key] || "";
+        return '<div style="margin-bottom:12px;">'
+          + '<label for="' + id + '" style="font-size:12px;color:#374151;font-weight:500;display:block;margin-bottom:2px;">'
+          + '<span style="font-family:ui-monospace,monospace;font-size:10px;color:#92400e;margin-right:6px;">' + escapeHtml(q.key) + '</span>'
+          + escapeHtml(q.text)
+          + '</label>'
+          + hint
+          + '<div style="position:relative;">'
+          +   '<textarea id="' + id + '" data-question="' + escapeHtml(q.text) + '" rows="2" style="width:100%;margin-top:4px;padding:6px 40px 6px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:12px;font-family:inherit;" placeholder="(skip if not applicable)" oninput="saveInputsToLocal()">' + escapeHtml(savedVal) + '</textarea>'
+          +   '<button type="button" class="mic-btn" data-mic-target="' + id + '" style="position:absolute;top:6px;right:4px;width:24px;height:24px;font-size:11px;" title="Dictate">🎤</button>'
+          + '</div>'
+          + '</div>';
+      }).join("");
+  // Newly-rendered mic buttons need wiring.
+  initMicButtons();
+}
+
+function collectGuidedAnswers() {
+  const container = document.getElementById("guided-fields");
+  if (!container) return [];
+  return Array.from(container.querySelectorAll("textarea")).map(ta => ({
+    question: ta.dataset.question || "",
+    answer: ta.value.trim(),
+  })).filter(a => a.question && a.answer);
+}
+
+function setInputMode(mode) {
+  const cfg = MODE_CONFIG[mode] || MODE_CONFIG.story;
+  document.querySelectorAll(".mode-btn").forEach(b => {
+    b.classList.toggle("active", b.dataset.mode === mode);
+  });
+  const ta = document.getElementById("answers");
+  const guided = document.getElementById("guided-fields");
+  ta.dataset.mode = mode;
+
+  if (mode === "guided") {
+    ta.style.display = "none";
+    guided.style.display = "block";
+    const tier = document.getElementById("tier").value;
+    renderGuidedFields(tier);
+  } else {
+    ta.style.display = "";
+    guided.style.display = "none";
+    if (cfg.placeholder) ta.placeholder = cfg.placeholder;
+  }
+
+  const labelEl = document.querySelector('label[for="answers"]');
+  if (labelEl) labelEl.textContent = cfg.label;
+  const hintEl = document.getElementById("mode-hint");
+  if (hintEl) hintEl.textContent = cfg.hint;
+}
+
+// Re-render guided fields when tier changes (only if in guided mode).
+window.addEventListener("DOMContentLoaded", () => {
+  const tierEl = document.getElementById("tier");
+  if (tierEl) {
+    tierEl.addEventListener("change", () => {
+      const ta = document.getElementById("answers");
+      if (ta && ta.dataset.mode === "guided") {
+        renderGuidedFields(tierEl.value);
+      }
+    });
+  }
+});
 
 // ---------- Helpers ----------
 function escapeHtml(s) {
