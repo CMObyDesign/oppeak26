@@ -256,15 +256,11 @@ function buildReportPage(reportBody, tierLabel, contactName, tier, env, contactE
   let cta = "";
   if (tier === "free") {
     // Beta cohort bypass: user enters SOLOMON50 → CTA swaps to survey (skips paywall).
-    // No code entered → CTA stays as normal payment link.
-    const betaSurvey47 = "https://success.cfobydesign.com/mid-analysis";
-    cta = `
-      <div class="cta-panel">
-        <span class="upgrade-chip">↑ UPGRADE · BUSINESS ANALYSIS</span>
-        <p class="eyebrow gold">FROM SURFACE READ TO FULL DIAGNOSIS</p>
-        <h2>Your free report shows what's wrong.<br><em>The $47 version shows what to do about it.</em></h2>
-        <p class="sub">Full 8–12 page report · Strategist brief · 30-minute session with a real fractional CFO. All delivered same day.</p>
-
+    // Only active when env.UPGRADE_47_URL is set (coupon target = upgrade47Href).
+    // When UPGRADE_47_URL is unset, upgrade47Href === paymentLink47, so the coupon
+    // would just re-point at payment — pointless — so we hide the coupon row entirely.
+    const couponEnabled = Boolean(env && env.UPGRADE_47_URL);
+    const couponRow = couponEnabled ? `
         <div class="coupon-row" id="coupon-row">
           <label for="coupon-input" class="coupon-label">Have a beta code?</label>
           <div class="coupon-inputgroup">
@@ -272,14 +268,8 @@ function buildReportPage(reportBody, tierLabel, contactName, tier, env, contactE
             <button type="button" id="coupon-apply">Apply</button>
           </div>
           <p class="coupon-msg" id="coupon-msg" aria-live="polite"></p>
-        </div>
-
-        <a class="btn btn-primary" id="upgrade-cta" href="${paymentLink47}" data-payment-href="${paymentLink47}" data-beta-href="${betaSurvey47}">
-          <span id="upgrade-label">Upgrade to Full Diagnostic — $47</span>
-          <span class="arrow">→</span>
-        </a>
-        <p class="micro" id="upgrade-micro">One-time payment. No subscription. No follow-up sales calls unless you book one.</p>
-
+        </div>` : "";
+    const couponScript = couponEnabled ? `
         <script>
           (function () {
             var input = document.getElementById('coupon-input');
@@ -312,7 +302,20 @@ function buildReportPage(reportBody, tierLabel, contactName, tier, env, contactE
             apply.addEventListener('click', tryCoupon);
             input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); tryCoupon(); } });
           })();
-        </script>
+        </script>` : "";
+    cta = `
+      <div class="cta-panel">
+        <span class="upgrade-chip">↑ UPGRADE · BUSINESS ANALYSIS</span>
+        <p class="eyebrow gold">FROM SURFACE READ TO FULL DIAGNOSIS</p>
+        <h2>Your free report shows what's wrong.<br><em>The $47 version shows what to do about it.</em></h2>
+        <p class="sub">Full 8–12 page report · Strategist brief · 30-minute session with a real fractional CFO. All delivered same day.</p>
+${couponRow}
+        <a class="btn btn-primary" id="upgrade-cta" href="${paymentLink47}" data-payment-href="${paymentLink47}" data-beta-href="${upgrade47Href}">
+          <span id="upgrade-label">Upgrade to Full Diagnostic — $47</span>
+          <span class="arrow">→</span>
+        </a>
+        <p class="micro" id="upgrade-micro">One-time payment. No subscription. No follow-up sales calls unless you book one.</p>
+${couponScript}
       </div>`;
   } else if (tier === "paid_47") {
     cta = `
@@ -1305,21 +1308,58 @@ async function fetchGHLContact(contactId, env) {
 }
 
 // Build the {question, answer} array Solomon expects from the contact's
-// custom fields, skipping Solomon-owned fields and empty values.
+// custom fields. Only fields explicitly mapped in SURVEY_FIELD_MAP are
+// forwarded — unmapped IDs are DROPPED, not passed with an opaque
+// "field:abc123" label. Passing opaque labels means the LLM sees an answer
+// ("$150,000" / "No" / "60 days") without knowing whether it refers to
+// revenue, debt, taxes, or AR aging, which produces misattributed reports.
+//
+// WARNING: SURVEY_FIELD_MAP currently only covers the free-tier questions
+// (P1-P3 + Q1-Q8). Paid-tier IDs (Q9-Q26 for paid_47; Q_A-Q_M for paid_297)
+// still need to be added — until they are, paid_47 and paid_297 runs coming
+// through /from-ghl-survey will have their extra financial detail silently
+// dropped. See the SURVEY_FIELD_MAP definition for where to add them.
 function answersFromContactFields(contact) {
   const cfs = contact?.customFields || [];
-  return cfs
+  const dropped = [];
+  const mapped = cfs
     .filter(f => f && f.value && String(f.value).trim() && !SOLOMON_OWNED_FIELDS.has(f.id))
+    .filter(f => {
+      if (SURVEY_FIELD_MAP[f.id]) return true;
+      dropped.push(f.id);
+      return false;
+    })
     .map(f => ({
-      question: SURVEY_FIELD_MAP[f.id] || ("field:" + f.id),
+      question: SURVEY_FIELD_MAP[f.id],
       answer: String(f.value).trim(),
     }));
+  if (dropped.length) {
+    console.warn(`[answersFromContactFields] Dropped ${dropped.length} unmapped custom field(s): ${dropped.join(", ")}. Add IDs to SURVEY_FIELD_MAP to include them.`);
+  }
+  return mapped;
 }
 
 // POST /from-ghl-survey — GHL workflow webhook after a survey submits.
 // Body: { contactId, tier } — tier is "free" | "paid_47" | "paid_297"
 // Optional: rubricOverride (for testing new rubrics against real submissions)
+//
+// AUTH: Endpoint is publicly reachable, and a contact ID is exposed to end users
+// via the /report/{contactId} URL. Without protection anyone can POST here with
+// tier=paid_297 and get a Business Playbook generated + swot_paid_297 tag applied.
+// Two-layer defense:
+//   1. Shared secret in x-webhook-secret header (set env.WEBHOOK_SECRET + the same
+//      value on the GHL workflow's webhook step). Required when configured.
+//   2. For paid tiers, verify the contact ALREADY carries the matching swot_paid_*
+//      tag applied by the payment workflow. Free tier is unrestricted since it
+//      corresponds to an intake with no gate.
 async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
+  if (env.WEBHOOK_SECRET) {
+    const provided = request.headers.get("x-webhook-secret");
+    if (!provided || provided !== env.WEBHOOK_SECRET) {
+      return json({ success: false, error: "Unauthorized" }, 401);
+    }
+  }
+
   let body;
   try { body = await request.json(); }
   catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
@@ -1332,6 +1372,17 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
 
   const contact = await fetchGHLContact(contactId, env);
   if (!contact) return json({ success: false, error: "Contact not found in GHL" }, 404);
+
+  // Defense in depth: paid tiers require the matching lifecycle tag (applied by
+  // the GHL payment workflow). Prevents a valid webhook secret from being used
+  // to escalate a free lead's tier and generate paid content without payment.
+  if (tier === "paid_47" || tier === "paid_297") {
+    const requiredTag = tier === "paid_297" ? "swot_paid_297" : "swot_paid_47";
+    const contactTags = (contact.tags || []).map(t => String(t).toLowerCase());
+    if (!contactTags.includes(requiredTag)) {
+      return json({ success: false, error: `Contact does not have required ${requiredTag} tag` }, 403);
+    }
+  }
 
   const answers = answersFromContactFields(contact);
   if (!answers.length) return json({ success: false, error: "No answers on this contact yet" }, 400);
@@ -1389,17 +1440,23 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
     : tier === "paid_47" ? "swot_paid_47"
     : "swot_free_lead";
   const reportReadyTag = `swot_report_ready_${tier.replace(/^paid_/, "")}`;
-  const tags = [
+  // Non-email-trigger tags are safe to apply concurrently with the writeback;
+  // reportReadyTag is the email trigger and must NOT fire until the report
+  // field write has landed, or the email renders with blank merge fields.
+  const lifecycleTags = [
     tierTag,
-    reportReadyTag,
     `swot_path_${(agent.path || "").toLowerCase()}`,
     ...(agent.opportunityFlags || []).map((f) => String(f).toLowerCase()),
   ].filter(Boolean);
 
-  // Fire writeback + tags + tracking asynchronously so the webhook can respond fast.
   ctx.waitUntil(Promise.allSettled([
-    updateGHLContact(contactId, fields, env),
-    addGHLTag(contactId, tags, env),
+    // Chained: writeback must succeed before the email-trigger tag lands.
+    // On failure we deliberately skip reportReadyTag so no empty-report email fires.
+    updateGHLContact(contactId, fields, env).then(ok => {
+      if (ok) return addGHLTag(contactId, [reportReadyTag], env);
+      console.warn("[from-ghl-survey] Contact writeback failed; skipping reportReadyTag");
+    }),
+    addGHLTag(contactId, lifecycleTags, env),
     fireTrackingEvent({
       event_type: `report_generated_${tier}`,
       tier,
@@ -1681,17 +1738,22 @@ export default {
         tier === "paid_297" ? "swot_paid_297"
         : tier === "paid_47" ? "swot_paid_47"
         : "swot_free_lead";
-      const tags = [
+      const reportReadyTag = `swot_report_ready_${tier.replace(/^paid_/, "")}`;
+      // Same ordering rule as /from-ghl-survey: report-ready tag (email trigger)
+      // must land AFTER the writeback. Lifecycle tags are safe to run concurrently.
+      const lifecycleTags = [
         tierTag,
-        `swot_report_ready_${tier.replace(/^paid_/, "")}`,
         `swot_path_${(agent.path || "").toLowerCase()}`,
         ...(agent.opportunityFlags || []).map((f) => String(f).toLowerCase()),
       ].filter(Boolean);
 
       ctx.waitUntil(
         Promise.allSettled([
-          updateGHLContact(contactId, fields, env),
-          addGHLTag(contactId, tags, env),
+          updateGHLContact(contactId, fields, env).then(ok => {
+            if (ok) return addGHLTag(contactId, [reportReadyTag], env);
+            console.warn("[POST /] Contact writeback failed; skipping reportReadyTag");
+          }),
+          addGHLTag(contactId, lifecycleTags, env),
           fireTrackingEvent({
             event_type: `report_generated_${tier}`,
             tier,
