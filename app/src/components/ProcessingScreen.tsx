@@ -1,10 +1,17 @@
 import { motion } from "framer-motion";
 import { Check, Activity } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export const ProcessingScreen = ({ onComplete }: { onComplete: () => void }) => {
+  // Progress bar hits 100% at 3.5s but the Claude call typically takes 15-30s.
+  // Show a "still working" note once the bar completes so users don't think the page froze.
+  const [barDone, setBarDone] = useState(false);
+
   useEffect(() => {
-    const timer = setTimeout(onComplete, 3500);
+    const timer = setTimeout(() => {
+      setBarDone(true);
+      onComplete();
+    }, 3500);
     return () => clearTimeout(timer);
   }, [onComplete]);
 
@@ -61,6 +68,17 @@ export const ProcessingScreen = ({ onComplete }: { onComplete: () => void }) => 
             />
           </div>
         </div>
+
+        {barDone && (
+          <motion.p
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.4 }}
+            className="text-sm text-muted-foreground font-body pt-4"
+          >
+            Finalizing your report — this usually takes another 20–40 seconds. Please keep this tab open.
+          </motion.p>
+        )}
       </div>
 
       {/* Background SWOT Grid Animation */}

@@ -41,7 +41,7 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
           { value: "statewide", label: "Statewide" },
           { value: "regional", label: "Regional Multi-state" },
           { value: "national", label: "National" },
-          { value: "ecommerce", label: "E-commerce Online" }
+          { value: "ecommerce", label: "E-commerce / Online" }
         ],
         required: true
       },
