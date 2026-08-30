@@ -224,7 +224,27 @@ export const PurchaseGateScreen = ({ score, path, onBack }: PurchaseGateScreenPr
               />
               <div className="space-y-2 leading-none">
                 <Label htmlFor="terms" className="text-sm font-medium text-foreground cursor-pointer">
-                  Terms and Conditions *
+                  I agree to the{" "}
+                  <a
+                    href="https://www.cfobydesign.com/tos"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline text-primary hover:text-primary/80"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Terms and Conditions
+                  </a>
+                  {" "}and{" "}
+                  <a
+                    href="https://www.cfobydesign.com/privacy"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline text-primary hover:text-primary/80"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Privacy Policy
+                  </a>
+                  . *
                 </Label>
                 <div className="text-xs text-muted-foreground">
                   By checking this box, I fully understand and agree to all the provisions of the agreement.
