@@ -29,8 +29,8 @@ export const PAYMENT_LINK_47 = env.VITE_PAYMENT_LINK_47 || "https://REPLACE_WITH
 export const PAYMENT_LINK_297 = env.VITE_PAYMENT_LINK_297 || "https://REPLACE_WITH_YOUR_DOMAIN/payment-link/REPLACE_WITH_297_LINK_ID";
 export const BOOKING_LINK_297 = env.VITE_BOOKING_LINK_297 || "https://REPLACE_WITH_YOUR_DOMAIN/widget/booking/REPLACE_WITH_297_CALENDAR_ID";
 
-// Brand/marketing images previously hosted on Vibe's asset CDN
-// (vibe.filesafe.space). Default to local placeholder graphics until real
-// URLs (or files dropped into public/images/) are provided.
-export const IMAGE_LOGO = env.VITE_IMAGE_LOGO || "/images/placeholder-logo.svg";
+// Brand/marketing images. Default to the production CFO By Design logo
+// hosted on GHL's asset CDN so builds without VITE_IMAGE_LOGO still render
+// the real brand. Override via env var only if the URL rotates.
+export const IMAGE_LOGO = env.VITE_IMAGE_LOGO || "https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png";
 export const IMAGE_STRATEGIST_BG = env.VITE_IMAGE_STRATEGIST_BG || "/images/placeholder-strategist-bg.svg";
