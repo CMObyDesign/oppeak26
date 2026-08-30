@@ -1,0 +1,23 @@
+/thanks
+  Cache-Control: no-store, no-cache, must-revalidate, private
+  Pragma: no-cache
+
+/beta-thanks
+  Cache-Control: no-store, no-cache, must-revalidate, private
+  Pragma: no-cache
+
+/beta-feedback
+  Cache-Control: no-store, no-cache, must-revalidate, private
+  Pragma: no-cache
+
+/paid-47
+  Cache-Control: no-store, no-cache, must-revalidate, private
+  Pragma: no-cache
+
+/paid-297
+  Cache-Control: no-store, no-cache, must-revalidate, private
+  Pragma: no-cache
+
+/audit-confirmed
+  Cache-Control: no-store, no-cache, must-revalidate, private
+  Pragma: no-cache
