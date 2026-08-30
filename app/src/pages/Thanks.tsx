@@ -2,8 +2,7 @@ import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, Mail, ArrowRight } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-
-const PAYMENT_LINK_47 = "https://my.cfobydesign.com/payment-link/6a0db7aa1a6dcdeebb53b641";
+import { PAYMENT_LINK_47 } from "@/lib/ghl-config";
 
 const Thanks = () => {
   const [searchParams] = useSearchParams();
