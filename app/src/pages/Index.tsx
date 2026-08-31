@@ -166,7 +166,18 @@ const Index = () => {
             className="h-10 md:h-12 object-contain brightness-150 shrink-0"
           />
           <div className="text-center md:text-left space-y-2">
-            <div className="text-xs uppercase tracking-[0.3em] font-mono text-foreground">CFO By Design | cfobydesign.com | Confidential</div>
+            <div className="text-xs uppercase tracking-[0.3em] font-mono text-foreground">
+              CFO By Design |{" "}
+              <a
+                href="https://www.cfobydesign.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline hover:text-primary transition-colors"
+              >
+                cfobydesign.com
+              </a>{" "}
+              | Confidential
+            </div>
             <div className="text-[10px] md:text-xs uppercase tracking-[0.2em] text-muted-foreground font-medium">Your Business Finances. Professionally Managed.</div>
           </div>
         </div>
