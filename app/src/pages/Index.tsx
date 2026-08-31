@@ -164,8 +164,22 @@ const Index = () => {
           <div className="text-[10px] md:text-xs uppercase tracking-[0.2em] text-muted-foreground font-medium">Your Business Finances. Professionally Managed.</div>
         </div>
         <div className="flex gap-8">
-          <button className="text-xs uppercase tracking-widest font-mono hover:text-primary transition-colors text-foreground">Privacy</button>
-          <button className="text-xs uppercase tracking-widest font-mono hover:text-primary transition-colors text-foreground">Terms</button>
+          <a
+            href="https://www.cfobydesign.com/privacy"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs uppercase tracking-widest font-mono hover:text-primary transition-colors text-foreground"
+          >
+            Privacy
+          </a>
+          <a
+            href="https://www.cfobydesign.com/tos"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs uppercase tracking-widest font-mono hover:text-primary transition-colors text-foreground"
+          >
+            Terms
+          </a>
         </div>
       </footer>
     </div>

@@ -6,7 +6,7 @@ import { CheckCircle2, Mail, ArrowRight, Sparkles } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
 
 const BETA_MID_ANALYSIS_URL =
-  "https://success.cfobydesign.com/mid-analysis-page";
+  "https://success.cfobydesign.com/mid-analysis";
 
 const BetaThanks = () => {
   const [searchParams] = useSearchParams();

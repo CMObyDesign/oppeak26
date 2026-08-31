@@ -39,7 +39,7 @@ export const PaymentRequiredScreen = ({ tier, paymentUrl }: Props) => {
 
         <p className="text-xs text-muted-foreground">
           Already paid? Give it a few seconds, then refresh. If you still see this,
-          email <a className="underline" href="mailto:hello@cfobydesign.com">hello@cfobydesign.com</a>.
+          email <a className="underline" href="mailto:support@cfobydesign.com">support@cfobydesign.com</a>.
         </p>
       </div>
     </div>
