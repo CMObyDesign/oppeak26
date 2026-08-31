@@ -159,9 +159,16 @@ const Index = () => {
       </main>
 
       <footer className="w-full p-8 flex flex-col md:flex-row justify-between items-center gap-6 opacity-60 mt-auto z-40 border-t border-white/5 bg-background/50 backdrop-blur-sm">
-        <div className="text-center md:text-left space-y-2">
-          <div className="text-xs uppercase tracking-[0.3em] font-mono text-foreground">CFO By Design | cfobydesign.com | Confidential</div>
-          <div className="text-[10px] md:text-xs uppercase tracking-[0.2em] text-muted-foreground font-medium">Your Business Finances. Professionally Managed.</div>
+        <div className="flex flex-col md:flex-row items-center gap-4 md:gap-6">
+          <img
+            src={IMAGE_LOGO}
+            alt="CFO By Design"
+            className="h-10 md:h-12 object-contain brightness-150 shrink-0"
+          />
+          <div className="text-center md:text-left space-y-2">
+            <div className="text-xs uppercase tracking-[0.3em] font-mono text-foreground">CFO By Design | cfobydesign.com | Confidential</div>
+            <div className="text-[10px] md:text-xs uppercase tracking-[0.2em] text-muted-foreground font-medium">Your Business Finances. Professionally Managed.</div>
+          </div>
         </div>
         <div className="flex gap-8">
           <a
