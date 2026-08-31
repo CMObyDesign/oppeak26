@@ -484,7 +484,7 @@ ${couponScript}
 
   <footer class="footer">
     CFO by Design · cfobydesign.com
-    · <a href="mailto:hello@cfobydesign.com">Contact</a>
+    · <a href="mailto:support@cfobydesign.com">Contact</a>
     · <a href="https://www.cfobydesign.com/privacy">Privacy</a>
     · <a href="https://www.cfobydesign.com/tos">Terms</a>
   </footer>
@@ -882,7 +882,7 @@ async function handleReport(contactId, env) {
               '<h3 style="font-family:Georgia,serif;font-size:22px;color:#1a1a1a;margin:0 0 10px;">Still working on your report…</h3>' +
               '<p style="color:#6b7280;font-size:15px;max-width:460px;margin:0 auto 6px;">' +
                 'This usually takes 30–60 seconds. If the wait feels long, refresh manually or email ' +
-                '<a href="mailto:hello@cfobydesign.com" style="color:#92400e;">hello@cfobydesign.com</a> ' +
+                '<a href="mailto:support@cfobydesign.com" style="color:#92400e;">support@cfobydesign.com</a> ' +
                 'and we\\'ll dig in.</p>';
           }
 

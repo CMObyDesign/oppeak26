@@ -32,7 +32,7 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
         <h2 className="font-display text-3xl font-bold text-destructive">Report unavailable</h2>
         <p className="text-muted-foreground">
           We could not generate your report just now. Please refresh and try again, or email{" "}
-          <a className="underline" href="mailto:hello@cfobydesign.com">hello@cfobydesign.com</a>.
+          <a className="underline" href="mailto:support@cfobydesign.com">support@cfobydesign.com</a>.
         </p>
         {error && <pre className="text-xs text-left text-muted-foreground bg-secondary/30 p-4 rounded-xl overflow-x-auto">{error}</pre>}
       </div>
