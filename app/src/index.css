@@ -126,5 +126,30 @@ All colors MUST be HSL.
   .text-glow-gold {
     text-shadow: 0 0 20px rgba(245, 196, 61, 0.4);
   }
+
+  /* Embedded mode (set by app/src/lib/iframe-resize.ts on <html> when the
+     app is loaded inside an iframe): collapse min-h-screen wrappers so the
+     app reports its true content height to the parent frame. Without this
+     override, LandingScreen and Index both enforce 100vh — which in an
+     iframe equals the iframe's current height, creating a feedback loop
+     that stretches the frame with dead space. */
+  html.is-embedded .min-h-screen {
+    min-height: 0 !important;
+  }
+
+  /* The parent funnel page owns branding; hide our absolute logo header
+     inside the iframe so it doesn't dominate the visible viewport. Absolute
+     positioned, so display:none does not shift layout. */
+  html.is-embedded header {
+    display: none !important;
+  }
+
+  /* With the header hidden, LandingScreen no longer needs the large
+     "clear the absolute header" padding-top. Trim it hard so the iframe
+     shows the hero copy first, not empty space. */
+  html.is-embedded .pt-40 { padding-top: 1rem !important; }
+  html.is-embedded .md\:pt-56 { padding-top: 1.5rem !important; }
+  html.is-embedded .pt-48 { padding-top: 1rem !important; }
+  html.is-embedded .md\:pt-64 { padding-top: 1.5rem !important; }
 }
 
