@@ -53,6 +53,12 @@ export function initIframeResize(): void {
   document.documentElement.style.overflow = "hidden";
   document.body.style.overflow = "hidden";
 
+  // Mark <html> as embedded so CSS can collapse min-h-screen on layout
+  // wrappers. Without this, the app root and LandingScreen both hold at
+  // least 100vh (= the iframe's current height), creating a feedback loop
+  // that pads the iframe with dead space — the "spread out" symptom.
+  document.documentElement.classList.add("is-embedded");
+
   // Initial measure once fonts + images have had a chance to settle.
   schedule();
   window.addEventListener("load", schedule);
