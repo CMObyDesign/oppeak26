@@ -485,8 +485,8 @@ ${couponScript}
   <footer class="footer">
     CFO by Design · cfobydesign.com
     · <a href="mailto:hello@cfobydesign.com">Contact</a>
-    · <a href="https://cfobydesign.com/privacy">Privacy</a>
-    · <a href="https://cfobydesign.com/tos">Terms</a>
+    · <a href="https://www.cfobydesign.com/privacy">Privacy</a>
+    · <a href="https://www.cfobydesign.com/tos">Terms</a>
   </footer>
 </body>
 </html>`;
