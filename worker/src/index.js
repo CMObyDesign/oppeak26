@@ -1535,7 +1535,13 @@ function answersFromContactFields(contact) {
     .map(f => {
       const curated = SURVEY_FIELD_MAP[f.id];
       const fallback = f.name || f.fieldKey || f.key || null;
-      const question = curated || fallback;
+      // Last-resort label — use the field ID itself so the answer still
+      // reaches Solomon even when GHL's API returns bare {id, value} with
+      // no name/key metadata. Solomon can reason from the answer content
+      // (a number, a phrase) even without knowing which question it
+      // corresponds to.
+      const idLabel = f.id ? `field ${f.id}` : null;
+      const question = curated || fallback || idLabel;
       if (!question) {
         dropped.push(f.id);
         return null;
@@ -1543,13 +1549,13 @@ function answersFromContactFields(contact) {
       return {
         question,
         answer: String(f.value).trim(),
-        _source: curated ? "mapped" : "fallback",
+        _source: curated ? "mapped" : fallback ? "fallback" : "id-only",
       };
     })
     .filter(Boolean)
     .map(({ _source, ...rest }) => rest);
   if (dropped.length) {
-    console.warn(`[answersFromContactFields] Dropped ${dropped.length} truly-opaque custom field(s) (no label anywhere): ${dropped.join(", ")}.`);
+    console.warn(`[answersFromContactFields] Dropped ${dropped.length} field(s) with no id and no label: ${dropped.join(", ")}.`);
   }
   return mapped;
 }
