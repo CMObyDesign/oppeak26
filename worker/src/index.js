@@ -985,20 +985,74 @@ async function handleReport(contactId, env) {
 // POST /apply-solomon50 — tag a contact when they redeem the SOLOMON50 beta code
 // on the free report page. Fires from the report page's coupon-apply JS. Best-effort:
 // UX proceeds regardless of tag-write success. No auth needed — worst case is a
-// contactId + tag write, no data exfiltration or paid-tier escalation.
+// contact + tag write, no data exfiltration or paid-tier escalation.
+//
+// Body accepts either:
+//   { contactId, code }                       — tag the known contact
+//   { email, name?, businessName?, code }     — upsert by email then tag
+// The email path is what the React beta flow uses when VITE_GHL_SURVEY_SUBMIT_URL
+// isn't set (no lead-capture POST to create the GHL contact upstream). Upserting
+// by email keeps the beta cohort trackable without requiring pre-existing IDs.
 async function handleApplySolomon50(request, env) {
   let body;
   try { body = await request.json(); }
   catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
 
-  const contactId = body.contactId || body.contact_id;
   const code = String(body.code || "").trim().toUpperCase();
-  if (!contactId) return json({ success: false, error: "Missing contactId" }, 400);
   if (code !== "SOLOMON50") return json({ success: false, error: "Unrecognized code" }, 400);
   if (!env.GHL_API_KEY) return json({ success: false, error: "GHL not configured" }, 500);
 
+  let contactId = body.contactId || body.contact_id || null;
+  const email = String(body.email || "").trim().toLowerCase();
+
+  // No contactId? Try to upsert by email.
+  if (!contactId) {
+    if (!email) return json({ success: false, error: "Need contactId or email" }, 400);
+    contactId = await upsertGHLContactByEmail(email, {
+      name: body.name,
+      businessName: body.businessName,
+    }, env);
+    if (!contactId) return json({ success: false, error: "Contact upsert failed" }, 500);
+  }
+
   const ok = await addGHLTag(contactId, ["swot_solomon50_applied"], env);
-  return json({ success: ok });
+  return json({ success: ok, contactId });
+}
+
+// Upsert a GHL contact by email. Returns the contactId on success (existing OR
+// newly created), null on failure. Used by /apply-solomon50 when the beta user
+// hasn't been registered upstream so we can still track their SOLOMON50 redemption.
+async function upsertGHLContactByEmail(email, extras, env) {
+  if (!email || !env.GHL_API_KEY) return null;
+  const [firstName, ...rest] = String(extras?.name || "").trim().split(/\s+/);
+  const payload = {
+    email,
+    locationId: env.GHL_LOCATION_ID || CONFIG.GHL_LOCATION_ID,
+  };
+  if (firstName) payload.firstName = firstName;
+  if (rest.length) payload.lastName = rest.join(" ");
+  if (extras?.businessName) payload.companyName = extras.businessName;
+
+  try {
+    const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/upsert`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.GHL_API_KEY}`,
+        Version: "2021-07-28",
+      },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      console.warn(`[upsertGHLContactByEmail] status ${res.status}: ${(await res.text()).slice(0, 300)}`);
+      return null;
+    }
+    const data = await res.json().catch(() => ({}));
+    return data?.contact?.id || data?.id || null;
+  } catch (err) {
+    console.warn(`[upsertGHLContactByEmail] error: ${err.message}`);
+    return null;
+  }
 }
 
 // ----- Ask Solomon console (internal training & testing) -----
