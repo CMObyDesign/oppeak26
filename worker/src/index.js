@@ -2026,28 +2026,39 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   if (tier === "paid_297") fields.push({ key: "swot_deep_dive_booked", field_value: "true" });
 
   // Tag policy per tier:
-  //   free       — write swot_free_lead + report-ready tag (email fires).
-  //   paid_47    — write swot_paid_47 + report-ready tag. Payment already
-  //                cleared upstream; report gets delivered.
-  //   paid_297   — write ONLY the sell-them signal `swot_paid_297_pending`.
-  //                Do NOT apply swot_paid_297 or swot_report_ready_paid_297
-  //                yet — the /deep-dive-preview page will show a Solomon
-  //                teaser and route to checkout. GHL's $150 payment workflow
-  //                is the one that applies swot_paid_297 + the report-ready
-  //                tag after payment, so:
-  //                  - the Playbook email doesn't fire before payment
-  //                  - /report tier fallback keeps serving the paid_47
-  //                    Full Diagnostic until payment upgrades them
-  //                Solomon has still written business_playbook +
-  //                swot_strategist_brief to the contact so the preview
-  //                page can render a real teaser and the moment payment
-  //                clears there's nothing else to compute.
+  //   free      — write swot_free_lead + report-ready tag (email fires).
+  //   paid_47   — write swot_paid_47 + report-ready tag. Payment cleared
+  //               upstream; report gets delivered.
+  //   paid_297  — sell-first flow. Two shapes:
+  //     (a) fresh: no swot_paid_297 yet. Apply swot_paid_297_pending on
+  //         submit. On successful writeback ALSO apply swot_playbook_written
+  //         as a durable signal the Playbook was actually stored. Payment
+  //         workflow must gate delivery on BOTH swot_paid_297 (payment
+  //         succeeded) AND swot_playbook_written (writeback succeeded);
+  //         if writeback fails, swot_playbook_written never lands and the
+  //         delivery email is safely held.
+  //     (b) already-paid customer submits (survey landed late, replay,
+  //         resubmit): contact already carries swot_paid_297, so we're
+  //         effectively acting as paid_47 does — apply the report-ready
+  //         tag directly on writeback success (chained). Otherwise the
+  //         payment event has already passed and nothing else will trigger
+  //         the delivery email.
+  const alreadyPaid297 = (contact.tags || [])
+    .map((t) => String(t).toLowerCase())
+    .includes("swot_paid_297");
+
   const tierTag =
-    tier === "paid_297" ? "swot_paid_297_pending"
-    : tier === "paid_47" ? "swot_paid_47"
-    : "swot_free_lead";
-  // paid_297 defers the report-ready email trigger to the payment workflow.
-  const reportReadyTag = tier === "paid_297" ? null : `swot_report_ready_${tier.replace(/^paid_/, "")}`;
+    tier === "paid_297"
+      ? (alreadyPaid297 ? "swot_paid_297" : "swot_paid_297_pending")
+      : tier === "paid_47" ? "swot_paid_47"
+      : "swot_free_lead";
+  // paid_297 fresh submits defer the report-ready email trigger to the
+  // payment workflow. paid_297 replays for already-paid customers fire it
+  // directly (chained on writeback success). All other tiers fire it as before.
+  const reportReadyTag =
+    tier === "paid_297" && !alreadyPaid297
+      ? null
+      : `swot_report_ready_${tier.replace(/^paid_/, "")}`;
   const lifecycleTags = [
     tierTag,
     `swot_path_${(agent.path || "").toLowerCase()}`,
@@ -2055,16 +2066,22 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   ].filter(Boolean);
 
   ctx.waitUntil(Promise.allSettled([
-    // Chained: writeback must succeed before the email-trigger tag lands.
-    // On failure we deliberately skip reportReadyTag so no empty-report email fires.
+    // Chained: writeback must succeed before either the email-trigger tag
+    // (paid_47 / paid_297 replay / free) OR the paid_297-fresh writeback
+    // signal tag (swot_playbook_written) lands.
     updateGHLContact(contactId, fields, env).then(ok => {
       if (!ok) {
-        console.warn("[from-ghl-survey] Contact writeback failed; skipping reportReadyTag");
+        console.warn("[from-ghl-survey] Contact writeback failed; skipping post-write tags");
         return;
       }
-      if (reportReadyTag) return addGHLTag(contactId, [reportReadyTag], env);
-      // paid_297: writeback done, but the email-trigger tag deliberately
-      // waits for the payment workflow. Nothing to do here.
+      const postWriteTags = [];
+      if (reportReadyTag) postWriteTags.push(reportReadyTag);
+      // paid_297 fresh flow: durable signal that the Playbook is actually
+      // stored on the contact. Payment workflow gates the delivery email
+      // and swot_paid_297 on this tag — if it's missing, the payment
+      // workflow should not fire the report-ready tag.
+      if (tier === "paid_297" && !alreadyPaid297) postWriteTags.push("swot_playbook_written");
+      if (postWriteTags.length) return addGHLTag(contactId, postWriteTags, env);
     }),
     addGHLTag(contactId, lifecycleTags, env),
     fireTrackingEvent({
