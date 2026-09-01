@@ -783,9 +783,15 @@ async function handleReportStatus(contactId, env) {
   const data = await res.json().catch(() => ({}));
   const c = data?.contact || {};
   const tags = (c.tags || []).map((t) => String(t).toLowerCase());
+  // Tier detection — highest paid tier wins if multiple tags are present.
+  // swot_solomon50_applied is a beta-cohort tag applied when a user redeems
+  // the SOLOMON50 code; it unlocks the same tier code paths as swot_paid_47
+  // so beta users see the paid_47 report and CTA, not the free upgrade.
   let reportFieldKey, tier;
   if (tags.includes("swot_paid_297")) { reportFieldKey = "business_playbook"; tier = "paid_297"; }
-  else if (tags.includes("swot_paid_47")) { reportFieldKey = "swot_full_report"; tier = "paid_47"; }
+  else if (tags.includes("swot_paid_47") || tags.includes("swot_solomon50_applied")) {
+    reportFieldKey = "swot_full_report"; tier = "paid_47";
+  }
   else { reportFieldKey = "swot_free_report"; tier = "free"; }
   const cfs = c.customFields || [];
   const reportFieldId = CONFIG.REPORT_FIELD_IDS[reportFieldKey];
@@ -822,12 +828,15 @@ async function handleReport(contactId, env) {
   const tags = (c.tags || []).map((t) => String(t).toLowerCase());
 
   // Determine tier from tags — highest paid tier wins if multiple are present.
+  // swot_solomon50_applied (beta cohort) unlocks the paid_47 tier just like a
+  // real payment does, so beta users see the same report + booking CTA as
+  // paying users. Both tags stay on the contact for reporting/attribution.
   let reportFieldKey, tierLabel, tier;
   if (tags.includes("swot_paid_297")) {
     reportFieldKey = "business_playbook";
     tierLabel = "Business Playbook";
     tier = "paid_297";
-  } else if (tags.includes("swot_paid_47")) {
+  } else if (tags.includes("swot_paid_47") || tags.includes("swot_solomon50_applied")) {
     reportFieldKey = "swot_full_report";
     tierLabel = "Full Diagnostic";
     tier = "paid_47";
@@ -1454,10 +1463,19 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   // the GHL payment workflow). Prevents a valid webhook secret from being used
   // to escalate a free lead's tier and generate paid content without payment.
   if (tier === "paid_47" || tier === "paid_297") {
-    const requiredTag = tier === "paid_297" ? "swot_paid_297" : "swot_paid_47";
+    // Accept either the real paid tag (applied by GHL payment workflow) OR
+    // the beta cohort tag (applied when a user redeems SOLOMON50) for the
+    // paid_47 gate. paid_297 still requires the real paid tag — no beta
+    // bypass for the $297 deep dive.
+    const acceptedTags = tier === "paid_297"
+      ? ["swot_paid_297"]
+      : ["swot_paid_47", "swot_solomon50_applied"];
     const contactTags = (contact.tags || []).map(t => String(t).toLowerCase());
-    if (!contactTags.includes(requiredTag)) {
-      return json({ success: false, error: `Contact does not have required ${requiredTag} tag` }, 403);
+    if (!acceptedTags.some(t => contactTags.includes(t))) {
+      return json({
+        success: false,
+        error: `Contact does not have any of the required tag(s): ${acceptedTags.join(", ")}`,
+      }, 403);
     }
   }
 
