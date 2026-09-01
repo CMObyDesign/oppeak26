@@ -289,7 +289,10 @@ ${context}
 
 // Wrap inline-styled report body in a full standalone HTML page for the /report endpoint.
 // Used when someone clicks "View Report Online" from an email.
-function buildReportPage(reportBody, tierLabel, contactName, tier, env, contactEmail, contactId) {
+// Async because it mints an HMAC-signed apply-token bound to this contactId,
+// injected into the SOLOMON50 coupon script for the /apply-solomon50 auth check.
+async function buildReportPage(reportBody, tierLabel, contactName, tier, env, contactEmail, contactId) {
+  const applyToken = contactId ? await mintApplyToken(contactId, env) : null;
   const e = escapeHtml;
   const paymentLink47 = (env && env.PAYMENT_LINK_47) || CONFIG.PAYMENT_LINK_47;
   const paymentLink297 = (env && env.PAYMENT_LINK_297) || CONFIG.PAYMENT_LINK_297;
@@ -333,6 +336,7 @@ function buildReportPage(reportBody, tierLabel, contactName, tier, env, contactE
             var chip = document.querySelector('.cta-panel .upgrade-chip');
             var VALID = { 'SOLOMON50': { href: cta.dataset.betaHref, label: 'Claim My Beta Access — Full Diagnostic', micro: 'Beta cohort · SOLOMON50 applied · skip payment, go straight to intake.' } };
             var CONTACT_ID = ${JSON.stringify(contactId || "")};
+            var APPLY_TOKEN = ${JSON.stringify(applyToken || "")};
             function tryCoupon() {
               var code = (input.value || '').trim().toUpperCase();
               if (!code) return;
@@ -388,7 +392,11 @@ function buildReportPage(reportBody, tierLabel, contactName, tier, env, contactE
               fetch('/apply-solomon50', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contactId: CONTACT_ID || undefined, code: code })
+                body: JSON.stringify({
+                  contactId: CONTACT_ID || undefined,
+                  token: APPLY_TOKEN || undefined,
+                  code: code
+                })
               }).then(function (r) {
                 return r.json().catch(function () { return { success: false }; })
                   .then(function (data) { return { ok: r.ok, data: data }; });
@@ -598,13 +606,19 @@ ${couponScript}
       document.body.style.overflow = 'hidden';
       var scheduled = false;
       function post() {
-        // Intrinsic content height only — offsetHeight on <html>/<body>
-        // reports the viewport size the parent iframe imposed, so including
-        // it in Math.max floors reported height at the current iframe height
-        // and the parent can never shrink the frame back after a page
-        // transition to a shorter view.
-        var el = document.documentElement;
-        var h = Math.max(el.scrollHeight, document.body.scrollHeight);
+        // Intrinsic content height only. Both offsetHeight AND scrollHeight
+        // on <html>/<body> can adopt the imposed iframe height (scrollHeight
+        // is max(children box, own client height); any 100vh/percentage-height
+        // wrapper carries that floor). Measure the bottom edge of body's
+        // tallest direct child via getBoundingClientRect instead — that reads
+        // the actual rendered box regardless of the imposed root height.
+        var body = document.body;
+        var bottom = 0;
+        for (var i = 0; i < body.children.length; i++) {
+          var r = body.children[i].getBoundingClientRect();
+          if (r.bottom > bottom) bottom = r.bottom;
+        }
+        var h = bottom > 0 ? Math.ceil(bottom + window.scrollY) : body.scrollHeight;
         window.parent.postMessage({ type: 'cfobd-iframe-height', height: h }, '*');
       }
       function schedule() {
@@ -1094,7 +1108,7 @@ async function handleReport(contactId, env) {
           setTimeout(poll, 2000);
         })();
       </script>`;
-    return new Response(buildReportPage(fallback, tierLabel, "Business Owner", tier, env, c.email || "", contactId), {
+    return new Response(await buildReportPage(fallback, tierLabel, "Business Owner", tier, env, c.email || "", contactId), {
       status: 200,
       headers: htmlHeaders(),
     });
@@ -1107,20 +1121,15 @@ async function handleReport(contactId, env) {
   const contactName =
     c.firstName || c.contactName || [c.firstName, c.lastName].filter(Boolean).join(" ") || "Business Owner";
 
-  return new Response(buildReportPage(reportWithReset, tierLabel, contactName, tier, env, c.email || "", contactId), {
+  return new Response(await buildReportPage(reportWithReset, tierLabel, contactName, tier, env, c.email || "", contactId), {
     status: 200,
     headers: htmlHeaders(),
   });
 }
 
-// Origin allowlist for privileged endpoints (currently /apply-solomon50).
-// The SOLOMON50 code is exposed in the client bundle, and this endpoint upserts
-// GHL contacts + applies a paid-tier-unlocking tag. Wildcard CORS made it
-// trivial to script arbitrary contact creation from any origin — this narrows
-// acceptable browser callers to our own funnel + report pages. Not a defense
-// against a determined attacker forging Origin headers (that would need an
-// HMAC token bound to the report URL); it is a first-cut abuse control that
-// stops drive-by / cross-site abuse.
+// Origin allowlist — a CSRF control, not authentication. A non-browser caller
+// can set any Origin header. Kept as first-cut abuse mitigation for the
+// no-token React /beta path; the token path below is the real authorization.
 const ALLOWED_APPLY_ORIGINS = new Set([
   "https://success.cfobydesign.com",
   "https://my.cfobydesign.com",
@@ -1141,26 +1150,105 @@ function isAllowedApplyOrigin(request) {
   return false;
 }
 
-// POST /apply-solomon50 — tag a contact when they redeem the SOLOMON50 beta code
-// on the free report page. Fires from the report page's coupon-apply JS.
-//
-// AUTH: browser Origin must match the funnel/report/survey/preview allowlist above.
-// This blocks casual cross-site abuse of an otherwise-public endpoint that upserts
-// contacts and applies a paid-tier-unlocking tag. A signed request token bound to
-// the report URL would be strictly stronger and is the right follow-up if beta
-// abuse surfaces post-demo.
-//
-// Body accepts either:
-//   { contactId, code }                       — tag the known contact
-//   { email, name?, businessName?, code }     — upsert by email then tag
-// The email path is what the React beta flow uses when VITE_GHL_SURVEY_SUBMIT_URL
-// isn't set (no lead-capture POST to create the GHL contact upstream). Upserting
-// by email keeps the beta cohort trackable without requiring pre-existing IDs.
-async function handleApplySolomon50(request, env) {
-  if (!isAllowedApplyOrigin(request)) {
-    return json({ success: false, error: "Origin not allowed" }, 403);
-  }
+// HMAC-signed token minted by the worker when it renders /report/<contactId>.
+// The report URL is delivered to the user via a worker-set contact field
+// (swot_report_path), so obtaining a valid token requires already being the
+// legitimate holder of that contact record. Token binds the operation to a
+// specific scope + subject (contactId) + expiry.
+const APPLY_TOKEN_TTL_MS = 60 * 60 * 1000; // 1h — user has time to redeem after report loads
+function _tokenSecret(env) {
+  return env.APPLY_TOKEN_SECRET || env.WEBHOOK_SECRET || null;
+}
+function _b64url(bytes) {
+  let s = "";
+  const bin = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  for (let i = 0; i < bin.length; i++) s += String.fromCharCode(bin[i]);
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+function _b64urlDecode(s) {
+  s = s.replace(/-/g, "+").replace(/_/g, "/");
+  while (s.length % 4) s += "=";
+  const bin = atob(s);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+async function _hmac(secret, msg) {
+  const key = await crypto.subtle.importKey(
+    "raw", new TextEncoder().encode(secret),
+    { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(msg));
+  return new Uint8Array(sig);
+}
+async function mintApplyToken(subject, env) {
+  const secret = _tokenSecret(env);
+  if (!secret || !subject) return null;
+  const payload = { s: "solomon50", sub: String(subject), exp: Date.now() + APPLY_TOKEN_TTL_MS };
+  const payloadB64 = _b64url(new TextEncoder().encode(JSON.stringify(payload)));
+  const sig = await _hmac(secret, payloadB64);
+  return `${payloadB64}.${_b64url(sig)}`;
+}
+// Returns { ok, sub } — sub is the contactId the token was minted for. Callers
+// must additionally check sub matches the record they intend to write.
+async function verifyApplyToken(token, env) {
+  const secret = _tokenSecret(env);
+  if (!secret || !token || typeof token !== "string") return { ok: false };
+  const parts = token.split(".");
+  if (parts.length !== 2) return { ok: false };
+  const [payloadB64, sigB64] = parts;
+  let providedSig, expectedSig;
+  try {
+    providedSig = _b64urlDecode(sigB64);
+    expectedSig = await _hmac(secret, payloadB64);
+  } catch { return { ok: false }; }
+  if (providedSig.length !== expectedSig.length) return { ok: false };
+  // Constant-time compare
+  let diff = 0;
+  for (let i = 0; i < providedSig.length; i++) diff |= providedSig[i] ^ expectedSig[i];
+  if (diff !== 0) return { ok: false };
+  let payload;
+  try { payload = JSON.parse(new TextDecoder().decode(_b64urlDecode(payloadB64))); }
+  catch { return { ok: false }; }
+  if (payload.s !== "solomon50") return { ok: false };
+  if (typeof payload.exp !== "number" || Date.now() > payload.exp) return { ok: false };
+  return { ok: true, sub: String(payload.sub || "") };
+}
 
+// Coarse in-memory rate limit for the no-token /beta path. Not distributed,
+// resets on worker restart — a KV binding would be strictly better and is the
+// right follow-up. For demo scale this is enough to stop volume-abuse from
+// a single source. Keyed by CF-Connecting-IP.
+const _applyRateBucket = new Map(); // ip → [ts, ts, ...]
+const APPLY_RATE_WINDOW_MS = 60 * 60 * 1000; // 1h
+const APPLY_RATE_MAX = 5;               // 5 attempts / IP / hour on the no-token path
+function checkNoTokenRateLimit(request) {
+  const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for") || "unknown";
+  const now = Date.now();
+  const arr = (_applyRateBucket.get(ip) || []).filter(t => now - t < APPLY_RATE_WINDOW_MS);
+  if (arr.length >= APPLY_RATE_MAX) return false;
+  arr.push(now);
+  _applyRateBucket.set(ip, arr);
+  return true;
+}
+
+// POST /apply-solomon50 — tag a contact when they redeem the SOLOMON50 beta code.
+//
+// AUTHORIZATION — one of:
+//   (A) Signed token bound to a known contactId. Worker mints this token when it
+//       renders /report/<contactId>, so possession proves the caller reached the
+//       legitimate report page for that contact. Token is HMAC-SHA256 over
+//       {scope:"solomon50", sub:contactId, exp} using APPLY_TOKEN_SECRET (falls
+//       back to WEBHOOK_SECRET). Fires from the report-page coupon script.
+//   (B) No-token path — origin allowlist + per-IP rate limit + email required
+//       (contactId-only requests must present a token). Serves the React /beta
+//       flow where the app doesn't visit a worker-minted URL first. Weaker; a
+//       real captcha/Turnstile check is the correct pre-launch upgrade.
+//
+// Body accepts:
+//   { token, contactId, code }                            — path (A)
+//   { email, name?, businessName?, code }                 — path (B)
+async function handleApplySolomon50(request, env) {
   let body;
   try { body = await request.json(); }
   catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
@@ -1169,14 +1257,37 @@ async function handleApplySolomon50(request, env) {
   if (code !== "SOLOMON50") return json({ success: false, error: "Unrecognized code" }, 400);
   if (!env.GHL_API_KEY) return json({ success: false, error: "GHL not configured" }, 500);
 
-  let contactId = body.contactId || body.contact_id || null;
+  const rawContactId = body.contactId || body.contact_id || null;
   const email = String(body.email || "").trim().toLowerCase();
+  const token = body.token || null;
 
-  // No contactId? Try to upsert by email. Basic shape check on the email —
-  // rejects trivially malformed values before we hit GHL.
-  if (!contactId) {
+  let contactId = null;
+
+  if (token) {
+    // Path (A): signed token. Must match the contactId in the body — the token
+    // authorizes ONLY the subject it was minted for. Origin check is redundant
+    // here (the signature is stronger).
+    const v = await verifyApplyToken(token, env);
+    if (!v.ok) return json({ success: false, error: "Invalid or expired token" }, 401);
+    if (!rawContactId || String(rawContactId) !== v.sub) {
+      return json({ success: false, error: "Token does not authorize this contact" }, 403);
+    }
+    contactId = v.sub;
+  } else {
+    // Path (B): no token. Origin allowlist + per-IP rate limit + email required.
+    // ContactId-only path is not allowed here because it would let a caller
+    // apply the tag to any contact whose ID they guess/leak.
+    if (!isAllowedApplyOrigin(request)) {
+      return json({ success: false, error: "Origin not allowed" }, 403);
+    }
+    if (!checkNoTokenRateLimit(request)) {
+      return json({ success: false, error: "Too many attempts — try again later" }, 429);
+    }
+    if (rawContactId && !email) {
+      return json({ success: false, error: "Token required to apply by contactId" }, 401);
+    }
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return json({ success: false, error: "Need contactId or a valid email" }, 400);
+      return json({ success: false, error: "A valid email is required" }, 400);
     }
     contactId = await upsertGHLContactByEmail(email, {
       name: body.name,

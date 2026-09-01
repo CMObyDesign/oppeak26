@@ -22,14 +22,24 @@ function isEmbedded(): boolean {
 }
 
 function measureAndPost(): void {
-  // Measure INTRINSIC content height only — no offsetHeight terms. offsetHeight
-  // on <html>/<body> reports the current viewport size (which the parent set
-  // when it sized the iframe), so including it in Math.max floors the reported
-  // height at the iframe's current height and it can never shrink. When the
-  // page grows smaller (a screen transition to a shorter view, wider viewport
-  // dropping wrap lines) we want the parent to tighten the iframe back.
-  const el = document.documentElement;
-  const height = Math.max(el.scrollHeight, document.body.scrollHeight);
+  // Measure INTRINSIC content height only. Both offsetHeight AND scrollHeight on
+  // <html>/<body> can inherit the height the parent imposed on the iframe —
+  // scrollHeight is max(children's box, own client height), so any element sized
+  // to a percentage of viewport (a 100vh root wrapper, a flexbox column growing
+  // to fill) will report at least that floor and the parent frame can never
+  // shrink back after a page transition to a shorter view.
+  //
+  // The reliable measure is the bottom edge of the tallest child element inside
+  // body — measured directly via getBoundingClientRect(), which reflects
+  // rendered box position without the root's imposed height. Falls back to
+  // body.scrollHeight if body has no children (unlikely, but safe).
+  const body = document.body;
+  let bottom = 0;
+  for (let i = 0; i < body.children.length; i++) {
+    const rect = (body.children[i] as HTMLElement).getBoundingClientRect();
+    if (rect.bottom > bottom) bottom = rect.bottom;
+  }
+  const height = bottom > 0 ? Math.ceil(bottom + window.scrollY) : body.scrollHeight;
   window.parent.postMessage({ type: MESSAGE_TYPE, height }, "*");
 }
 
