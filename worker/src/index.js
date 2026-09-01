@@ -129,11 +129,20 @@ similar businesses. If an answer doesn't explicitly establish the trigger, leave
   growth model is referral-only and explicitly so. NEVER fire on the FREE tier — digital
   presence findings are a paid-tier reveal and must be held back from the free report.
 
-HANDLING INCOMPLETE OR MISSING ANSWERS — call this out honestly, don't fabricate around it:
+HANDLING INCOMPLETE OR NON-RESPONSIVE ANSWERS — call this out honestly, don't fabricate around it:
 
-- If a critical intake answer is BLANK, one-word ("yes"/"no"/"idk"/"n/a"), obviously placeholder,
-  or clearly non-responsive (e.g. "asdf", copy-pasted marketing text) — DO NOT invent numbers
-  or context to fill the gap. Instead:
+- The intake block lists EVERY question that was posed. Skipped answers appear as
+  \`Answer: [not provided]\` — treat those as unanswered, not as a text answer of "[not provided]".
+- Some questions are dropdowns whose valid answers are short ("Yes", "No", "Not sure",
+  "Somewhere in between"). A short answer that MATCHES an offered option is COMPLETE —
+  don't treat it as incomplete just because it is one word.
+- Consider an answer INCOMPLETE only when it is:
+    * \`[not provided]\` (skipped),
+    * filler ("idk", "n/a", "-", "?", blank),
+    * obvious placeholder ("test", "asdf", "xxxx"), or
+    * clearly non-responsive (copy-pasted marketing text unrelated to the question, a URL
+      where a number was asked, a number where a narrative was asked).
+  DO NOT invent numbers or context to fill the gap. Instead:
     * Include one gap or opportunity item whose title starts with "Incomplete intake —"
       (e.g. "Incomplete intake — debt posture not disclosed") that names the missing/vague
       field(s) and states what the assessment cannot verify without it.
@@ -143,9 +152,9 @@ HANDLING INCOMPLETE OR MISSING ANSWERS — call this out honestly, don't fabrica
     * Word it as a diagnostic gap in visibility, not a personal criticism — e.g.
       "Without the debt-service figure we cannot confirm whether cash flow supports the
       current book of business. Recommend re-running with that number filled in."
-- If most of the intake is empty/placeholder (>50% of questions unusable), reduce gaps and
-  opportunities counts by one each and note in \`context\`: "Partial intake — some findings
-  held back pending complete answers." Do not fabricate replacements.
+- If more than half the questions in the intake are incomplete by the definition above,
+  reduce gaps and opportunities counts by one each and note in \`context\`: "Partial intake —
+  some findings held back pending complete answers." Do not fabricate replacements.
 - The strategistBrief field must always mention which fields were incomplete so the
   consultant knows what to probe on the call.`;
 
@@ -327,28 +336,72 @@ function buildReportPage(reportBody, tierLabel, contactName, tier, env, contactE
             function tryCoupon() {
               var code = (input.value || '').trim().toUpperCase();
               if (!code) return;
-              if (VALID[code]) {
-                var v = VALID[code];
+              if (!VALID[code]) {
+                msg.textContent = 'That code isn\\'t recognized. Double-check spelling.';
+                msg.className = 'coupon-msg err';
+                return;
+              }
+              var v = VALID[code];
+              // Optimistic UI feedback so the button doesn't feel dead — but
+              // the CTA link stays gated until the server confirms the tag
+              // write. Without confirmation, the user could reach the paid
+              // survey without the entitlement tag applied, and the survey
+              // webhook would 403 (no swot_solomon50_applied on contact).
+              msg.textContent = 'Applying code…';
+              msg.className = 'coupon-msg';
+              input.disabled = true;
+              apply.disabled = true;
+              apply.textContent = 'Applying…';
+              cta.setAttribute('aria-disabled', 'true');
+              cta.style.pointerEvents = 'none';
+              cta.style.opacity = '0.6';
+              // Guard against a click on the CTA while the request is in
+              // flight — swallow it until tag write returns.
+              var blockNav = function (e) { e.preventDefault(); e.stopPropagation(); };
+              cta.addEventListener('click', blockNav);
+
+              function unlockCta() {
                 cta.href = v.href;
                 label.textContent = v.label;
                 micro.textContent = v.micro;
                 msg.textContent = '✓ Code applied — payment bypassed.';
                 msg.className = 'coupon-msg ok';
                 if (chip) chip.textContent = '◆ BETA COHORT · ' + code + ' APPLIED';
-                input.disabled = true;
-                apply.disabled = true;
                 apply.textContent = 'Applied';
-                if (CONTACT_ID) {
-                  fetch('/apply-solomon50', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ contactId: CONTACT_ID, code: code })
-                  }).catch(function () { /* tag write is best-effort; UX proceeds regardless */ });
-                }
-              } else {
-                msg.textContent = 'That code isn\\'t recognized. Double-check spelling.';
-                msg.className = 'coupon-msg err';
+                cta.removeEventListener('click', blockNav);
+                cta.removeAttribute('aria-disabled');
+                cta.style.pointerEvents = '';
+                cta.style.opacity = '';
               }
+              function reenableForRetry(errMsg) {
+                msg.textContent = errMsg || 'Could not apply that code. Please try again.';
+                msg.className = 'coupon-msg err';
+                input.disabled = false;
+                apply.disabled = false;
+                apply.textContent = 'Apply';
+                cta.removeEventListener('click', blockNav);
+                cta.removeAttribute('aria-disabled');
+                cta.style.pointerEvents = '';
+                cta.style.opacity = '';
+              }
+
+              fetch('/apply-solomon50', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ contactId: CONTACT_ID || undefined, code: code })
+              }).then(function (r) {
+                return r.json().catch(function () { return { success: false }; })
+                  .then(function (data) { return { ok: r.ok, data: data }; });
+              }).then(function (result) {
+                if (result.ok && result.data && result.data.success) {
+                  unlockCta();
+                } else {
+                  var err = (result.data && result.data.error) || 'Server rejected the code.';
+                  reenableForRetry('Could not apply code: ' + err);
+                }
+              }).catch(function () {
+                reenableForRetry('Network error — please try again.');
+              });
             }
             apply.addEventListener('click', tryCoupon);
             input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); tryCoupon(); } });
@@ -545,11 +598,13 @@ ${couponScript}
       document.body.style.overflow = 'hidden';
       var scheduled = false;
       function post() {
+        // Intrinsic content height only — offsetHeight on <html>/<body>
+        // reports the viewport size the parent iframe imposed, so including
+        // it in Math.max floors reported height at the current iframe height
+        // and the parent can never shrink the frame back after a page
+        // transition to a shorter view.
         var el = document.documentElement;
-        var h = Math.max(
-          el.scrollHeight, el.offsetHeight,
-          document.body.scrollHeight, document.body.offsetHeight
-        );
+        var h = Math.max(el.scrollHeight, document.body.scrollHeight);
         window.parent.postMessage({ type: 'cfobd-iframe-height', height: h }, '*');
       }
       function schedule() {
@@ -827,17 +882,34 @@ async function handleReportStatus(contactId, env) {
   const data = await res.json().catch(() => ({}));
   const c = data?.contact || {};
   const tags = (c.tags || []).map((t) => String(t).toLowerCase());
-  // Tier detection — highest paid tier wins if multiple tags are present.
-  // swot_solomon50_applied is a beta-cohort tag applied when a user redeems
-  // the SOLOMON50 code; it unlocks the same tier code paths as swot_paid_47
-  // so beta users see the paid_47 report and CTA, not the free upgrade.
-  let reportFieldKey, tier;
-  if (tags.includes("swot_paid_297")) { reportFieldKey = "business_playbook"; tier = "paid_297"; }
-  else if (tags.includes("swot_paid_47") || tags.includes("swot_solomon50_applied")) {
-    reportFieldKey = "swot_full_report"; tier = "paid_47";
-  }
-  else { reportFieldKey = "swot_free_report"; tier = "free"; }
   const cfs = c.customFields || [];
+  const hasField = (key) => {
+    const id = CONFIG.REPORT_FIELD_IDS[key];
+    const found = cfs.find((f) => (id && f.id === id) ||
+      (f.fieldKey || f.key || "") === `contact.${key}` ||
+      (f.fieldKey || f.key || "") === key);
+    return Boolean((found?.value || found?.field_value || "").toString().trim());
+  };
+  // Tier detection — prefer the highest tier whose report field ACTUALLY has
+  // content. swot_solomon50_applied is applied at coupon redemption, before
+  // the beta user completes the paid survey; without this content check we
+  // would swap to swot_full_report immediately and show the analyzing screen
+  // indefinitely instead of surfacing the free report they already have.
+  const preferPaid47 = tags.includes("swot_paid_47") || tags.includes("swot_solomon50_applied");
+  let reportFieldKey, tier;
+  if (tags.includes("swot_paid_297") && hasField("business_playbook")) {
+    reportFieldKey = "business_playbook"; tier = "paid_297";
+  } else if (preferPaid47 && hasField("swot_full_report")) {
+    reportFieldKey = "swot_full_report"; tier = "paid_47";
+  } else if (hasField("swot_free_report")) {
+    reportFieldKey = "swot_free_report"; tier = "free";
+  } else if (tags.includes("swot_paid_297")) {
+    reportFieldKey = "business_playbook"; tier = "paid_297"; // still analyzing
+  } else if (preferPaid47) {
+    reportFieldKey = "swot_full_report"; tier = "paid_47";   // still analyzing
+  } else {
+    reportFieldKey = "swot_free_report"; tier = "free";      // still analyzing
+  }
   const reportFieldId = CONFIG.REPORT_FIELD_IDS[reportFieldKey];
   const found = cfs.find((f) => (reportFieldId && f.id === reportFieldId) ||
     (f.fieldKey || f.key || "") === `contact.${reportFieldKey}` ||
@@ -870,38 +942,53 @@ async function handleReport(contactId, env) {
   const data = await res.json().catch(() => ({}));
   const c = data?.contact || {};
   const tags = (c.tags || []).map((t) => String(t).toLowerCase());
-
-  // Determine tier from tags — highest paid tier wins if multiple are present.
-  // swot_solomon50_applied (beta cohort) unlocks the paid_47 tier just like a
-  // real payment does, so beta users see the same report + booking CTA as
-  // paying users. Both tags stay on the contact for reporting/attribution.
-  let reportFieldKey, tierLabel, tier;
-  if (tags.includes("swot_paid_297")) {
-    reportFieldKey = "business_playbook";
-    tierLabel = "Business Playbook";
-    tier = "paid_297";
-  } else if (tags.includes("swot_paid_47") || tags.includes("swot_solomon50_applied")) {
-    reportFieldKey = "swot_full_report";
-    tierLabel = "Full Diagnostic";
-    tier = "paid_47";
-  } else {
-    reportFieldKey = "swot_free_report";
-    tierLabel = "SWOT Diagnostic";
-    tier = "free";
-  }
-
-  // Find the report content. GHL v2 contact GET returns customFields keyed by `id`
-  // (not `fieldKey`), so we look up by the known field ID for this location.
-  // Fall back to fieldKey/key matching for forward-compatibility if a future API
-  // version starts returning those.
   const customFields = c.customFields || [];
-  const reportFieldId = CONFIG.REPORT_FIELD_IDS[reportFieldKey];
-  const reportField = customFields.find((f) => {
-    if (reportFieldId && f.id === reportFieldId) return true;
-    const key = f.fieldKey || f.key || "";
-    return key === `contact.${reportFieldKey}` || key === reportFieldKey;
-  });
-  const reportContent = reportField?.value || reportField?.field_value || "";
+
+  // Determine tier from tags — but prefer the highest paid tier only when
+  // its report field ACTUALLY has content. swot_solomon50_applied is applied
+  // when the coupon is redeemed, well before the paid survey completes and
+  // the full report is written. Without the content check, a beta user
+  // between coupon-apply and paid-report-ready would see the analyzing
+  // fallback for an empty swot_full_report while their existing
+  // swot_free_report sits unused. Fall through to the highest tier that has
+  // real content; if none does, use the highest tag as "still analyzing"
+  // so the poll continues to reflect the right destination tier.
+  const findFieldFor = (key) => {
+    const id = CONFIG.REPORT_FIELD_IDS[key];
+    return customFields.find((f) => {
+      if (id && f.id === id) return true;
+      const k = f.fieldKey || f.key || "";
+      return k === `contact.${key}` || k === key;
+    });
+  };
+  const contentOf = (key) => {
+    const f = findFieldFor(key);
+    return (f?.value || f?.field_value || "").toString().trim();
+  };
+
+  let reportFieldKey, tierLabel, tier, reportContent;
+  const preferPaid47 = tags.includes("swot_paid_47") || tags.includes("swot_solomon50_applied");
+  if (tags.includes("swot_paid_297") && contentOf("business_playbook")) {
+    reportFieldKey = "business_playbook"; tierLabel = "Business Playbook"; tier = "paid_297";
+    reportContent = contentOf("business_playbook");
+  } else if (preferPaid47 && contentOf("swot_full_report")) {
+    reportFieldKey = "swot_full_report"; tierLabel = "Full Diagnostic"; tier = "paid_47";
+    reportContent = contentOf("swot_full_report");
+  } else if (contentOf("swot_free_report")) {
+    reportFieldKey = "swot_free_report"; tierLabel = "SWOT Diagnostic"; tier = "free";
+    reportContent = contentOf("swot_free_report");
+  } else if (tags.includes("swot_paid_297")) {
+    reportFieldKey = "business_playbook"; tierLabel = "Business Playbook"; tier = "paid_297";
+    reportContent = "";
+  } else if (preferPaid47) {
+    reportFieldKey = "swot_full_report"; tierLabel = "Full Diagnostic"; tier = "paid_47";
+    reportContent = "";
+  } else {
+    reportFieldKey = "swot_free_report"; tierLabel = "SWOT Diagnostic"; tier = "free";
+    reportContent = "";
+  }
+  const reportField = findFieldFor(reportFieldKey);
+  void reportField; // preserved for parity with prior code shape; unused below
 
   if (!reportContent) {
     const fallback = `
@@ -1026,10 +1113,42 @@ async function handleReport(contactId, env) {
   });
 }
 
+// Origin allowlist for privileged endpoints (currently /apply-solomon50).
+// The SOLOMON50 code is exposed in the client bundle, and this endpoint upserts
+// GHL contacts + applies a paid-tier-unlocking tag. Wildcard CORS made it
+// trivial to script arbitrary contact creation from any origin — this narrows
+// acceptable browser callers to our own funnel + report pages. Not a defense
+// against a determined attacker forging Origin headers (that would need an
+// HMAC token bound to the report URL); it is a first-cut abuse control that
+// stops drive-by / cross-site abuse.
+const ALLOWED_APPLY_ORIGINS = new Set([
+  "https://success.cfobydesign.com",
+  "https://my.cfobydesign.com",
+  "https://oppeak26.pages.dev",
+  "https://swot-engine.cfobydesign.workers.dev",
+]);
+function isAllowedApplyOrigin(request) {
+  const origin = request.headers.get("origin") || "";
+  if (!origin) return false;
+  if (ALLOWED_APPLY_ORIGINS.has(origin)) return true;
+  // Pages preview subdomains: <anything>.oppeak26.pages.dev
+  try {
+    const { hostname, protocol } = new URL(origin);
+    if (protocol !== "https:") return false;
+    if (hostname.endsWith(".oppeak26.pages.dev")) return true;
+    if (hostname.endsWith(".cfobydesign.workers.dev")) return true;
+  } catch { /* fall through */ }
+  return false;
+}
+
 // POST /apply-solomon50 — tag a contact when they redeem the SOLOMON50 beta code
-// on the free report page. Fires from the report page's coupon-apply JS. Best-effort:
-// UX proceeds regardless of tag-write success. No auth needed — worst case is a
-// contact + tag write, no data exfiltration or paid-tier escalation.
+// on the free report page. Fires from the report page's coupon-apply JS.
+//
+// AUTH: browser Origin must match the funnel/report/survey/preview allowlist above.
+// This blocks casual cross-site abuse of an otherwise-public endpoint that upserts
+// contacts and applies a paid-tier-unlocking tag. A signed request token bound to
+// the report URL would be strictly stronger and is the right follow-up if beta
+// abuse surfaces post-demo.
 //
 // Body accepts either:
 //   { contactId, code }                       — tag the known contact
@@ -1038,6 +1157,10 @@ async function handleReport(contactId, env) {
 // isn't set (no lead-capture POST to create the GHL contact upstream). Upserting
 // by email keeps the beta cohort trackable without requiring pre-existing IDs.
 async function handleApplySolomon50(request, env) {
+  if (!isAllowedApplyOrigin(request)) {
+    return json({ success: false, error: "Origin not allowed" }, 403);
+  }
+
   let body;
   try { body = await request.json(); }
   catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
@@ -1049,9 +1172,12 @@ async function handleApplySolomon50(request, env) {
   let contactId = body.contactId || body.contact_id || null;
   const email = String(body.email || "").trim().toLowerCase();
 
-  // No contactId? Try to upsert by email.
+  // No contactId? Try to upsert by email. Basic shape check on the email —
+  // rejects trivially malformed values before we hit GHL.
   if (!contactId) {
-    if (!email) return json({ success: false, error: "Need contactId or email" }, 400);
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return json({ success: false, error: "Need contactId or a valid email" }, 400);
+    }
     contactId = await upsertGHLContactByEmail(email, {
       name: body.name,
       businessName: body.businessName,
@@ -1493,6 +1619,13 @@ let _ghlFieldCatalogCache = null;
 let _ghlFieldCatalogFetchedAt = 0;
 const GHL_FIELD_CATALOG_TTL_MS = 5 * 60 * 1000;
 
+// Distinguished error class so callers can tell a real catalog fetch failure
+// (which should propagate as a retryable webhook error) from an intentional
+// empty catalog (no GHL creds configured, tolerable for local/free-tier flows).
+class GHLCatalogUnavailableError extends Error {
+  constructor(msg) { super(msg); this.name = "GHLCatalogUnavailableError"; }
+}
+
 async function fetchGHLCustomFieldsCatalog(env) {
   if (!env.GHL_API_KEY) return {};
   const now = Date.now();
@@ -1500,37 +1633,50 @@ async function fetchGHLCustomFieldsCatalog(env) {
     return _ghlFieldCatalogCache;
   }
   const locationId = env.GHL_LOCATION_ID || CONFIG.GHL_LOCATION_ID;
-  const url = `${CONFIG.GHL_API_BASE}/locations/${locationId}/customFields`;
+  // model=contact is required by GHL's Get Custom Fields endpoint; without it
+  // the API rejects the request and the catalog stays empty, so hydration
+  // silently no-ops. Explicitly ask for contact-scoped fields.
+  const url = `${CONFIG.GHL_API_BASE}/locations/${locationId}/customFields?model=contact`;
+  let res;
   try {
-    const res = await fetch(url, {
+    res = await fetch(url, {
       headers: {
         Authorization: `Bearer ${env.GHL_API_KEY}`,
         Version: "2021-07-28",
       },
     });
-    if (!res.ok) {
-      console.warn(`[fetchGHLCustomFieldsCatalog] ${res.status} — cannot resolve bare {id,value} payloads; using previous cache if any.`);
-      return _ghlFieldCatalogCache || {};
-    }
-    const data = await res.json().catch(() => ({}));
-    const list = data?.customFields || [];
-    const map = {};
-    for (const f of list) {
-      if (f && f.id) {
-        map[f.id] = {
-          name: f.name || null,
-          fieldKey: f.fieldKey || f.key || null,
-          dataType: f.dataType || null,
-        };
-      }
-    }
-    _ghlFieldCatalogCache = map;
-    _ghlFieldCatalogFetchedAt = now;
-    return map;
   } catch (e) {
-    console.warn(`[fetchGHLCustomFieldsCatalog] error: ${e?.message || e}`);
-    return _ghlFieldCatalogCache || {};
+    // Network-level failure on a cold worker means we cannot resolve bare
+    // {id,value} payloads at all. Serving a stale cache is fine; serving an
+    // empty one silently would risk generating an incomplete paid report
+    // that still passes the answers.length check on any curated free-tier
+    // field the contact carries. Propagate so the webhook can retry.
+    if (_ghlFieldCatalogCache) return _ghlFieldCatalogCache;
+    throw new GHLCatalogUnavailableError(`network error: ${e?.message || e}`);
   }
+  if (!res.ok) {
+    if (_ghlFieldCatalogCache) {
+      console.warn(`[fetchGHLCustomFieldsCatalog] ${res.status} — using cached catalog.`);
+      return _ghlFieldCatalogCache;
+    }
+    const bodySnippet = (await res.text().catch(() => "")).slice(0, 300);
+    throw new GHLCatalogUnavailableError(`status ${res.status}: ${bodySnippet}`);
+  }
+  const data = await res.json().catch(() => ({}));
+  const list = data?.customFields || [];
+  const map = {};
+  for (const f of list) {
+    if (f && f.id) {
+      map[f.id] = {
+        name: f.name || null,
+        fieldKey: f.fieldKey || f.key || null,
+        dataType: f.dataType || null,
+      };
+    }
+  }
+  _ghlFieldCatalogCache = map;
+  _ghlFieldCatalogFetchedAt = now;
+  return map;
 }
 
 // Build the {question, answer} array Solomon expects from the contact's
@@ -1688,7 +1834,22 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
     }
   }
 
-  const answers = await answersFromContactFields(contact, env);
+  let answers;
+  try {
+    answers = await answersFromContactFields(contact, env);
+  } catch (err) {
+    // GHL customFields catalog is unavailable on this cold worker — do NOT
+    // fall back to just the curated free-tier labels, or we'd silently ship
+    // an incomplete paid report. 502 tells GHL's workflow retry to try again.
+    if (err instanceof GHLCatalogUnavailableError) {
+      console.warn(`[handleGHLSurveyWebhook] catalog unavailable: ${err.message}`);
+      return json({
+        success: false,
+        error: "GHL custom-fields catalog unavailable; retry momentarily",
+      }, 502);
+    }
+    throw err;
+  }
   if (!answers.length) return json({ success: false, error: "No answers on this contact yet" }, 400);
 
   const contactPayload = {

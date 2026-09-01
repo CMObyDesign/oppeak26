@@ -61,25 +61,28 @@ export function getReadableAnswer(
 }
 
 /** Convert the form's numeric answers + Questions definitions into the labeled
- *  question/answer pairs the worker expects. Looks up labels for select options. */
+ *  question/answer pairs the worker expects. Looks up labels for select options.
+ *
+ *  Emits EVERY question the assessment asked, including unanswered ones as
+ *  \`Answer: [not provided]\`. The worker's rubric relies on seeing skipped
+ *  questions in the prompt to compute the incomplete-intake fraction and to
+ *  flag "Incomplete intake —" gaps by name. Filtering blanks here would hide
+ *  what was skipped and make the completeness rule inoperable. */
 export function formatAnswersForAgent(
   answers: Record<number | string, any>,
   questions: { id?: number; fieldKey?: string; text: string; options?: { value: string | number; label: string }[] }[]
 ): { question: string; answer: string }[] {
-  return Object.entries(answers)
-    .map(([key, raw]) => {
-      const isNumericId = !isNaN(Number(key));
-      const q = questions.find((x) => 
-        isNumericId ? x.id === Number(key) : x.fieldKey === key
-      );
-      if (!q) return null;
-      
+  return questions
+    .filter(q => q.text)
+    .map(q => {
+      const raw = (q.id != null ? answers[q.id] : undefined) ??
+                  (q.fieldKey ? answers[q.fieldKey] : undefined);
       const answerText = getReadableAnswer(raw, q.options);
-      if (!answerText) return null;
-      
-      return { question: q.text, answer: answerText };
-    })
-    .filter((x): x is { question: string; answer: string } => x !== null);
+      return {
+        question: q.text,
+        answer: answerText && answerText.trim() ? answerText.trim() : "[not provided]",
+      };
+    });
 }
 
 export async function runAssessment(params: {

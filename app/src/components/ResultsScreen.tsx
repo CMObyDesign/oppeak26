@@ -45,13 +45,18 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
       return;
     }
     setCouponStatus("applying");
-    // Best-effort tag write to worker for beta cohort tracking. The worker
-    // accepts either contactId (preferred) or email (upserts by email so the
-    // tag write works even when the React lead-capture POST didn't create a
-    // GHL contact upstream — the common case when VITE_GHL_SURVEY_SUBMIT_URL
+    // Confirm the tag write BEFORE navigating. The paid survey webhook rejects
+    // (403) any submission whose contact lacks swot_solomon50_applied, so
+    // sending the user forward on a failed tag write would leave them able to
+    // fill out the survey only to have report generation blocked. Fail loudly
+    // instead: show "invalid" state and let them retry. The worker accepts
+    // either contactId (preferred) or email (upserts by email so the tag
+    // write works even when the React lead-capture POST didn't create a GHL
+    // contact upstream — the common case when VITE_GHL_SURVEY_SUBMIT_URL
     // isn't set on Cloudflare Pages). We capture the returned contactId so
     // the mid-analysis redirect carries it and downstream tier gates work.
     let resolvedContactId: string | undefined = leadData?.contactId;
+    let ok = false;
     try {
       const res = await fetch(APPLY_SOLOMON50_URL, {
         method: "POST",
@@ -65,10 +70,18 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (data?.contactId) resolvedContactId = data.contactId;
+      if (res.ok && data?.success) {
+        ok = true;
+        if (data?.contactId) resolvedContactId = data.contactId;
+      }
     } catch {
-      // Non-blocking — proceed to redirect regardless.
+      // Network error — fall through to failure branch.
     }
+    if (!ok) {
+      setCouponStatus("invalid");
+      return;
+    }
+    setCouponStatus("applied");
     const target = resolvedContactId
       ? `${BETA_MID_ANALYSIS_URL}?contact_id=${encodeURIComponent(resolvedContactId)}`
       : BETA_MID_ANALYSIS_URL;
@@ -286,7 +299,7 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
               </div>
               {couponStatus === "invalid" && (
                 <p className="text-sm text-destructive font-mono text-center">
-                  That code isn't recognized. Double-check spelling.
+                  We couldn't apply that code. Check the spelling, or try again in a moment.
                 </p>
               )}
               <p className="text-xs text-muted-foreground text-center">
