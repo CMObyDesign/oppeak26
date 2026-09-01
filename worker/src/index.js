@@ -1562,14 +1562,22 @@ function answersFromContactFields(contact) {
 // via the /report/{contactId} URL. Without protection anyone can POST here with
 // tier=paid_297 and get a Business Playbook generated + swot_paid_297 tag applied.
 // Two-layer defense:
-//   1. Shared secret in x-webhook-secret header (set env.WEBHOOK_SECRET + the same
-//      value on the GHL workflow's webhook step). Required when configured.
+//   1. Shared secret compared to env.WEBHOOK_SECRET. Accepted via EITHER
+//      `x-webhook-secret: <secret>` OR `Authorization: Bearer <secret>` — GHL's
+//      webhook UI stores the secret as a "Bearer token" that it sends as an
+//      Authorization header, while other clients typically use the custom
+//      x-webhook-secret header. Both are checked so the same env value works
+//      for whichever pattern the caller uses.
 //   2. For paid tiers, verify the contact ALREADY carries the matching swot_paid_*
 //      tag applied by the payment workflow. Free tier is unrestricted since it
 //      corresponds to an intake with no gate.
 async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   if (env.WEBHOOK_SECRET) {
-    const provided = request.headers.get("x-webhook-secret");
+    const headerSecret = request.headers.get("x-webhook-secret");
+    const authHeader = request.headers.get("Authorization") || request.headers.get("authorization") || "";
+    const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+    const bearerSecret = bearerMatch ? bearerMatch[1].trim() : null;
+    const provided = headerSecret || bearerSecret;
     if (!provided || provided !== env.WEBHOOK_SECRET) {
       return json({ success: false, error: "Unauthorized" }, 401);
     }
@@ -1818,7 +1826,7 @@ export default {
         return json({
           configured: Boolean(s),
           length: typeof s === "string" ? s.length : 0,
-          hint: "Both the worker (WEBHOOK_SECRET env) and each GHL webhook action's x-webhook-secret header must match exactly. If configured is false, add the secret in Cloudflare → Workers → swot-engine → Settings → Variables and redeploy.",
+          hint: "Accepted as either 'x-webhook-secret: <secret>' or 'Authorization: Bearer <secret>' — use whichever your webhook client (GHL uses Bearer) supports. If configured is false, add WEBHOOK_SECRET in Cloudflare → Workers → swot-engine → Settings → Variables and redeploy.",
         });
       }
       return json({ success: false, error: "Not found" }, 404);
