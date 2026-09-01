@@ -1484,21 +1484,90 @@ async function fetchGHLContact(contactId, env) {
   return data?.contact || null;
 }
 
+// Per-worker-instance cache for the location's custom-fields catalog.
+// GHL's /contacts/{id} response returns customFields as bare {id, value};
+// we hit /locations/{loc}/customFields once to resolve IDs → {name, fieldKey},
+// which we need for BOTH filtering out Solomon-owned fields on re-runs and
+// giving Solomon a real question label for paid-tier answers.
+let _ghlFieldCatalogCache = null;
+let _ghlFieldCatalogFetchedAt = 0;
+const GHL_FIELD_CATALOG_TTL_MS = 5 * 60 * 1000;
+
+async function fetchGHLCustomFieldsCatalog(env) {
+  if (!env.GHL_API_KEY) return {};
+  const now = Date.now();
+  if (_ghlFieldCatalogCache && (now - _ghlFieldCatalogFetchedAt) < GHL_FIELD_CATALOG_TTL_MS) {
+    return _ghlFieldCatalogCache;
+  }
+  const locationId = env.GHL_LOCATION_ID || CONFIG.GHL_LOCATION_ID;
+  const url = `${CONFIG.GHL_API_BASE}/locations/${locationId}/customFields`;
+  try {
+    const res = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${env.GHL_API_KEY}`,
+        Version: "2021-07-28",
+      },
+    });
+    if (!res.ok) {
+      console.warn(`[fetchGHLCustomFieldsCatalog] ${res.status} — cannot resolve bare {id,value} payloads; using previous cache if any.`);
+      return _ghlFieldCatalogCache || {};
+    }
+    const data = await res.json().catch(() => ({}));
+    const list = data?.customFields || [];
+    const map = {};
+    for (const f of list) {
+      if (f && f.id) {
+        map[f.id] = {
+          name: f.name || null,
+          fieldKey: f.fieldKey || f.key || null,
+          dataType: f.dataType || null,
+        };
+      }
+    }
+    _ghlFieldCatalogCache = map;
+    _ghlFieldCatalogFetchedAt = now;
+    return map;
+  } catch (e) {
+    console.warn(`[fetchGHLCustomFieldsCatalog] error: ${e?.message || e}`);
+    return _ghlFieldCatalogCache || {};
+  }
+}
+
 // Build the {question, answer} array Solomon expects from the contact's
-// custom fields. Fields listed in SURVEY_FIELD_MAP get their curated
-// question label. Unmapped fields (typically paid-tier questions whose
-// GHL IDs haven't been added to the map yet) fall back to the field's own
-// GHL-provided label (`name` / `fieldKey` / `key`) so their answers still
-// reach Solomon rather than being silently dropped. Fields with no label
-// available anywhere are dropped as truly opaque.
+// custom fields.
 //
-// The tradeoff — a fallback label like "monthly_revenue" isn't as precise
-// as a curated one like "What's your monthly recurring revenue?", but it
-// is far more informative than losing the answer entirely. Adding paid-tier
-// IDs to SURVEY_FIELD_MAP is still the preferred long-term fix.
-function answersFromContactFields(contact) {
+// GHL's /contacts/{id} endpoint returns customFields as bare {id, value} —
+// the name / fieldKey metadata lives on /locations/{loc}/customFields
+// instead. We fetch that catalog once per worker instance (5-min TTL) and
+// hydrate every bare payload before applying filters or labels. Without
+// hydration, name-based exclusions like "swot_" prefix can't fire on
+// bare payloads and Solomon-owned fields (swot_297_score,
+// swot_last_event_type, swot_internal_notes, etc.) would leak back into
+// intake on re-runs.
+//
+// Labeling precedence: SURVEY_FIELD_MAP (curated) → catalog name →
+// catalog fieldKey. Fields that remain unresolved after hydration are
+// DROPPED — feeding an opaque "field <id>" label alongside a raw dollar
+// amount is worse than a missing answer, because Solomon cannot tell
+// whether "$150000" is total-debt, monthly-service, or annual-revenue.
+async function answersFromContactFields(contact, env) {
   const cfs = contact?.customFields || [];
   const dropped = [];
+  const catalog = env ? await fetchGHLCustomFieldsCatalog(env) : {};
+
+  // Hydrate: merge each bare {id, value} with the catalog's {name, fieldKey}
+  // so downstream filters and labelers see the same shape whether GHL
+  // returned bare or enriched payloads.
+  const hydrated = cfs.map(f => {
+    if (!f || !f.id) return f;
+    const meta = catalog[f.id];
+    if (!meta) return f;
+    return {
+      ...f,
+      name: f.name || meta.name || null,
+      fieldKey: f.fieldKey || f.key || meta.fieldKey || null,
+    };
+  });
 
   // Exclusion filters. A field is dropped when ANY match:
   //   1. Solomon-owned by ID (SOLOMON_OWNED_FIELDS above)
@@ -1527,7 +1596,7 @@ function answersFromContactFields(contact) {
            /\.(pdf|xlsx|xls|csv|docx?|png|jpg|jpeg)(\?|$)/i.test(v);
   };
 
-  const mapped = cfs
+  const mapped = hydrated
     .filter(f => f && f.value && String(f.value).trim())
     .filter(f => !SOLOMON_OWNED_FIELDS.has(f.id))
     .filter(f => !isSolomonOwnedByName(f))
@@ -1535,27 +1604,24 @@ function answersFromContactFields(contact) {
     .map(f => {
       const curated = SURVEY_FIELD_MAP[f.id];
       const fallback = f.name || f.fieldKey || f.key || null;
-      // Last-resort label — use the field ID itself so the answer still
-      // reaches Solomon even when GHL's API returns bare {id, value} with
-      // no name/key metadata. Solomon can reason from the answer content
-      // (a number, a phrase) even without knowing which question it
-      // corresponds to.
-      const idLabel = f.id ? `field ${f.id}` : null;
-      const question = curated || fallback || idLabel;
+      const question = curated || fallback || null;
       if (!question) {
-        dropped.push(f.id);
+        // Unresolved after catalog hydration — drop rather than feed an
+        // opaque label. A dollar amount without its question would let
+        // Solomon guess wrong about which number answers which prompt.
+        dropped.push(f.id || "(no id)");
         return null;
       }
       return {
         question,
         answer: String(f.value).trim(),
-        _source: curated ? "mapped" : fallback ? "fallback" : "id-only",
+        _source: curated ? "mapped" : "fallback",
       };
     })
     .filter(Boolean)
     .map(({ _source, ...rest }) => rest);
   if (dropped.length) {
-    console.warn(`[answersFromContactFields] Dropped ${dropped.length} field(s) with no id and no label: ${dropped.join(", ")}.`);
+    console.warn(`[answersFromContactFields] Dropped ${dropped.length} unresolved field(s) (no catalog match, no name/key): ${dropped.join(", ")}.`);
   }
   return mapped;
 }
@@ -1622,7 +1688,7 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
     }
   }
 
-  const answers = answersFromContactFields(contact);
+  const answers = await answersFromContactFields(contact, env);
   if (!answers.length) return json({ success: false, error: "No answers on this contact yet" }, 400);
 
   const contactPayload = {
