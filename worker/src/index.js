@@ -1140,6 +1140,7 @@ function isAllowedApplyOrigin(request) {
   const origin = request.headers.get("origin") || "";
   if (!origin) return false;
   if (ALLOWED_APPLY_ORIGINS.has(origin)) return true;
+  // Pages preview subdomains: <anything>.oppeak26.pages.dev
   try {
     const { hostname, protocol } = new URL(origin);
     if (protocol !== "https:") return false;
