@@ -1455,8 +1455,39 @@ async function fetchGHLContact(contactId, env) {
 function answersFromContactFields(contact) {
   const cfs = contact?.customFields || [];
   const dropped = [];
+
+  // Exclusion filters. A field is dropped when ANY match:
+  //   1. Solomon-owned by ID (SOLOMON_OWNED_FIELDS above)
+  //   2. Solomon-owned by name/key convention — anything whose key or name
+  //      starts with "swot_" / "SWOT " catches fields added to GHL after
+  //      the ID set was last updated (e.g. swot_297_score,
+  //      swot_last_event_type, swot_internal_notes) so re-runs don't feed
+  //      Solomon its own prior output as an intake answer.
+  //   3. File upload fields — their "value" is a URL to the uploaded file,
+  //      not analyzable text. Detected by the value being a URL string.
+  //      (A dedicated file-content pipeline would be the right long-term
+  //      fix; for now the LLM shouldn't see a raw URL as an "answer".)
+  const isSolomonOwnedByName = (f) => {
+    const key = String(f.key || f.fieldKey || "").toLowerCase();
+    const name = String(f.name || "").toLowerCase();
+    return key.startsWith("swot_") || key.startsWith("contact.swot_") ||
+           name.startsWith("swot ") || name === "internal notes";
+  };
+  const looksLikeFileUpload = (f) => {
+    const v = String(f.value || "").trim();
+    if (!/^https?:\/\//i.test(v)) return false;
+    const key = String(f.key || f.fieldKey || "").toLowerCase();
+    const name = String(f.name || "").toLowerCase();
+    return key.includes("file_upload") || key.includes("upload") ||
+           name.includes("file upload") || name.includes("upload") ||
+           /\.(pdf|xlsx|xls|csv|docx?|png|jpg|jpeg)(\?|$)/i.test(v);
+  };
+
   const mapped = cfs
-    .filter(f => f && f.value && String(f.value).trim() && !SOLOMON_OWNED_FIELDS.has(f.id))
+    .filter(f => f && f.value && String(f.value).trim())
+    .filter(f => !SOLOMON_OWNED_FIELDS.has(f.id))
+    .filter(f => !isSolomonOwnedByName(f))
+    .filter(f => !looksLikeFileUpload(f))
     .map(f => {
       const curated = SURVEY_FIELD_MAP[f.id];
       const fallback = f.name || f.fieldKey || f.key || null;
