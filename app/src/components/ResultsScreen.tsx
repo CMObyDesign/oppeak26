@@ -1,15 +1,21 @@
+import { useState } from "react";
+import { useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
 import { SwotQuadrant } from "./SwotQuadrant";
 import { GapCard } from "./GapCard";
 import { OpportunityCard } from "./OpportunityCard";
 import { Button } from "@/components/ui/button";
-import { Activity, Target, CheckCircle2, ShieldCheck, Zap, Users, BarChart3, Calculator, Calendar } from "lucide-react";
+import { Input } from "./ui/input";
+import { Activity, Target, CheckCircle2, ShieldCheck, Zap, Users, BarChart3, Calculator, Calendar, Sparkles, ArrowRight } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import type { AgentReport } from "@/lib/assessment";
 import { CountdownTimer } from "./CountdownTimer";
 import { OFFERS, getRemainingTime } from "@/lib/offerTiming";
 import { PAYMENT_LINK_47, PAYMENT_LINK_297 } from "@/lib/ghl-config";
 import { navigateExternal } from "@/lib/navigate-external";
+
+const BETA_MID_ANALYSIS_URL = "https://success.cfobydesign.com/mid-analysis";
+const APPLY_SOLOMON50_URL = "https://swot-engine.cfobydesign.workers.dev/apply-solomon50";
 
 interface ResultsScreenProps {
   report: AgentReport | null;
@@ -27,6 +33,35 @@ const PATH_STYLE: Record<string, { score: string; badge: string }> = {
 };
 
 export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: ResultsScreenProps) => {
+  const location = useLocation();
+  const isBeta = location.pathname.startsWith("/beta");
+  const [couponCode, setCouponCode] = useState("");
+  const [couponStatus, setCouponStatus] = useState<"idle" | "invalid" | "applying" | "applied">("idle");
+
+  const handleApplyCoupon = async () => {
+    const code = couponCode.trim().toUpperCase();
+    if (code !== "SOLOMON50") {
+      setCouponStatus("invalid");
+      return;
+    }
+    setCouponStatus("applying");
+    // Best-effort tag write to worker for beta cohort tracking.
+    if (leadData?.contactId) {
+      try {
+        await fetch(APPLY_SOLOMON50_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ contactId: leadData.contactId, code }),
+        });
+      } catch {
+        // Non-blocking — proceed to redirect regardless.
+      }
+    }
+    const target = leadData?.contactId
+      ? `${BETA_MID_ANALYSIS_URL}?contact_id=${encodeURIComponent(leadData.contactId)}`
+      : BETA_MID_ANALYSIS_URL;
+    navigateExternal(target);
+  };
   if (error || !report) {
     return (
       <div className="w-full max-w-2xl mx-auto pt-48 md:pt-64 pb-32 px-4 text-center space-y-6">
@@ -187,52 +222,110 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
         </p>
       </div>
 
-      {/* CTAs — branched by tier */}
+      {/* CTAs — branched by tier + beta-vs-regular for the free tier */}
       {report.tier === "free" ? (
         <div className="text-center space-y-6 py-10 max-w-2xl mx-auto">
           <div className="p-4 rounded-xl border border-white/5 bg-secondary/20 text-muted-foreground text-sm">
             We've sent a copy to <span className="font-medium text-foreground">{leadData?.email || "your email"}</span> — check your inbox in the next minute.
           </div>
-          <div className="space-y-4">
-            <div className="flex justify-center">
-              <CountdownTimer 
-                durationHours={OFFERS.DIAGNOSTIC_47.durationHours} 
-                label={OFFERS.DIAGNOSTIC_47.label} 
-              />
-            </div>
-            {!getRemainingTime(OFFERS.DIAGNOSTIC_47.durationHours).isExpired ? (
-              <Button
-                onClick={() => {
-                  console.log("[Analytics] SWOT_UPGRADE_CLICK");
-                  navigateExternal(PAYMENT_LINK_47);
-                }}
-                className="w-full h-20 text-xl font-bold rounded-xl shadow-glow-gold transition-all hover:-translate-y-1 active:translate-y-0 bg-primary hover:bg-primary/90 text-primary-foreground relative overflow-hidden group"
-              >
-                <div className="relative z-10 flex flex-col items-center">
-                  <span>Get My Full Diagnosis + Strategy Session — $47</span>
-                  {!getRemainingTime(OFFERS.ACTION_BONUS_50.durationHours).isExpired && (
-                    <span className="text-[10px] uppercase tracking-widest text-primary-foreground/80 mt-1 font-mono">
-                      ⚡ Includes $50 Action Taker Bonus (24h only)
-                    </span>
-                  )}
-                </div>
-              </Button>
-            ) : (
-              <div className="p-6 rounded-xl border border-amber-500/20 bg-amber-500/5 text-amber-500 text-sm font-medium">
-                The limited-time $47 diagnostic offer has expired.
+          {isBeta ? (
+            /* Beta cohort: coupon input (SOLOMON50) that skips payment and
+               routes to the mid-analysis survey. Beta users cannot use the
+               regular payment link because HL requires a card even on 100%
+               off coupons. */
+            <div className="space-y-4 text-left">
+              <div className="flex items-center gap-2 justify-center">
+                <Sparkles className="h-4 w-4 text-primary" />
+                <p className="text-xs uppercase tracking-[0.3em] font-mono text-primary text-center">
+                  Beta Access — Complimentary Full Diagnostic
+                </p>
               </div>
-            )}
-          </div>
-          <Button
-            onClick={() => {
-              console.log("[Analytics] SWOT_DEEP_DIVE_CLICK");
-              navigateExternal(PAYMENT_LINK_297);
-            }}
-            variant="ghost"
-            className="w-full text-sm text-muted-foreground hover:text-foreground mt-4"
-          >
-            Want a full manual audit with a senior strategist? Learn about the Deep Dive — $297
-          </Button>
+              <p className="text-center text-muted-foreground text-sm">
+                Enter your beta code below to unlock the full analysis at no cost.
+              </p>
+              <div className="flex flex-col sm:flex-row gap-3 items-stretch">
+                <Input
+                  value={couponCode}
+                  onChange={(e) => {
+                    setCouponCode(e.target.value);
+                    if (couponStatus === "invalid") setCouponStatus("idle");
+                  }}
+                  placeholder="Enter code (e.g. SOLOMON50)"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="flex-1 h-14 text-base"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleApplyCoupon();
+                    }
+                  }}
+                  disabled={couponStatus === "applying" || couponStatus === "applied"}
+                />
+                <Button
+                  onClick={handleApplyCoupon}
+                  disabled={couponStatus === "applying" || couponStatus === "applied" || !couponCode.trim()}
+                  size="lg"
+                  className="h-14"
+                >
+                  {couponStatus === "applying" ? "Applying…" : couponStatus === "applied" ? "Applied ✓" : "Apply"}
+                  {couponStatus === "idle" && <ArrowRight className="ml-2 h-4 w-4" />}
+                </Button>
+              </div>
+              {couponStatus === "invalid" && (
+                <p className="text-sm text-destructive font-mono text-center">
+                  That code isn't recognized. Double-check spelling.
+                </p>
+              )}
+              <p className="text-xs text-muted-foreground text-center">
+                Beta cohort · Skip payment, go straight to the intake.
+              </p>
+            </div>
+          ) : (
+            /* Regular cohort: paid $47 upgrade via GHL payment link. */
+            <div className="space-y-4">
+              <div className="flex justify-center">
+                <CountdownTimer
+                  durationHours={OFFERS.DIAGNOSTIC_47.durationHours}
+                  label={OFFERS.DIAGNOSTIC_47.label}
+                />
+              </div>
+              {!getRemainingTime(OFFERS.DIAGNOSTIC_47.durationHours).isExpired ? (
+                <Button
+                  onClick={() => {
+                    console.log("[Analytics] SWOT_UPGRADE_CLICK");
+                    navigateExternal(PAYMENT_LINK_47);
+                  }}
+                  className="w-full h-20 text-xl font-bold rounded-xl shadow-glow-gold transition-all hover:-translate-y-1 active:translate-y-0 bg-primary hover:bg-primary/90 text-primary-foreground relative overflow-hidden group"
+                >
+                  <div className="relative z-10 flex flex-col items-center">
+                    <span>Get My Full Diagnosis + Strategy Session — $47</span>
+                    {!getRemainingTime(OFFERS.ACTION_BONUS_50.durationHours).isExpired && (
+                      <span className="text-[10px] uppercase tracking-widest text-primary-foreground/80 mt-1 font-mono">
+                        ⚡ Includes $50 Action Taker Bonus (24h only)
+                      </span>
+                    )}
+                  </div>
+                </Button>
+              ) : (
+                <div className="p-6 rounded-xl border border-amber-500/20 bg-amber-500/5 text-amber-500 text-sm font-medium">
+                  The limited-time $47 diagnostic offer has expired.
+                </div>
+              )}
+            </div>
+          )}
+          {!isBeta && (
+            <Button
+              onClick={() => {
+                console.log("[Analytics] SWOT_DEEP_DIVE_CLICK");
+                navigateExternal(PAYMENT_LINK_297);
+              }}
+              variant="ghost"
+              className="w-full text-sm text-muted-foreground hover:text-foreground mt-4"
+            >
+              Want a full manual audit with a senior strategist? Learn about the Deep Dive — $297
+            </Button>
+          )}
         </div>
       ) : (
         <div className="text-center space-y-6 py-10 max-w-2xl mx-auto">
