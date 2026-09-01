@@ -422,7 +422,7 @@ async function buildReportPage(reportBody, tierLabel, contactName, tier, env, co
         <h2>Your free report shows what's wrong.<br><em>The $47 version shows what to do about it.</em></h2>
         <p class="sub">Full 8–12 page report · Strategist brief · 30-minute session with a real fractional CFO. All delivered same day.</p>
 ${couponRow}
-        <a class="btn btn-primary" id="upgrade-cta" href="${paymentLink47}" data-payment-href="${paymentLink47}" data-beta-href="${upgrade47Href}">
+        <a class="btn btn-primary" id="upgrade-cta" target="_top" href="${paymentLink47}" data-payment-href="${paymentLink47}" data-beta-href="${upgrade47Href}">
           <span id="upgrade-label">Upgrade to Full Diagnostic — $47</span>
           <span class="arrow">→</span>
         </a>
@@ -436,10 +436,10 @@ ${couponScript}
         <p class="eyebrow gold">FROM DIAGNOSIS TO EXECUTION</p>
         <h2>You have the diagnosis.<br><em>Now let's build the intervention.</em></h2>
         <p class="sub">The Deep Dive is a 90-day engagement with a real CFO who walks the plan with you — Business Playbook, weekly check-ins, hands-on implementation.</p>
-        <a class="btn btn-primary" href="${upgrade297Href}">Upgrade to Deep Dive — <span style="text-decoration:line-through;opacity:0.6;font-weight:400;">$297</span> $150 <span class="arrow">→</span></a>
+        <a class="btn btn-primary" target="_top" href="${upgrade297Href}">Upgrade to Deep Dive — <span style="text-decoration:line-through;opacity:0.6;font-weight:400;">$297</span> $150 <span class="arrow">→</span></a>
         <p class="micro" style="margin-top:8px;">◆ Action-Taker Discount · $147 off, limited-time</p>
         <p class="micro">Or book your included 30-minute strategy call first:<br>
-          <a class="ghost-link" href="${bookingLink47}">Book my strategy session →</a></p>
+          <a class="ghost-link" target="_top" href="${bookingLink47}">Book my strategy session →</a></p>
       </div>`;
   } else if (tier === "paid_297") {
     cta = `
@@ -457,7 +457,7 @@ ${couponScript}
         </div>
         <p class="micro" style="margin-top:22px;">
           Trouble with the calendar?
-          <a class="ghost-link" href="${bookingLink297}${emailParam}" target="_blank" rel="noopener">Open booking in a new window →</a>
+          <a class="ghost-link" target="_top" href="${bookingLink297}${emailParam}">Open booking →</a>
         </p>
       </div>`;
   }

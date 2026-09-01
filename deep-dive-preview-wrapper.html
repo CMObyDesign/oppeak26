@@ -278,7 +278,13 @@
         <span class="price-now">$150</span>
       </div>
       <p class="price-tag">◆ Action-Taker Discount · $147 off</p>
-      <a class="cta-btn" href="https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0">
+      <!--
+        target="_top" breaks the click out of the funnel iframe so the
+        payment page fills the whole tab. Without it the payment link
+        loads inside the small iframe container and reads as broken.
+      -->
+      <a class="cta-btn" target="_top"
+         href="https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0">
         Reserve My Deep Dive → $150
       </a>
       <span class="cta-micro">
