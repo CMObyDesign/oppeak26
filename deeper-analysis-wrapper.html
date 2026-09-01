@@ -1,0 +1,264 @@
+<!--
+  Paste-in HTML block for success.cfobydesign.com/deeper-analysis
+  (the Deep Dive / paid_297 survey page).
+
+  In GHL funnel builder: add a "Custom Code" / "HTML" block to the top of the
+  page, paste EVERYTHING between the two lines below. It renders a fully
+  branded intro (matching the CFO by Design dark palette + Playfair Display
+  serif) with a clear explainer of what happens next, trust markers, and a
+  wrapper container for the survey.
+
+  The survey iframe goes inside <div id="cfobd-survey-mount"> — replace the
+  placeholder <iframe> src with the real paid_297 survey URL (the one that
+  currently sits on this page). Everything else is inert markup.
+
+  ─── COPY FROM HERE ───
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  /* Scope everything under .cfobd-deep to avoid clashing with GHL styles */
+  .cfobd-deep, .cfobd-deep * { box-sizing: border-box; }
+  .cfobd-deep {
+    background: linear-gradient(180deg, #0a0e14 0%, #12181f 100%);
+    color: #f2ecdf;
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding: 56px 20px 32px;
+    min-height: 100vh;
+  }
+  .cfobd-deep .wrap { max-width: 920px; margin: 0 auto; }
+  .cfobd-deep .header { text-align: center; margin-bottom: 44px; }
+  .cfobd-deep .logo {
+    height: 68px; width: auto; object-fit: contain;
+    filter: brightness(1.5);
+    margin: 0 auto 30px;
+    display: block;
+  }
+  .cfobd-deep .eyebrow {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
+    color: #d4b565; margin: 0 0 18px;
+  }
+  .cfobd-deep h1 {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-weight: 700; font-size: clamp(30px, 4.5vw, 46px);
+    line-height: 1.12; margin: 0 0 20px; color: #f2ecdf;
+  }
+  .cfobd-deep h1 em { color: #d4b565; font-style: italic; font-weight: 500; }
+  .cfobd-deep .lede {
+    font-size: 18px; line-height: 1.6; color: #a8b0bd;
+    max-width: 660px; margin: 0 auto;
+  }
+
+  .cfobd-deep .trust-row {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px; margin: 36px 0 44px;
+  }
+  @media (max-width: 640px) { .cfobd-deep .trust-row { grid-template-columns: 1fr; } }
+  .cfobd-deep .trust-cell {
+    background: rgba(212, 181, 101, 0.06);
+    border: 1px solid rgba(212, 181, 101, 0.18);
+    border-radius: 10px;
+    padding: 18px 16px;
+    text-align: center;
+  }
+  .cfobd-deep .trust-cell .num {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 26px; color: #d4b565; font-weight: 600; line-height: 1;
+    margin-bottom: 6px; display: block;
+  }
+  .cfobd-deep .trust-cell .lbl {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: #a8b0bd;
+  }
+
+  .cfobd-deep .plan-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    padding: 28px 30px;
+    margin: 0 0 40px;
+  }
+  .cfobd-deep .plan-title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 20px; font-weight: 600; color: #f2ecdf;
+    margin: 0 0 18px;
+  }
+  .cfobd-deep .plan-list {
+    list-style: none; padding: 0; margin: 0;
+    display: grid; gap: 14px;
+  }
+  .cfobd-deep .plan-list li {
+    display: grid; grid-template-columns: 32px 1fr; gap: 14px;
+    align-items: start;
+  }
+  .cfobd-deep .step {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #d4b565; color: #0a0e14;
+    font-family: 'Playfair Display', serif; font-weight: 700;
+    font-size: 14px;
+  }
+  .cfobd-deep .step-title {
+    color: #f2ecdf; font-weight: 600; font-size: 15px; margin: 4px 0 4px;
+  }
+  .cfobd-deep .step-body {
+    color: #a8b0bd; font-size: 14px; line-height: 1.55; margin: 0;
+  }
+  .cfobd-deep .step-body strong { color: #d4b565; font-weight: 600; }
+
+  .cfobd-deep .divider {
+    text-align: center; margin: 6px 0 26px;
+    color: #6d7480; font-family: ui-monospace, Menlo, monospace;
+    font-size: 10px; letter-spacing: 0.3em; text-transform: uppercase;
+  }
+  .cfobd-deep .divider::before,
+  .cfobd-deep .divider::after {
+    content: ""; display: inline-block; height: 1px; width: 40px;
+    background: rgba(212, 181, 101, 0.3);
+    vertical-align: middle; margin: 0 14px;
+  }
+
+  .cfobd-deep .survey-card {
+    background: #fafaf7;
+    border-radius: 14px;
+    box-shadow: 0 30px 60px -20px rgba(0, 0, 0, 0.5);
+    overflow: hidden;
+    margin: 0 0 32px;
+  }
+  .cfobd-deep .survey-card iframe {
+    display: block; width: 100%; min-height: 780px; border: 0;
+  }
+
+  .cfobd-deep .pay-note {
+    text-align: center; padding: 22px 20px;
+    background: rgba(212, 181, 101, 0.08);
+    border: 1px solid rgba(212, 181, 101, 0.22);
+    border-radius: 10px;
+    color: #f2ecdf; font-size: 14px; line-height: 1.55;
+    margin-bottom: 18px;
+  }
+  .cfobd-deep .pay-note .amt {
+    color: #d4b565; font-weight: 700;
+    font-family: 'Playfair Display', serif; font-size: 18px;
+  }
+  .cfobd-deep .footer {
+    text-align: center; color: #6d7480; font-size: 12px;
+    padding-top: 26px; margin-top: 28px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+  }
+  .cfobd-deep .footer a { color: #d4b565; text-decoration: none; }
+  .cfobd-deep .footer a:hover { text-decoration: underline; }
+</style>
+
+<section class="cfobd-deep">
+  <div class="wrap">
+
+    <div class="header">
+      <img class="logo"
+           src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png"
+           alt="CFO By Design">
+      <p class="eyebrow">Step 2 of 2 · Deep Dive Intake</p>
+      <h1>Nine questions. A real CFO. <em>Your 90-day playbook.</em></h1>
+      <p class="lede">
+        This is the intake we walk through with our highest-value clients before
+        they sit down with a strategist. Your answers become the working brief
+        your CFO uses to build the Playbook — so the first minute of the call is
+        already useful.
+      </p>
+    </div>
+
+    <div class="trust-row">
+      <div class="trust-cell">
+        <span class="num">1:1</span>
+        <span class="lbl">Real CFO, not automation</span>
+      </div>
+      <div class="trust-cell">
+        <span class="num">24 h</span>
+        <span class="lbl">Playbook delivered</span>
+      </div>
+      <div class="trust-cell">
+        <span class="num">50 min</span>
+        <span class="lbl">Deep Dive strategy session</span>
+      </div>
+    </div>
+
+    <div class="plan-card">
+      <p class="plan-title">Here's what happens next</p>
+      <ol class="plan-list">
+        <li>
+          <span class="step">1</span>
+          <div>
+            <div class="step-title">Answer the intake below</div>
+            <p class="step-body">
+              Nine questions covering revenue, debt posture, cash flow, and the
+              specific decisions you're weighing. Takes about 6 minutes. Every
+              answer feeds directly into the strategist brief.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="step">2</span>
+          <div>
+            <div class="step-title">Secure your seat — <strong>$150</strong></div>
+            <p class="step-body">
+              Right after you submit, you'll be routed to checkout to reserve
+              your Deep Dive. One-time payment. No subscription. This is what
+              locks in the CFO's calendar block and the Playbook build.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="step">3</span>
+          <div>
+            <div class="step-title">CFO builds your Business Playbook (24 h)</div>
+            <p class="step-body">
+              Custom-written to your intake — priorities ranked, cash-flow model,
+              and the exact next moves for the next 90 days. Delivered to your
+              inbox before your call.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="step">4</span>
+          <div>
+            <div class="step-title">50-minute Deep Dive on the calendar</div>
+            <p class="step-body">
+              Walk the plan with your strategist. Not a sales pitch — this is the
+              working session where decisions get made and next moves are
+              committed.
+            </p>
+          </div>
+        </li>
+      </ol>
+    </div>
+
+    <p class="divider">Begin intake</p>
+
+    <div class="pay-note">
+      <span class="amt">$150</span> · one-time · charged after you submit ·
+      no card entered until step 2
+    </div>
+
+    <!-- Survey iframe mount. Replace the src below with the paid_297 GHL survey URL. -->
+    <div class="survey-card" id="cfobd-survey-mount">
+      <iframe
+        src="https://my.cfobydesign.com/widget/survey/REPLACE_WITH_PAID_297_SURVEY_ID"
+        title="Deep Dive intake — 9 questions"
+        loading="lazy"
+        allow="clipboard-write"
+      ></iframe>
+    </div>
+
+    <div class="footer">
+      Questions before you start? Email
+      <a href="mailto:support@cfobydesign.com">support@cfobydesign.com</a> — a
+      strategist will get back to you the same day.
+    </div>
+
+  </div>
+</section>
+<!-- ─── COPY UP TO HERE ─── -->

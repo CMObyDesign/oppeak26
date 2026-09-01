@@ -1946,13 +1946,18 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   // the GHL payment workflow). Prevents a valid webhook secret from being used
   // to escalate a free lead's tier and generate paid content without payment.
   if (tier === "paid_47" || tier === "paid_297") {
-    // Accept either the real paid tag (applied by GHL payment workflow) OR
-    // the beta cohort tag (applied when a user redeems SOLOMON50) for the
-    // paid_47 gate. paid_297 still requires the real paid tag — no beta
-    // bypass for the $297 deep dive.
-    const acceptedTags = tier === "paid_297"
-      ? ["swot_paid_297"]
-      : ["swot_paid_47", "swot_solomon50_applied"];
+    // Gate policy per tier:
+    //   paid_47  — require swot_paid_47 (real payment) OR swot_solomon50_applied
+    //              (beta cohort). Payment already cleared upstream.
+    //   paid_297 — the Deep Dive uses a sell-first flow: user hits this
+    //              endpoint via the tier 3 survey BEFORE they pay, so we
+    //              cannot require swot_paid_297. Instead require that the
+    //              contact is already a paid_47 customer (or SOLOMON50
+    //              beta), i.e. someone Solomon has already vetted at the
+    //              earlier tier. The $150 payment workflow applies
+    //              swot_paid_297 + swot_report_ready_paid_297 later, which
+    //              is what actually unlocks the report page + delivery email.
+    const acceptedTags = ["swot_paid_47", "swot_paid_297", "swot_solomon50_applied"];
     const contactTags = (contact.tags || []).map(t => String(t).toLowerCase());
     if (!acceptedTags.some(t => contactTags.includes(t))) {
       return json({
@@ -2020,22 +2025,29 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   fields.push({ key: "swot_report_path", field_value: `${requestUrl.origin}/report/${contactId}` });
   if (tier === "paid_297") fields.push({ key: "swot_deep_dive_booked", field_value: "true" });
 
-  // All tags lowercase. Two tags fire per report generation:
-  //   - Lifecycle tag: swot_free_lead / swot_paid_47 / swot_paid_297
-  //     (For paid tiers, HL's payment workflow ALREADY applied swot_paid_*.
-  //      Re-applying is a no-op; worker also applies for parity in case of manual replays.)
-  //   - Report-ready tag: swot_report_ready_free / swot_report_ready_paid_47 / swot_report_ready_paid_297
-  //     THIS IS THE EMAIL TRIGGER. Fires only AFTER Solomon has written the report
-  //     to the contact — guarantees email templates don't render blank {{contact.swot_*_report}}.
-  // Plus: swot_path_* + opportunity flags (LLM-driven).
+  // Tag policy per tier:
+  //   free       — write swot_free_lead + report-ready tag (email fires).
+  //   paid_47    — write swot_paid_47 + report-ready tag. Payment already
+  //                cleared upstream; report gets delivered.
+  //   paid_297   — write ONLY the sell-them signal `swot_paid_297_pending`.
+  //                Do NOT apply swot_paid_297 or swot_report_ready_paid_297
+  //                yet — the /deep-dive-preview page will show a Solomon
+  //                teaser and route to checkout. GHL's $150 payment workflow
+  //                is the one that applies swot_paid_297 + the report-ready
+  //                tag after payment, so:
+  //                  - the Playbook email doesn't fire before payment
+  //                  - /report tier fallback keeps serving the paid_47
+  //                    Full Diagnostic until payment upgrades them
+  //                Solomon has still written business_playbook +
+  //                swot_strategist_brief to the contact so the preview
+  //                page can render a real teaser and the moment payment
+  //                clears there's nothing else to compute.
   const tierTag =
-    tier === "paid_297" ? "swot_paid_297"
+    tier === "paid_297" ? "swot_paid_297_pending"
     : tier === "paid_47" ? "swot_paid_47"
     : "swot_free_lead";
-  const reportReadyTag = `swot_report_ready_${tier.replace(/^paid_/, "")}`;
-  // Non-email-trigger tags are safe to apply concurrently with the writeback;
-  // reportReadyTag is the email trigger and must NOT fire until the report
-  // field write has landed, or the email renders with blank merge fields.
+  // paid_297 defers the report-ready email trigger to the payment workflow.
+  const reportReadyTag = tier === "paid_297" ? null : `swot_report_ready_${tier.replace(/^paid_/, "")}`;
   const lifecycleTags = [
     tierTag,
     `swot_path_${(agent.path || "").toLowerCase()}`,
@@ -2046,8 +2058,13 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
     // Chained: writeback must succeed before the email-trigger tag lands.
     // On failure we deliberately skip reportReadyTag so no empty-report email fires.
     updateGHLContact(contactId, fields, env).then(ok => {
-      if (ok) return addGHLTag(contactId, [reportReadyTag], env);
-      console.warn("[from-ghl-survey] Contact writeback failed; skipping reportReadyTag");
+      if (!ok) {
+        console.warn("[from-ghl-survey] Contact writeback failed; skipping reportReadyTag");
+        return;
+      }
+      if (reportReadyTag) return addGHLTag(contactId, [reportReadyTag], env);
+      // paid_297: writeback done, but the email-trigger tag deliberately
+      // waits for the payment workflow. Nothing to do here.
     }),
     addGHLTag(contactId, lifecycleTags, env),
     fireTrackingEvent({

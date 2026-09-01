@@ -1,0 +1,302 @@
+<!--
+  Paste-in HTML block for success.cfobydesign.com/deep-dive-preview
+  (the sell-them interstitial between the tier 3 survey submit and the $150
+  payment link).
+
+  Flow:
+    Full Diagnostic $47 report → click "$150 Deep Dive" → /deeper-analysis
+    (branded survey wrapper — see deeper-analysis-wrapper.html) → user
+    submits the survey → GHL post-submit redirect lands here → this page
+    shows Solomon's teaser and the payment CTA → payment → /report shows
+    the full Business Playbook.
+
+  In GHL funnel builder: create /deep-dive-preview funnel page. Add a
+  Custom Code / HTML block, paste EVERYTHING between the two markers.
+  GHL will substitute the {{contact.*}} merge tags at render time.
+
+  Wiring the user needs to do in GHL:
+    1. Paid_297 survey → post-submit URL:
+         /deep-dive-preview?cid={{contact.id}}
+    2. Payment link 297 → post-payment URL:
+         /report/{{contact.id}}   (worker's report page shows the Playbook
+                                    once payment applies swot_paid_297)
+    3. Payment workflow (already exists for $150):
+         on payment success, apply:
+           - swot_paid_297
+           - swot_report_ready_paid_297   (fires the Playbook delivery email)
+
+  ─── COPY FROM HERE ───
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  .cfobd-preview, .cfobd-preview * { box-sizing: border-box; }
+  .cfobd-preview {
+    background: linear-gradient(180deg, #0a0e14 0%, #12181f 100%);
+    color: #f2ecdf;
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding: 56px 20px 32px;
+    min-height: 100vh;
+  }
+  .cfobd-preview .wrap { max-width: 880px; margin: 0 auto; }
+
+  /* Header */
+  .cfobd-preview .header { text-align: center; margin-bottom: 40px; }
+  .cfobd-preview .logo {
+    height: 68px; width: auto; object-fit: contain;
+    filter: brightness(1.5);
+    margin: 0 auto 30px; display: block;
+  }
+  .cfobd-preview .eyebrow {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
+    color: #4ade80; margin: 0 0 18px;
+  }
+  .cfobd-preview .eyebrow .dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    background: #4ade80; margin-right: 8px; vertical-align: middle;
+    animation: cfobd-pulse 1.6s infinite;
+  }
+  @keyframes cfobd-pulse { 0%,100%{opacity:.55;} 50%{opacity:1;} }
+  .cfobd-preview h1 {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-weight: 700; font-size: clamp(30px, 4.5vw, 48px);
+    line-height: 1.1; margin: 0 0 20px; color: #f2ecdf;
+  }
+  .cfobd-preview h1 em { color: #d4b565; font-style: italic; font-weight: 500; }
+  .cfobd-preview .lede {
+    font-size: 18px; line-height: 1.6; color: #a8b0bd;
+    max-width: 620px; margin: 0 auto;
+  }
+
+  /* Teaser card — shows Solomon's swot_strategist_brief */
+  .cfobd-preview .teaser {
+    background: #fafaf7;
+    color: #1a1a1a;
+    border-radius: 14px;
+    padding: 34px 34px;
+    margin: 36px 0 44px;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,0.5);
+    position: relative;
+  }
+  .cfobd-preview .teaser::before {
+    content: "";
+    position: absolute; top: -1px; left: 24px; right: 24px;
+    height: 3px; border-radius: 3px 3px 0 0;
+    background: linear-gradient(90deg, #d4b565 0%, #c4a647 100%);
+  }
+  .cfobd-preview .teaser-eyebrow {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 10px; letter-spacing: 0.28em; text-transform: uppercase;
+    color: #92400e; margin: 0 0 12px;
+  }
+  .cfobd-preview .teaser-title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-weight: 700; font-size: 22px; color: #1a1a1a;
+    margin: 0 0 14px;
+  }
+  .cfobd-preview .teaser-body {
+    color: #374151; font-size: 16px; line-height: 1.65;
+    white-space: pre-wrap;
+  }
+  /* Fallback if the merge tag comes back empty — Nuxt-style hiding */
+  .cfobd-preview .teaser-body:empty::before {
+    content: "Your intake has been received. Your CFO is reviewing the specifics from your answers now — full analysis + Playbook delivered within 24 hours after you reserve your seat below.";
+    color: #6b7280; font-style: italic;
+  }
+
+  /* What's included */
+  .cfobd-preview .included {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
+    padding: 28px 30px;
+    margin: 0 0 36px;
+  }
+  .cfobd-preview .included-title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 20px; font-weight: 600; color: #f2ecdf;
+    margin: 0 0 18px;
+  }
+  .cfobd-preview .included-list {
+    list-style: none; padding: 0; margin: 0;
+    display: grid; gap: 14px;
+  }
+  .cfobd-preview .included-list li {
+    display: grid; grid-template-columns: 28px 1fr; gap: 14px;
+    align-items: start;
+    color: #d8dfe8; font-size: 15px; line-height: 1.55;
+  }
+  .cfobd-preview .check {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 24px; height: 24px; border-radius: 50%;
+    background: rgba(212,181,101,0.15); color: #d4b565;
+    font-weight: 700; font-size: 13px; margin-top: 2px;
+  }
+  .cfobd-preview .included-list li strong { color: #f2ecdf; font-weight: 600; }
+
+  /* Pricing + CTA */
+  .cfobd-preview .cta-card {
+    background: linear-gradient(180deg, rgba(212,181,101,0.10) 0%, rgba(212,181,101,0.04) 100%);
+    border: 1px solid rgba(212,181,101,0.28);
+    border-radius: 14px;
+    padding: 32px 30px;
+    text-align: center;
+    margin: 0 0 28px;
+  }
+  .cfobd-preview .price-row {
+    display: inline-flex; align-items: baseline; gap: 12px;
+    margin-bottom: 10px;
+  }
+  .cfobd-preview .price-was {
+    color: #6b7480; text-decoration: line-through;
+    font-family: 'Playfair Display', serif;
+    font-size: 22px; font-weight: 500;
+  }
+  .cfobd-preview .price-now {
+    color: #d4b565;
+    font-family: 'Playfair Display', serif;
+    font-size: 44px; font-weight: 700;
+    line-height: 1;
+  }
+  .cfobd-preview .price-tag {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: #a8b0bd; margin-bottom: 22px;
+  }
+  .cfobd-preview .cta-btn {
+    display: inline-block;
+    background: linear-gradient(180deg, #f2c94c 0%, #d4b565 100%);
+    color: #0a0e14;
+    font-family: 'DM Sans', sans-serif;
+    font-weight: 700; font-size: 17px;
+    padding: 16px 34px; border-radius: 10px;
+    text-decoration: none;
+    letter-spacing: 0.01em;
+    box-shadow: 0 12px 28px -8px rgba(212,181,101,0.5);
+    transition: transform 120ms ease, box-shadow 120ms ease;
+  }
+  .cfobd-preview .cta-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 16px 34px -8px rgba(212,181,101,0.65);
+  }
+  .cfobd-preview .cta-micro {
+    display: block;
+    margin-top: 16px;
+    color: #a8b0bd; font-size: 13px; line-height: 1.5;
+  }
+
+  /* Trust markers */
+  .cfobd-preview .trust {
+    text-align: center;
+    color: #6d7480; font-size: 12px; line-height: 1.7;
+    padding-top: 16px;
+  }
+  .cfobd-preview .trust strong { color: #d4b565; font-weight: 600; }
+
+  /* Support ghost link */
+  .cfobd-preview .support {
+    text-align: center;
+    margin-top: 34px; padding-top: 26px;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    color: #6d7480; font-size: 13px; line-height: 1.65;
+  }
+  .cfobd-preview .support a { color: #d4b565; text-decoration: none; }
+  .cfobd-preview .support a:hover { text-decoration: underline; }
+  .cfobd-preview .support .not-ready {
+    display: block; margin-top: 8px; font-size: 12px;
+  }
+</style>
+
+<section class="cfobd-preview">
+  <div class="wrap">
+
+    <div class="header">
+      <img class="logo"
+           src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png"
+           alt="CFO By Design">
+      <p class="eyebrow"><span class="dot"></span>Intake received · Solomon has reviewed your answers</p>
+      <h1>Your Playbook is <em>ready to build.</em></h1>
+      <p class="lede">
+        Solomon just finished a first-pass review of your intake — here's a
+        preview of what your CFO is going to walk you through. Reserve your
+        seat below to unlock the full Business Playbook and lock in your Deep
+        Dive session.
+      </p>
+    </div>
+
+    <!-- Teaser card — merge tag pulls Solomon's strategist brief that was
+         written by /from-ghl-survey. If the brief is empty (Solomon errored
+         or the run is still in-flight), the :empty::before fallback kicks in. -->
+    <div class="teaser">
+      <p class="teaser-eyebrow">Strategist brief · Preview</p>
+      <p class="teaser-title">Here's the frame your CFO is starting from</p>
+      <div class="teaser-body">{{contact.swot_strategist_brief}}</div>
+    </div>
+
+    <!-- What's included -->
+    <div class="included">
+      <p class="included-title">What your $150 secures</p>
+      <ul class="included-list">
+        <li>
+          <span class="check">✓</span>
+          <span><strong>The full Business Playbook</strong> — 10-15 pages,
+          custom-written by your CFO from your intake. Priorities ranked, cash-flow
+          model built to your inputs, exact next moves for the next 90 days.</span>
+        </li>
+        <li>
+          <span class="check">✓</span>
+          <span><strong>A 50-minute Deep Dive session</strong> with your CFO —
+          not a sales pitch, this is the working session where decisions get made
+          and next moves get committed.</span>
+        </li>
+        <li>
+          <span class="check">✓</span>
+          <span><strong>24-hour delivery</strong> — Playbook lands in your inbox
+          before your call. You'll walk into the session already prepped.</span>
+        </li>
+        <li>
+          <span class="check">✓</span>
+          <span><strong>The full analysis</strong> Solomon has already run — you'll
+          see everything, not just the preview above.</span>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Pricing + CTA -->
+    <div class="cta-card">
+      <div class="price-row">
+        <span class="price-was">$297</span>
+        <span class="price-now">$150</span>
+      </div>
+      <p class="price-tag">◆ Action-Taker Discount · $147 off</p>
+      <a class="cta-btn" href="https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0">
+        Reserve My Deep Dive → $150
+      </a>
+      <span class="cta-micro">
+        One-time payment. No subscription. Playbook + calendar link delivered
+        the moment payment clears.
+      </span>
+    </div>
+
+    <p class="trust">
+      <strong>Money-back guarantee.</strong> If the Playbook or the session
+      isn't the most useful hour you've spent on your business this quarter,
+      email us and we'll refund every dollar.
+    </p>
+
+    <div class="support">
+      Questions before you reserve? Email
+      <a href="mailto:support@cfobydesign.com">support@cfobydesign.com</a> —
+      real person, same day.
+      <span class="not-ready">
+        Not ready right now? Your intake is saved on your record — we'll email
+        you the preview so you can come back to it.
+      </span>
+    </div>
+
+  </div>
+</section>
+<!-- ─── COPY UP TO HERE ─── -->
