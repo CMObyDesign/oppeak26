@@ -11,6 +11,7 @@ import { ScrollArea } from "./ui/scroll-area";
 import { CountdownTimer } from "./CountdownTimer";
 import { OFFERS } from "@/lib/offerTiming";
 import { PAYMENT_LINK_297 } from "@/lib/ghl-config";
+import { navigateExternal } from "@/lib/navigate-external";
 
 interface PurchaseGateScreenProps {
   score: number;
@@ -70,7 +71,7 @@ export const PurchaseGateScreen = ({ score, path, onBack }: PurchaseGateScreenPr
     // window.location.href = session.url;
 
     setTimeout(() => {
-      window.open(PAYMENT_LINK_297, "_blank", "width=500,height=700");
+      navigateExternal(PAYMENT_LINK_297);
       setLoading(false);
     }, 1500);
   };
