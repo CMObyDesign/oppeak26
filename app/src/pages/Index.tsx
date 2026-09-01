@@ -10,6 +10,7 @@ import { FREE_ASSESSMENT_SECTIONS } from "@/data/freeAssessmentQuestions";
 import { formatAnswersForAgent, getReadableAnswer, runAssessment, AgentReport } from "@/lib/assessment";
 import { setAssessmentTimestamp } from "@/lib/offerTiming";
 import { IMAGE_LOGO } from "@/lib/ghl-config";
+import { requestParentScrollToTop } from "@/lib/iframe-resize";
 
 type ScreenState = "landing" | "assessment" | "analyzing" | "results" | "purchase" | "rehab";
 
@@ -96,7 +97,12 @@ const Index = () => {
   };
 
   useEffect(() => {
+    // Reset the iframe's inner viewport, then also ask the parent funnel
+    // page to scroll the iframe into view. Without the parent scroll, a
+    // user who was mid-page on the funnel when they clicked Next sees the
+    // fresh (often taller) screen well below their current scroll position.
     window.scrollTo(0, 0);
+    requestParentScrollToTop();
   }, [screen]);
 
   return (
