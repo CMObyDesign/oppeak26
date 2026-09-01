@@ -332,7 +332,8 @@ ${couponScript}
         <p class="eyebrow gold">FROM DIAGNOSIS TO EXECUTION</p>
         <h2>You have the diagnosis.<br><em>Now let's build the intervention.</em></h2>
         <p class="sub">The Deep Dive is a 90-day engagement with a real CFO who walks the plan with you — Business Playbook, weekly check-ins, hands-on implementation.</p>
-        <a class="btn btn-primary" href="${upgrade297Href}">Upgrade to Deep Dive — $297 <span class="arrow">→</span></a>
+        <a class="btn btn-primary" href="${upgrade297Href}">Upgrade to Deep Dive — <span style="text-decoration:line-through;opacity:0.6;font-weight:400;">$297</span> $150 <span class="arrow">→</span></a>
+        <p class="micro" style="margin-top:8px;">◆ Action-Taker Discount · $147 off, limited-time</p>
         <p class="micro">Or book your included 30-minute strategy call first:<br>
           <a class="ghost-link" href="${bookingLink47}">Book my strategy session →</a></p>
       </div>`;
