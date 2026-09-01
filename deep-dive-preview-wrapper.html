@@ -21,9 +21,20 @@
          /report/{{contact.id}}   (worker's report page shows the Playbook
                                     once payment applies swot_paid_297)
     3. Payment workflow (already exists for $150):
-         on payment success, apply:
-           - swot_paid_297
-           - swot_report_ready_paid_297   (fires the Playbook delivery email)
+         On payment success:
+           - apply swot_paid_297
+           - IF contact ALSO has swot_playbook_written:
+               apply swot_report_ready_paid_297  (fires the Playbook delivery email)
+             ELSE:
+               apply swot_playbook_missing (alert tag — notify staff to
+               investigate; do NOT fire the delivery email until the Playbook
+               is actually stored on the contact)
+         This double-gate prevents a rare failure mode where a transient
+         GHL writeback error means Solomon's Playbook never landed on the
+         contact record but payment cleared — without the second gate the
+         delivery email would render with a blank Playbook merge field.
+         swot_playbook_written is applied by /from-ghl-survey ONLY after
+         the contact writeback returns success.
 
   ─── COPY FROM HERE ───
 -->
@@ -221,46 +232,56 @@
       <h1>Your Playbook is <em>ready to build.</em></h1>
       <p class="lede">
         Solomon just finished a first-pass review of your intake — here's a
-        preview of what your CFO is going to walk you through. Reserve your
-        seat below to unlock the full Business Playbook and lock in your Deep
-        Dive session.
+        preview of what your CFO is going to walk you through. Your Playbook
+        comes in two parts: <strong style="color:#f2ecdf;">the written brief</strong>
+        delivered in 24 hours, and <strong style="color:#f2ecdf;">the Deep Dive
+        session</strong> where your CFO opens up the parts that need to be walked,
+        not read. Reserve your seat below to unlock both.
       </p>
     </div>
 
-    <!-- Teaser card — merge tag pulls Solomon's strategist brief that was
-         written by /from-ghl-survey. If the brief is empty (Solomon errored
-         or the run is still in-flight), the :empty::before fallback kicks in. -->
+    <!-- Teaser card — merge tag pulls Solomon's client-facing report opener
+         (swot_email_blurb), which is the 2-3 sentence hook Solomon writes
+         for the client's eyes. Deliberately NOT swot_strategist_brief:
+         that field is internal-only and contains upsell angles + the
+         consultant's opening tactic (see ASSESSMENT_RUBRIC in
+         worker/src/index.js). If the opener is empty (Solomon errored or
+         the run is still in-flight), the :empty::before fallback kicks in. -->
     <div class="teaser">
-      <p class="teaser-eyebrow">Strategist brief · Preview</p>
-      <p class="teaser-title">Here's the frame your CFO is starting from</p>
-      <div class="teaser-body">{{contact.swot_strategist_brief}}</div>
+      <p class="teaser-eyebrow">Solomon's read on your intake</p>
+      <p class="teaser-title">Here's what stood out</p>
+      <div class="teaser-body">{{contact.swot_email_blurb}}</div>
     </div>
 
-    <!-- What's included -->
+    <!-- What's included — the Playbook is intentionally two-part:
+         Part 1 is delivered as a document; Part 2 is what the consult
+         session dives deeper into (surface it in copy so the value of
+         the call is legible before payment). -->
     <div class="included">
       <p class="included-title">What your $150 secures</p>
       <ul class="included-list">
         <li>
-          <span class="check">✓</span>
-          <span><strong>The full Business Playbook</strong> — 10-15 pages,
+          <span class="check">1</span>
+          <span><strong>Playbook — Part 1: the written brief</strong> · 10-15 pages,
           custom-written by your CFO from your intake. Priorities ranked, cash-flow
-          model built to your inputs, exact next moves for the next 90 days.</span>
+          model built to your inputs, and the 3–5 moves that matter most in the
+          next 90 days. Delivered to your inbox within 24 hours — you'll walk into
+          the session already prepped.</span>
+        </li>
+        <li>
+          <span class="check">2</span>
+          <span><strong>Playbook — Part 2: the Deep Dive with your CFO</strong> ·
+          50-minute working session where your strategist opens up the parts of the
+          Playbook that need to be walked, not read: cash-flow model
+          walkthrough, debt-and-funding posture, priority sequencing, and the
+          judgment calls your intake surfaced. Not a sales pitch. This is where
+          decisions get made and next moves get committed.</span>
         </li>
         <li>
           <span class="check">✓</span>
-          <span><strong>A 50-minute Deep Dive session</strong> with your CFO —
-          not a sales pitch, this is the working session where decisions get made
-          and next moves get committed.</span>
-        </li>
-        <li>
-          <span class="check">✓</span>
-          <span><strong>24-hour delivery</strong> — Playbook lands in your inbox
-          before your call. You'll walk into the session already prepped.</span>
-        </li>
-        <li>
-          <span class="check">✓</span>
-          <span><strong>The full analysis</strong> Solomon has already run — you'll
-          see everything, not just the preview above.</span>
+          <span><strong>Everything Solomon has already run</strong> — the full
+          analysis behind the preview above, plus the extended reasoning your
+          CFO used to build Part 1.</span>
         </li>
       </ul>
     </div>
@@ -272,7 +293,13 @@
         <span class="price-now">$150</span>
       </div>
       <p class="price-tag">◆ Action-Taker Discount · $147 off</p>
-      <a class="cta-btn" href="https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0">
+      <!--
+        target="_top" breaks the click out of the funnel iframe so the
+        payment page fills the whole tab. Without it the payment link
+        loads inside the small iframe container and reads as broken.
+      -->
+      <a class="cta-btn" target="_top"
+         href="https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0">
         Reserve My Deep Dive → $150
       </a>
       <span class="cta-micro">
