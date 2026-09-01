@@ -45,20 +45,32 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
       return;
     }
     setCouponStatus("applying");
-    // Best-effort tag write to worker for beta cohort tracking.
-    if (leadData?.contactId) {
-      try {
-        await fetch(APPLY_SOLOMON50_URL, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contactId: leadData.contactId, code }),
-        });
-      } catch {
-        // Non-blocking — proceed to redirect regardless.
-      }
+    // Best-effort tag write to worker for beta cohort tracking. The worker
+    // accepts either contactId (preferred) or email (upserts by email so the
+    // tag write works even when the React lead-capture POST didn't create a
+    // GHL contact upstream — the common case when VITE_GHL_SURVEY_SUBMIT_URL
+    // isn't set on Cloudflare Pages). We capture the returned contactId so
+    // the mid-analysis redirect carries it and downstream tier gates work.
+    let resolvedContactId: string | undefined = leadData?.contactId;
+    try {
+      const res = await fetch(APPLY_SOLOMON50_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contactId: leadData?.contactId,
+          email: leadData?.email,
+          name: leadData?.name,
+          businessName: leadData?.businessName,
+          code,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data?.contactId) resolvedContactId = data.contactId;
+    } catch {
+      // Non-blocking — proceed to redirect regardless.
     }
-    const target = leadData?.contactId
-      ? `${BETA_MID_ANALYSIS_URL}?contact_id=${encodeURIComponent(leadData.contactId)}`
+    const target = resolvedContactId
+      ? `${BETA_MID_ANALYSIS_URL}?contact_id=${encodeURIComponent(resolvedContactId)}`
       : BETA_MID_ANALYSIS_URL;
     navigateExternal(target);
   };
