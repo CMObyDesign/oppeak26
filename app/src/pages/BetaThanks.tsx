@@ -10,7 +10,11 @@ const BETA_MID_ANALYSIS_URL =
 
 const BetaThanks = () => {
   const [searchParams] = useSearchParams();
-  const contactId = searchParams.get("contactId") || "";
+  const contactId = searchParams.get("contactId") || searchParams.get("contact_id") || "";
+  // Email may or may not be passed by the upstream redirect. When present it's
+  // strictly better than contactId: the /apply-solomon50 email path idempotently
+  // upserts and never depends on knowing an opaque ID. Prefer it when we have it.
+  const emailFromUrl = searchParams.get("email") || "";
   const [code, setCode] = useState("");
   const [status, setStatus] = useState<"idle" | "invalid" | "applying">("idle");
 
@@ -21,19 +25,35 @@ const BetaThanks = () => {
       return;
     }
     setStatus("applying");
-    if (contactId) {
-      try {
-        await fetch("https://swot-engine.cfobydesign.workers.dev/apply-solomon50", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ contactId, code: normalized }),
-        });
-      } catch {
-        // Best-effort — the tag write shouldn't block the beta redirect.
+
+    // Block navigation until the server confirms the tag was applied. Without
+    // confirmation, the user would reach the paid survey without
+    // swot_solomon50_applied, and the survey webhook would 403.
+    let ok = false;
+    let resolvedContactId = contactId;
+    try {
+      const payload: Record<string, string | undefined> = { code: normalized };
+      if (emailFromUrl) payload.email = emailFromUrl;
+      else if (contactId) payload.contactId = contactId;
+      const res = await fetch("https://swot-engine.cfobydesign.workers.dev/apply-solomon50", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok && data?.success) {
+        ok = true;
+        if (data?.contactId) resolvedContactId = data.contactId;
       }
+    } catch {
+      // Network error — fall through to failure branch below.
     }
-    const target = contactId
-      ? `${BETA_MID_ANALYSIS_URL}?contact_id=${encodeURIComponent(contactId)}`
+    if (!ok) {
+      setStatus("invalid");
+      return;
+    }
+    const target = resolvedContactId
+      ? `${BETA_MID_ANALYSIS_URL}?contact_id=${encodeURIComponent(resolvedContactId)}`
       : BETA_MID_ANALYSIS_URL;
     window.location.href = target;
   };
@@ -112,7 +132,7 @@ const BetaThanks = () => {
           </div>
           {status === "invalid" && (
             <p className="text-sm text-red-400 font-mono">
-              That code isn't recognized. Double-check spelling.
+              We couldn't apply that code. Check the spelling, or try again in a moment.
             </p>
           )}
         </div>
