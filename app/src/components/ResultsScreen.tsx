@@ -335,7 +335,7 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
               variant="ghost"
               className="w-full text-sm text-muted-foreground hover:text-foreground mt-4"
             >
-              Want a full manual audit with a senior strategist? Learn about the Deep Dive — $297
+              Want a full manual audit with a senior strategist? Learn about the Deep Dive — $150 (was $297)
             </Button>
           )}
         </div>
@@ -375,7 +375,7 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
               variant="ghost"
               className="w-full text-sm text-muted-foreground hover:text-foreground"
             >
-              Want a full manual audit with a senior strategist? Learn about the Deep Dive — $297
+              Want a full manual audit with a senior strategist? Learn about the Deep Dive — $150 (was $297)
             </Button>
           )}
         </div>

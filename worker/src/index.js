@@ -332,7 +332,8 @@ ${couponScript}
         <p class="eyebrow gold">FROM DIAGNOSIS TO EXECUTION</p>
         <h2>You have the diagnosis.<br><em>Now let's build the intervention.</em></h2>
         <p class="sub">The Deep Dive is a 90-day engagement with a real CFO who walks the plan with you — Business Playbook, weekly check-ins, hands-on implementation.</p>
-        <a class="btn btn-primary" href="${upgrade297Href}">Upgrade to Deep Dive — $297 <span class="arrow">→</span></a>
+        <a class="btn btn-primary" href="${upgrade297Href}">Upgrade to Deep Dive — <span style="text-decoration:line-through;opacity:0.6;font-weight:400;">$297</span> $150 <span class="arrow">→</span></a>
+        <p class="micro" style="margin-top:8px;">◆ Action-Taker Discount · $147 off, limited-time</p>
         <p class="micro">Or book your included 30-minute strategy call first:<br>
           <a class="ghost-link" href="${bookingLink47}">Book my strategy session →</a></p>
       </div>`;
@@ -1455,8 +1456,39 @@ async function fetchGHLContact(contactId, env) {
 function answersFromContactFields(contact) {
   const cfs = contact?.customFields || [];
   const dropped = [];
+
+  // Exclusion filters. A field is dropped when ANY match:
+  //   1. Solomon-owned by ID (SOLOMON_OWNED_FIELDS above)
+  //   2. Solomon-owned by name/key convention — anything whose key or name
+  //      starts with "swot_" / "SWOT " catches fields added to GHL after
+  //      the ID set was last updated (e.g. swot_297_score,
+  //      swot_last_event_type, swot_internal_notes) so re-runs don't feed
+  //      Solomon its own prior output as an intake answer.
+  //   3. File upload fields — their "value" is a URL to the uploaded file,
+  //      not analyzable text. Detected by the value being a URL string.
+  //      (A dedicated file-content pipeline would be the right long-term
+  //      fix; for now the LLM shouldn't see a raw URL as an "answer".)
+  const isSolomonOwnedByName = (f) => {
+    const key = String(f.key || f.fieldKey || "").toLowerCase();
+    const name = String(f.name || "").toLowerCase();
+    return key.startsWith("swot_") || key.startsWith("contact.swot_") ||
+           name.startsWith("swot ") || name === "internal notes";
+  };
+  const looksLikeFileUpload = (f) => {
+    const v = String(f.value || "").trim();
+    if (!/^https?:\/\//i.test(v)) return false;
+    const key = String(f.key || f.fieldKey || "").toLowerCase();
+    const name = String(f.name || "").toLowerCase();
+    return key.includes("file_upload") || key.includes("upload") ||
+           name.includes("file upload") || name.includes("upload") ||
+           /\.(pdf|xlsx|xls|csv|docx?|png|jpg|jpeg)(\?|$)/i.test(v);
+  };
+
   const mapped = cfs
-    .filter(f => f && f.value && String(f.value).trim() && !SOLOMON_OWNED_FIELDS.has(f.id))
+    .filter(f => f && f.value && String(f.value).trim())
+    .filter(f => !SOLOMON_OWNED_FIELDS.has(f.id))
+    .filter(f => !isSolomonOwnedByName(f))
+    .filter(f => !looksLikeFileUpload(f))
     .map(f => {
       const curated = SURVEY_FIELD_MAP[f.id];
       const fallback = f.name || f.fieldKey || f.key || null;

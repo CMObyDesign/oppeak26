@@ -100,10 +100,11 @@ export const PurchaseGateScreen = ({ score, path, onBack }: PurchaseGateScreenPr
           <div className="py-6 space-y-2">
             <p className="text-muted-foreground line-through text-lg font-mono">$1,500 typical CFO audit engagement</p>
             <div className="flex items-center justify-center gap-3">
-              <span className="text-4xl md:text-5xl font-display font-bold text-foreground">$297</span>
+              <span className="text-2xl md:text-3xl font-display font-bold text-muted-foreground line-through opacity-60">$297</span>
+              <span className="text-4xl md:text-5xl font-display font-bold text-primary">$150</span>
               <span className="text-muted-foreground text-xs md:text-sm font-medium">— Deep Dive Audit</span>
             </div>
-            <p className="text-primary font-mono text-xs uppercase tracking-widest">Delivered within 48 hours</p>
+            <p className="text-primary font-mono text-xs uppercase tracking-widest">◆ Action-Taker Discount · Delivered within 48 hours</p>
           </div>
         </div>
 
@@ -278,7 +279,7 @@ export const PurchaseGateScreen = ({ score, path, onBack }: PurchaseGateScreenPr
             disabled={loading || !formData.termsAccepted}
             className="w-full h-16 text-lg bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl shadow-glow-gold transition-all hover:scale-[1.02] disabled:opacity-50 disabled:hover:scale-100"
           >
-            {loading ? "Securing your checkout..." : "Pay $297 & Start My Audit →"}
+            {loading ? "Securing your checkout..." : "Pay $150 & Start My Audit →"}
           </Button>
 
           <div className="flex flex-col items-center gap-4 pt-4 border-t border-white/5">
