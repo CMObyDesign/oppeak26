@@ -22,16 +22,14 @@ function isEmbedded(): boolean {
 }
 
 function measureAndPost(): void {
-  // Use scrollHeight of the documentElement — the tallest of margin box,
-  // padding edges, and children. Works for absolutely-positioned children
-  // and dynamic content alike.
+  // Measure INTRINSIC content height only — no offsetHeight terms. offsetHeight
+  // on <html>/<body> reports the current viewport size (which the parent set
+  // when it sized the iframe), so including it in Math.max floors the reported
+  // height at the iframe's current height and it can never shrink. When the
+  // page grows smaller (a screen transition to a shorter view, wider viewport
+  // dropping wrap lines) we want the parent to tighten the iframe back.
   const el = document.documentElement;
-  const height = Math.max(
-    el.scrollHeight,
-    el.offsetHeight,
-    document.body.scrollHeight,
-    document.body.offsetHeight,
-  );
+  const height = Math.max(el.scrollHeight, document.body.scrollHeight);
   window.parent.postMessage({ type: MESSAGE_TYPE, height }, "*");
 }
 
