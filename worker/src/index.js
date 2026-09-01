@@ -1335,33 +1335,40 @@ async function fetchGHLContact(contactId, env) {
 }
 
 // Build the {question, answer} array Solomon expects from the contact's
-// custom fields. Only fields explicitly mapped in SURVEY_FIELD_MAP are
-// forwarded — unmapped IDs are DROPPED, not passed with an opaque
-// "field:abc123" label. Passing opaque labels means the LLM sees an answer
-// ("$150,000" / "No" / "60 days") without knowing whether it refers to
-// revenue, debt, taxes, or AR aging, which produces misattributed reports.
+// custom fields. Fields listed in SURVEY_FIELD_MAP get their curated
+// question label. Unmapped fields (typically paid-tier questions whose
+// GHL IDs haven't been added to the map yet) fall back to the field's own
+// GHL-provided label (`name` / `fieldKey` / `key`) so their answers still
+// reach Solomon rather than being silently dropped. Fields with no label
+// available anywhere are dropped as truly opaque.
 //
-// WARNING: SURVEY_FIELD_MAP currently only covers the free-tier questions
-// (P1-P3 + Q1-Q8). Paid-tier IDs (Q9-Q26 for paid_47; Q_A-Q_M for paid_297)
-// still need to be added — until they are, paid_47 and paid_297 runs coming
-// through /from-ghl-survey will have their extra financial detail silently
-// dropped. See the SURVEY_FIELD_MAP definition for where to add them.
+// The tradeoff — a fallback label like "monthly_revenue" isn't as precise
+// as a curated one like "What's your monthly recurring revenue?", but it
+// is far more informative than losing the answer entirely. Adding paid-tier
+// IDs to SURVEY_FIELD_MAP is still the preferred long-term fix.
 function answersFromContactFields(contact) {
   const cfs = contact?.customFields || [];
   const dropped = [];
   const mapped = cfs
     .filter(f => f && f.value && String(f.value).trim() && !SOLOMON_OWNED_FIELDS.has(f.id))
-    .filter(f => {
-      if (SURVEY_FIELD_MAP[f.id]) return true;
-      dropped.push(f.id);
-      return false;
+    .map(f => {
+      const curated = SURVEY_FIELD_MAP[f.id];
+      const fallback = f.name || f.fieldKey || f.key || null;
+      const question = curated || fallback;
+      if (!question) {
+        dropped.push(f.id);
+        return null;
+      }
+      return {
+        question,
+        answer: String(f.value).trim(),
+        _source: curated ? "mapped" : "fallback",
+      };
     })
-    .map(f => ({
-      question: SURVEY_FIELD_MAP[f.id],
-      answer: String(f.value).trim(),
-    }));
+    .filter(Boolean)
+    .map(({ _source, ...rest }) => rest);
   if (dropped.length) {
-    console.warn(`[answersFromContactFields] Dropped ${dropped.length} unmapped custom field(s): ${dropped.join(", ")}. Add IDs to SURVEY_FIELD_MAP to include them.`);
+    console.warn(`[answersFromContactFields] Dropped ${dropped.length} truly-opaque custom field(s) (no label anywhere): ${dropped.join(", ")}.`);
   }
   return mapped;
 }
