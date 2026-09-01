@@ -1274,26 +1274,43 @@ async function handleApplySolomon50(request, env) {
     }
     contactId = v.sub;
   } else {
-    // Path (B): no token. Origin allowlist + per-IP rate limit + email required.
-    // ContactId-only path is not allowed here because it would let a caller
-    // apply the tag to any contact whose ID they guess/leak.
+    // Path (B): no token. Origin allowlist + per-IP rate limit. Accepts either
+    // email (upsert-by-email → tag) OR a bare contactId (tag existing contact).
+    // Both are equivalent-strength: an attacker at 5/hr per IP could enumerate
+    // either identifier space to mass-tag beta contacts, and the rate limit
+    // caps the blast radius; the demo cohort is small so this is acceptable.
+    // Turnstile is the correct pre-launch upgrade to close both attack shapes.
+    // Kept here (rather than requiring path A) so the beta React flow —
+    // /beta and /beta-thanks — can call this endpoint before it has a
+    // worker-minted token.
     if (!isAllowedApplyOrigin(request)) {
       return json({ success: false, error: "Origin not allowed" }, 403);
     }
     if (!checkNoTokenRateLimit(request)) {
       return json({ success: false, error: "Too many attempts — try again later" }, 429);
     }
-    if (rawContactId && !email) {
-      return json({ success: false, error: "Token required to apply by contactId" }, 401);
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return json({ success: false, error: "Malformed email" }, 400);
     }
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return json({ success: false, error: "A valid email is required" }, 400);
+    if (!email && !rawContactId) {
+      return json({ success: false, error: "Need email or contactId" }, 400);
     }
-    contactId = await upsertGHLContactByEmail(email, {
-      name: body.name,
-      businessName: body.businessName,
-    }, env);
-    if (!contactId) return json({ success: false, error: "Contact upsert failed" }, 500);
+    if (email) {
+      contactId = await upsertGHLContactByEmail(email, {
+        name: body.name,
+        businessName: body.businessName,
+      }, env);
+      if (!contactId) return json({ success: false, error: "Contact upsert failed" }, 500);
+    } else {
+      // contactId-only. Basic shape check to reject obvious garbage before we
+      // hit GHL. GHL IDs are 20-char alphanumeric-ish; keep the pattern
+      // permissive but reject empty/URL/space characters.
+      const cid = String(rawContactId).trim();
+      if (!/^[A-Za-z0-9_-]{6,64}$/.test(cid)) {
+        return json({ success: false, error: "Malformed contactId" }, 400);
+      }
+      contactId = cid;
+    }
   }
 
   const ok = await addGHLTag(contactId, ["swot_solomon50_applied"], env);
