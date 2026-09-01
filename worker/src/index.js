@@ -488,6 +488,49 @@ ${couponScript}
     · <a href="https://www.cfobydesign.com/privacy">Privacy</a>
     · <a href="https://www.cfobydesign.com/tos">Terms</a>
   </footer>
+  <script>
+    // Iframe auto-resize bridge — mirrors app/src/lib/iframe-resize.ts on
+    // the React side so a GHL funnel page that embeds /report/{cid} can
+    // resize the iframe to fit content and eliminate nested scrollbars.
+    // No-op when NOT embedded (window.self === window.top).
+    (function () {
+      try {
+        if (window.self === window.top) return;
+      } catch (_) { /* cross-origin — treat as embedded */ }
+      document.documentElement.style.overflow = 'hidden';
+      document.body.style.overflow = 'hidden';
+      var scheduled = false;
+      function post() {
+        var el = document.documentElement;
+        var h = Math.max(
+          el.scrollHeight, el.offsetHeight,
+          document.body.scrollHeight, document.body.offsetHeight
+        );
+        window.parent.postMessage({ type: 'cfobd-iframe-height', height: h }, '*');
+      }
+      function schedule() {
+        if (scheduled) return;
+        scheduled = true;
+        requestAnimationFrame(function () { scheduled = false; post(); });
+      }
+      window.addEventListener('load', schedule);
+      window.addEventListener('resize', schedule);
+      try {
+        new MutationObserver(schedule).observe(document.body, {
+          subtree: true, childList: true, attributes: true, characterData: true
+        });
+      } catch (_) {}
+      try {
+        if (typeof ResizeObserver !== 'undefined') new ResizeObserver(schedule).observe(document.body);
+      } catch (_) {}
+      var polls = 0;
+      var pid = setInterval(function () {
+        schedule();
+        if (++polls >= 20) clearInterval(pid);
+      }, 500);
+      schedule();
+    })();
+  </script>
 </body>
 </html>`;
 }
