@@ -1,0 +1,73 @@
+<!--
+  Paste-in Custom Code block for the GHL funnel pages that embed the React
+  app iframe: /optin, /start, /mid-analysis (any page that hosts an
+  <iframe src="…oppeak26.pages.dev…">).
+
+  Handles two messages the app sends via window.postMessage:
+
+    { type: "cfobd-iframe-height", height: N }
+        Sent whenever the app's content changes size. We resize the iframe
+        so there are no nested scrollbars — the parent page scrolls the
+        whole thing as one scroll region.
+
+    { type: "cfobd-iframe-scrolltop" }
+        Sent on screen/route transitions (landing → assessment → analyzing
+        → results, etc.). We scroll the iframe's top edge back into view
+        so the user doesn't land mid-page on a taller screen.
+
+  Both are best-effort and safe to receive multiple times.
+
+  Configure IFRAME_SELECTOR below if you have more than one iframe on the
+  page or a non-obvious container ID.
+
+  ─── COPY FROM HERE ───
+-->
+<script>
+(function () {
+  // Adjust this if needed — matches the app iframe on this page.
+  var IFRAME_SELECTOR = 'iframe[src*="oppeak26.pages.dev"], iframe[src*="cfobydesign.com/optin"], iframe[src*="cfobydesign.com/beta"]';
+
+  var lastScrollAt = 0;
+  function throttleScroll() {
+    // Prevent scroll spam if the app sends multiple transitions rapidly.
+    var now = Date.now();
+    if (now - lastScrollAt < 400) return false;
+    lastScrollAt = now;
+    return true;
+  }
+
+  function findIframe() {
+    return document.querySelector(IFRAME_SELECTOR);
+  }
+
+  window.addEventListener("message", function (ev) {
+    var data = ev && ev.data;
+    if (!data || typeof data !== "object") return;
+
+    if (data.type === "cfobd-iframe-height" && typeof data.height === "number") {
+      var el = findIframe();
+      if (!el) return;
+      // Add a small buffer so any absolute-positioned tooltips near the
+      // bottom edge aren't clipped. Cap at 20 000 px as a sanity guard.
+      var h = Math.min(20000, Math.max(200, Math.ceil(data.height) + 12));
+      el.style.height = h + "px";
+      el.setAttribute("scrolling", "no");
+      return;
+    }
+
+    if (data.type === "cfobd-iframe-scrolltop") {
+      if (!throttleScroll()) return;
+      var el = findIframe();
+      if (!el) return;
+      // Scroll the iframe's top edge into view. Small offset accounts for
+      // the funnel's sticky header if there is one.
+      var rect = el.getBoundingClientRect();
+      var top = rect.top + window.pageYOffset - 12;
+      if (top < 0) top = 0;
+      window.scrollTo({ top: top, behavior: "smooth" });
+      return;
+    }
+  }, false);
+})();
+</script>
+<!-- ─── COPY UP TO HERE ─── -->

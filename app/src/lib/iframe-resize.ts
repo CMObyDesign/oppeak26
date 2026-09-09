@@ -11,6 +11,22 @@
 // Safe when NOT embedded: no-ops when window.self === window.top.
 
 const MESSAGE_TYPE = "cfobd-iframe-height";
+const SCROLL_MESSAGE_TYPE = "cfobd-iframe-scrolltop";
+
+/**
+ * Ask the parent funnel page to scroll the iframe into view at its top edge.
+ * Call this on a screen/route transition — window.scrollTo(0,0) inside the
+ * iframe only resets the iframe's inner viewport, so a user who was mid-scroll
+ * on the parent page sees the new (taller) screen well below their current
+ * position. The parent's message handler (see the paste-in snippet in the
+ * funnel wrapper docs) does the actual scroll — no-op if not embedded.
+ */
+export function requestParentScrollToTop(): void {
+  try {
+    if (window.self === window.top) return;
+    window.parent.postMessage({ type: SCROLL_MESSAGE_TYPE }, "*");
+  } catch { /* cross-origin — parent gets the message anyway */ }
+}
 
 function isEmbedded(): boolean {
   try {
