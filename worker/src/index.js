@@ -2069,7 +2069,7 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
     // Chained: writeback must succeed before either the email-trigger tag
     // (paid_47 / paid_297 replay / free) OR the paid_297-fresh writeback
     // signal tag (swot_playbook_written) lands.
-    updateGHLContact(contactId, fields, env).then(ok => {
+    updateGHLContact(contactId, fields, env).then(async ok => {
       if (!ok) {
         console.warn("[from-ghl-survey] Contact writeback failed; skipping post-write tags");
         return;
@@ -2080,7 +2080,21 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
       // stored on the contact. Payment workflow gates the delivery email
       // and swot_paid_297 on this tag — if it's missing, the payment
       // workflow should not fire the report-ready tag.
-      if (tier === "paid_297" && !alreadyPaid297) postWriteTags.push("swot_playbook_written");
+      if (tier === "paid_297" && !alreadyPaid297) {
+        postWriteTags.push("swot_playbook_written");
+        // Race guard: payment could have cleared between our initial
+        // fetchGHLContact (before the Claude call) and now (after the ~5-30s
+        // Solomon run + writeback). In that case the payment workflow saw
+        // no swot_playbook_written yet and withheld swot_report_ready_paid_297,
+        // and our alreadyPaid297 was false so we'd normally skip firing it
+        // ourselves. Re-check the tag NOW and apply the ready tag if payment
+        // landed during the run, so the delivery email isn't stranded.
+        const fresh = await fetchGHLContact(contactId, env).catch(() => null);
+        const nowPaid = fresh && (fresh.tags || [])
+          .map((t) => String(t).toLowerCase())
+          .includes("swot_paid_297");
+        if (nowPaid) postWriteTags.push("swot_report_ready_paid_297");
+      }
       if (postWriteTags.length) return addGHLTag(contactId, postWriteTags, env);
     }),
     addGHLTag(contactId, lifecycleTags, env),
