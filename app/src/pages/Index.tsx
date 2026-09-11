@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { LandingScreen } from "@/components/LandingScreen";
 import { AssessmentScreen } from "@/components/AssessmentScreen";
@@ -96,12 +96,22 @@ const Index = () => {
     else setScreen("purchase");
   };
 
+  // Skip the parent scroll on the very first invocation — that's the
+  // initial mount, not a user-triggered screen change. If the funnel page
+  // has intro content above the app iframe, scrolling the parent on load
+  // would jump past that content before the user has read it.
+  const isFirstScreenEffect = useRef(true);
   useEffect(() => {
-    // Reset the iframe's inner viewport, then also ask the parent funnel
-    // page to scroll the iframe into view. Without the parent scroll, a
-    // user who was mid-page on the funnel when they clicked Next sees the
-    // fresh (often taller) screen well below their current scroll position.
+    // Always reset the iframe's own viewport so the new screen starts
+    // at the top inside our frame.
     window.scrollTo(0, 0);
+    if (isFirstScreenEffect.current) {
+      isFirstScreenEffect.current = false;
+      return;
+    }
+    // Only ask the parent funnel to scroll the iframe into view on
+    // subsequent screen transitions. Otherwise a user reading intro
+    // content above the iframe gets yanked down on page load.
     requestParentScrollToTop();
   }, [screen]);
 
