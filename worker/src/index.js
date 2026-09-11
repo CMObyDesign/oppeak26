@@ -291,7 +291,15 @@ ${context}
 // Used when someone clicks "View Report Online" from an email.
 // Async because it mints an HMAC-signed apply-token bound to this contactId,
 // injected into the SOLOMON50 coupon script for the /apply-solomon50 auth check.
-async function buildReportPage(reportBody, tierLabel, contactName, tier, env, contactEmail, contactId) {
+async function buildReportPage(reportBody, tierLabel, contactName, tier, env, contactEmail, contactId, opts = {}) {
+  // isPending = true when reportBody is the analyzing spinner fallback,
+  // NOT a real Solomon-generated report. In that state we must not print
+  // the "YOUR REPORT · READY" pill or the tier-upsell CTA — both were
+  // rendering above/below the spinner and lying to the user. The pending
+  // shell only shows the spinner card + honest generating-copy eyebrow,
+  // and the poll script inside the spinner reloads the page when the
+  // report field actually populates.
+  const isPending = Boolean(opts.isPending);
   const applyToken = contactId ? await mintApplyToken(contactId, env) : null;
   const e = escapeHtml;
   const paymentLink47 = (env && env.PAYMENT_LINK_47) || CONFIG.PAYMENT_LINK_47;
@@ -576,8 +584,10 @@ ${couponScript}
 
   <section class="hello">
     <div class="wrap">
-      <p class="eyebrow">◆ YOUR REPORT · READY</p>
-      <h1>${e(contactName.split(' ')[0] || contactName)}, your <em>diagnostic</em> is back.</h1>
+      <p class="eyebrow">${isPending ? "◆ SOLOMON IS DIAGNOSING · GENERATING YOUR REPORT" : "◆ YOUR REPORT · READY"}</p>
+      <h1>${isPending
+        ? `${e(contactName.split(' ')[0] || contactName)}, your <em>diagnostic</em> is on the way.`
+        : `${e(contactName.split(' ')[0] || contactName)}, your <em>diagnostic</em> is back.`}</h1>
     </div>
   </section>
 
@@ -585,7 +595,7 @@ ${couponScript}
     ${reportBody}
   </div>
 
-  ${cta}
+  ${isPending ? "" : cta}
 
   <footer class="footer">
     CFO by Design · cfobydesign.com
@@ -1108,7 +1118,20 @@ async function handleReport(contactId, env) {
           setTimeout(poll, 2000);
         })();
       </script>`;
-    return new Response(await buildReportPage(fallback, tierLabel, "Business Owner", tier, env, c.email || "", contactId), {
+    // isPending=true suppresses the "READY" pill and the tier CTA — both
+    // are lies while the spinner is up. Fresh-lead observability: log
+    // which tier we're waiting on and whether we have any content in the
+    // OTHER report fields (helps diagnose writeback failures without
+    // wrangler tail).
+    const contentFree = contentOf("swot_free_report");
+    const contentFull = contentOf("swot_full_report");
+    const contentPlaybook = contentOf("business_playbook");
+    console.warn(`[handleReport] Serving analyzing shell for contact ${contactId} tier=${tier}; ` +
+      `swot_free_report=${contentFree ? contentFree.length + "chars" : "empty"} ` +
+      `swot_full_report=${contentFull ? contentFull.length + "chars" : "empty"} ` +
+      `business_playbook=${contentPlaybook ? contentPlaybook.length + "chars" : "empty"} ` +
+      `tags=[${(c.tags || []).join(",")}]`);
+    return new Response(await buildReportPage(fallback, tierLabel, "Business Owner", tier, env, c.email || "", contactId, { isPending: true }), {
       status: 200,
       headers: htmlHeaders(),
     });
@@ -2348,6 +2371,18 @@ export default {
 
     // Resolve a GHL contactId from email if one wasn't passed in.
     const contactId = await resolveGHLContactId(contact, env);
+    if (!contactId) {
+      // This is the root cause of the classic "/report/{cid} stuck on
+      // analyzing forever" bug: React app called runAssessment, Solomon
+      // generated a report in-memory, but no contactId means no writeback,
+      // so /report/{cid} finds an empty field and shows the spinner
+      // indefinitely. Surface this loudly so wrangler tail catches it.
+      console.warn(`[POST /] tier=${tier} — NO CONTACT RESOLVED for email=${contact.email || "(none)"}; ` +
+        `report generated in-memory but NOT written to GHL. /report/{cid} will show analyzing forever. ` +
+        `contactId in payload=${contact.contactId || "(none)"}. GHL_API_KEY set=${Boolean(env.GHL_API_KEY)}.`);
+    } else {
+      console.log(`[POST /] tier=${tier} contactId=${contactId} email=${contact.email || "(none)"} — starting writeback`);
+    }
 
     // Best-effort GHL writeback to CFO By Design's real SWOT custom fields.
     if (contactId) {
@@ -2411,8 +2446,11 @@ export default {
       ctx.waitUntil(
         Promise.allSettled([
           updateGHLContact(contactId, fields, env).then(ok => {
-            if (ok) return addGHLTag(contactId, [reportReadyTag], env);
-            console.warn("[POST /] Contact writeback failed; skipping reportReadyTag");
+            if (ok) {
+              console.log(`[POST /] tier=${tier} contactId=${contactId} — writeback OK, applying ${reportReadyTag}`);
+              return addGHLTag(contactId, [reportReadyTag], env);
+            }
+            console.warn(`[POST /] tier=${tier} contactId=${contactId} — writeback FAILED; skipping ${reportReadyTag}. /report/${contactId} will show analyzing forever until this contact is re-generated.`);
           }),
           addGHLTag(contactId, lifecycleTags, env),
           fireTrackingEvent({
