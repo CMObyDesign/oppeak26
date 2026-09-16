@@ -309,7 +309,7 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
           <li><strong>Pick a scenario type</strong> — <em>Hypothetical case</em> for a made-up business (default), or <em>Existing client</em> if you want to run the diagnostic against a real GHL contact (requires the GHL contactId).</li>
           <li><strong>Describe a business scenario</strong> — free-form prose in <em>📖 Story</em>, or fill Miguel's canonical intake questions in <em>📝 Guided</em>. Both work; Guided gives Solomon more structure.</li>
           <li><strong>Click Run ▶</strong> — Solomon returns a badge, opportunity flags, personalized email hook, internal strategist brief, and rendered client-facing report.</li>
-          <li><strong>Love the response?</strong> Type any email in "Send it" to receive the actual production email exactly as a client would see it via HighLevel.</li>
+          <li><strong>Love the response?</strong> The "Send this response" box after each run is pre-filled from the <em>Staff email</em> up top — one click emails a copy to yourself using the tier's real HighLevel workflow.</li>
           <li><strong>Bookmark great runs</strong>, save rubric variants, and export your learnings anytime — everything persists across sessions.</li>
         </ol>
         <p style="margin-top:12px;font-style:italic;font-size:11px;color:#78350f;">🎤 Prefer to speak? Mic buttons on textareas let you dictate.</p>
@@ -342,8 +342,8 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
 
       <div class="form-row">
         <div>
-          <label for="contact-email">Email — leave blank for pure test · fill to receive the actual workflow email</label>
-          <input type="email" id="contact-email" placeholder="your@email.com (will trigger the tier email workflow)">
+          <label for="staff-copy-email">Staff email — pre-fills "Send this response" after every run so you can email yourself a preview in one click. <strong>Not linked to any contact card.</strong></label>
+          <input type="email" id="staff-copy-email" placeholder="you@cfobydesign.com (your own inbox — not the tested contact's email)">
         </div>
         <div id="contact-id-wrap" style="display:none;">
           <label for="contact-id">GHL contact ID — <strong>required for existing clients</strong></label>
@@ -686,7 +686,7 @@ window.addEventListener("DOMContentLoaded", () => {
   restoreInputsFromLocal();
   renderSidebar();
   // Wire auto-save on every meaningful input change.
-  ["tier", "case-type", "contact-name", "contact-email", "contact-id", "answers", "rubric-override"].forEach(id => {
+  ["tier", "case-type", "contact-name", "staff-copy-email", "contact-id", "answers", "rubric-override"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("input", saveInputsToLocal);
     if (el && (id === "tier" || id === "case-type")) el.addEventListener("change", saveInputsToLocal);
@@ -776,7 +776,7 @@ function saveInputsToLocal() {
       tier: document.getElementById("tier")?.value || "free",
       caseType: document.getElementById("case-type")?.value || "hypothetical",
       contactName: document.getElementById("contact-name")?.value || "",
-      contactEmail: document.getElementById("contact-email")?.value || "",
+      staffCopyEmail: document.getElementById("staff-copy-email")?.value || "",
       contactId: document.getElementById("contact-id")?.value || "",
       answersRaw: document.getElementById("answers")?.value || "",
       rubricOverride: document.getElementById("rubric-override")?.value || "",
@@ -812,7 +812,7 @@ function restoreInputsFromLocal() {
     if (draft.tier) document.getElementById("tier").value = draft.tier;
     if (draft.caseType) document.getElementById("case-type").value = draft.caseType;
     if (draft.contactName) document.getElementById("contact-name").value = draft.contactName;
-    if (draft.contactEmail) document.getElementById("contact-email").value = draft.contactEmail;
+    if (draft.staffCopyEmail) document.getElementById("staff-copy-email").value = draft.staffCopyEmail;
     if (draft.contactId) document.getElementById("contact-id").value = draft.contactId;
     applyCaseTypeVisibility();
     if (draft.answersRaw) document.getElementById("answers").value = draft.answersRaw;
@@ -846,8 +846,11 @@ async function runSolomon() {
   const tier = document.getElementById("tier").value;
   const caseType = document.getElementById("case-type").value;
   const contactName = document.getElementById("contact-name").value.trim();
-  const contactEmail = document.getElementById("contact-email").value.trim();
   const contactId = document.getElementById("contact-id").value.trim();
+  // Staff-copy email is UI-only: it never becomes contact.email on the run.
+  // It just pre-fills the "Send this response" field after each run so the
+  // operator can one-click email themselves a preview.
+  const staffCopyEmail = document.getElementById("staff-copy-email").value.trim();
   const answersRaw = document.getElementById("answers").value.trim();
   const rubricOverride = document.getElementById("rubric-override").value.trim();
 
@@ -888,7 +891,7 @@ async function runSolomon() {
         caseType,
         contact: {
           name: contactName,
-          email: contactEmail,
+          // Deliberately no email — staff-copy email is not a contact email.
           ...(contactId ? { contactId } : {}),
         },
         answers,
@@ -912,9 +915,11 @@ async function runSolomon() {
       caseType,
       contact: {
         name: contactName,
-        email: contactEmail,
         ...(contactId ? { contactId } : {}),
       },
+      // Staff copy email is remembered on the run so re-loading it later
+      // still pre-fills the send box, but it is NEVER the contact's email.
+      staffCopyEmail: staffCopyEmail || "",
       answersRaw,
       rubricOverride: rubricOverride || null,
       result: data,
@@ -1270,7 +1275,7 @@ function renderOutput(run) {
         <div style="font-size:12px;color:#374151;margin-bottom:8px;">
           <strong>✉️ Love this response? Send it.</strong> Delivers THIS run's output (not a fresh Solomon call) to any email via the tier's GHL workflow.
         </div>
-        <input type="email" id="send-result-email-\${run.id}" placeholder="recipient@example.com" style="width:280px;">
+        <input type="email" id="send-result-email-\${run.id}" placeholder="recipient@example.com" value="\${escapeAttr(run.staffCopyEmail || "")}" style="width:280px;">
         <button onclick="sendResultToEmail('\${run.id}')">Send response →</button>
         <span id="send-result-status-\${run.id}" style="margin-left:10px;font-size:11px;color:#6b7280;"></span>
       </div>
@@ -1340,7 +1345,7 @@ function loadInputsFromRun(id) {
   document.getElementById("tier").value = run.tier || "free";
   document.getElementById("case-type").value = run.caseType || "hypothetical";
   document.getElementById("contact-name").value = run.contact?.name || "";
-  document.getElementById("contact-email").value = run.contact?.email || "";
+  // Leave staff-copy-email alone — it's the operator's preference, not the run's.
   document.getElementById("contact-id").value = run.contact?.contactId || "";
   document.getElementById("answers").value = run.answersRaw || "";
   document.getElementById("rubric-override").value = run.rubricOverride || "";
