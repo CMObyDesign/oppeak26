@@ -305,7 +305,8 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
       <div class="start-here-body">
         <p>You're training <strong>Solomon</strong>, the CFO diagnostic behind CFO By Design's SWOT engine. Your test runs and feedback shape how it thinks. Every response is generated fresh — nothing is canned.</p>
         <ol>
-          <li><strong>Pick a tier</strong> below (<code>free</code>, <code>paid_47</code>, or <code>paid_297</code>) — matches what a real client would go through.</li>
+          <li><strong>Pick a tier</strong> below (<code>Free</code>, <code>Partial SWOT</code>, or <code>Full SWOT</code>) — matches what a real client would go through.</li>
+          <li><strong>Pick a scenario type</strong> — <em>Hypothetical case</em> for a made-up business (default), or <em>Existing client</em> if you want to run the diagnostic against a real GHL contact (requires the GHL contactId).</li>
           <li><strong>Describe a business scenario</strong> — free-form prose in <em>📖 Story</em>, or fill Miguel's canonical intake questions in <em>📝 Guided</em>. Both work; Guided gives Solomon more structure.</li>
           <li><strong>Click Run ▶</strong> — Solomon returns a badge, opportunity flags, personalized email hook, internal strategist brief, and rendered client-facing report.</li>
           <li><strong>Love the response?</strong> Type any email in "Send it" to receive the actual production email exactly as a client would see it via HighLevel.</li>
@@ -321,18 +322,32 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
         <div>
           <label for="tier">Tier</label>
           <select id="tier">
-            <option value="free" selected>free</option>
-            <option value="paid_47">paid_47</option>
-            <option value="paid_297">paid_297</option>
+            <option value="free" selected>Free</option>
+            <option value="paid_47">Partial SWOT</option>
+            <option value="paid_297">Full SWOT</option>
+          </select>
+        </div>
+        <div>
+          <label for="case-type">Scenario type</label>
+          <select id="case-type">
+            <option value="hypothetical" selected>Hypothetical case</option>
+            <option value="existing_client">Existing client</option>
           </select>
         </div>
         <div>
           <label for="contact-name">Contact name</label>
           <input type="text" id="contact-name" placeholder="Test Owner" value="Test Owner">
         </div>
+      </div>
+
+      <div class="form-row">
         <div>
           <label for="contact-email">Email — leave blank for pure test · fill to receive the actual workflow email</label>
           <input type="email" id="contact-email" placeholder="your@email.com (will trigger the tier email workflow)">
+        </div>
+        <div id="contact-id-wrap" style="display:none;">
+          <label for="contact-id">GHL contact ID — <strong>required for existing clients</strong></label>
+          <input type="text" id="contact-id" placeholder="e.g. abc123XYZ… (from the contact card URL in GHL)">
         </div>
       </div>
 
@@ -433,6 +448,13 @@ const HISTORY_LIMIT = 20;
 const INPUT_DRAFT_KEY = "asksolomon_input_draft";
 const GUIDED_ANSWERS_KEY = "asksolomon_guided_answers"; // per-question values keyed by q.key, persist across tier switches
 const LIBRARY_SELECTED_KEY = "asksolomon_library_selected"; // array of library item ids currently checked-in for the next run
+
+// Display labels for tiers — server + GHL tags still use the raw values
+// (free / paid_47 / paid_297); only the dashboard shows the friendly names.
+const TIER_LABELS = { free: "Free", paid_47: "Partial SWOT", paid_297: "Full SWOT" };
+function tierLabel(t) { return TIER_LABELS[t] || t || "—"; }
+const CASE_TYPE_LABELS = { hypothetical: "Hypothetical", existing_client: "Existing client" };
+function caseTypeLabel(t) { return CASE_TYPE_LABELS[t] || CASE_TYPE_LABELS.hypothetical; }
 const LIBRARY_CATEGORIES = [
   { key: "transcript", label: "🎙️ Transcripts", hint: "Client meeting transcripts (Fireflies, Gong, manual)" },
   { key: "testimonial", label: "🗨️ Testimonials", hint: "Verbatim client quotes about outcomes" },
@@ -664,11 +686,15 @@ window.addEventListener("DOMContentLoaded", () => {
   restoreInputsFromLocal();
   renderSidebar();
   // Wire auto-save on every meaningful input change.
-  ["tier", "contact-name", "contact-email", "answers", "rubric-override"].forEach(id => {
+  ["tier", "case-type", "contact-name", "contact-email", "contact-id", "answers", "rubric-override"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("input", saveInputsToLocal);
-    if (el && id === "tier") el.addEventListener("change", saveInputsToLocal);
+    if (el && (id === "tier" || id === "case-type")) el.addEventListener("change", saveInputsToLocal);
   });
+  // Show/hide the GHL contact ID field based on scenario type.
+  const caseSel = document.getElementById("case-type");
+  if (caseSel) caseSel.addEventListener("change", applyCaseTypeVisibility);
+  applyCaseTypeVisibility();
   initMicButtons();
   // Fetch + render the reference library on load.
   renderLibrary();
@@ -733,13 +759,25 @@ function initMicButtons() {
   });
 }
 
+// Show / hide the GHL contact ID input based on the Scenario type dropdown.
+// Existing-client runs must be tied to a real GHL contact; hypothetical runs
+// don't need one and shouldn't accidentally push writeback to a real record.
+function applyCaseTypeVisibility() {
+  const sel = document.getElementById("case-type");
+  const wrap = document.getElementById("contact-id-wrap");
+  if (!sel || !wrap) return;
+  wrap.style.display = sel.value === "existing_client" ? "" : "none";
+}
+
 // Persist current form inputs to localStorage so refresh doesn't nuke work in progress.
 function saveInputsToLocal() {
   try {
     const draft = {
       tier: document.getElementById("tier")?.value || "free",
+      caseType: document.getElementById("case-type")?.value || "hypothetical",
       contactName: document.getElementById("contact-name")?.value || "",
       contactEmail: document.getElementById("contact-email")?.value || "",
+      contactId: document.getElementById("contact-id")?.value || "",
       answersRaw: document.getElementById("answers")?.value || "",
       rubricOverride: document.getElementById("rubric-override")?.value || "",
       mode: document.getElementById("answers")?.dataset.mode || "story",
@@ -772,8 +810,11 @@ function restoreInputsFromLocal() {
     const draft = JSON.parse(localStorage.getItem(INPUT_DRAFT_KEY) || "null");
     if (!draft) return;
     if (draft.tier) document.getElementById("tier").value = draft.tier;
+    if (draft.caseType) document.getElementById("case-type").value = draft.caseType;
     if (draft.contactName) document.getElementById("contact-name").value = draft.contactName;
     if (draft.contactEmail) document.getElementById("contact-email").value = draft.contactEmail;
+    if (draft.contactId) document.getElementById("contact-id").value = draft.contactId;
+    applyCaseTypeVisibility();
     if (draft.answersRaw) document.getElementById("answers").value = draft.answersRaw;
     if (draft.rubricOverride) {
       document.getElementById("rubric-override").value = draft.rubricOverride;
@@ -803,10 +844,19 @@ function readLocal(key, fallback) {
 // ---------- Run ----------
 async function runSolomon() {
   const tier = document.getElementById("tier").value;
+  const caseType = document.getElementById("case-type").value;
   const contactName = document.getElementById("contact-name").value.trim();
   const contactEmail = document.getElementById("contact-email").value.trim();
+  const contactId = document.getElementById("contact-id").value.trim();
   const answersRaw = document.getElementById("answers").value.trim();
   const rubricOverride = document.getElementById("rubric-override").value.trim();
+
+  // Existing-client runs must be tied to a real GHL contact — the worker
+  // requires contactId for any writeback and Solomon should never touch a
+  // real record on a typo.
+  if (caseType === "existing_client" && !contactId) {
+    return toast("Enter the GHL contact ID for existing-client scenarios.", "error");
+  }
 
   const mode = document.getElementById("answers").dataset.mode || "story";
   let answers;
@@ -835,7 +885,12 @@ async function runSolomon() {
       headers: { "Content-Type": "application/json", "x-console-password": getPassword() },
       body: JSON.stringify({
         tier,
-        contact: { name: contactName, email: contactEmail },
+        caseType,
+        contact: {
+          name: contactName,
+          email: contactEmail,
+          ...(contactId ? { contactId } : {}),
+        },
         answers,
         rubricOverride: rubricOverride || undefined,
         libraryIds: getSelectedLibraryIds(),
@@ -854,7 +909,12 @@ async function runSolomon() {
       id: "run_" + Date.now(),
       ts: new Date().toISOString(),
       tier,
-      contact: { name: contactName, email: contactEmail },
+      caseType,
+      contact: {
+        name: contactName,
+        email: contactEmail,
+        ...(contactId ? { contactId } : {}),
+      },
       answersRaw,
       rubricOverride: rubricOverride || null,
       result: data,
@@ -1158,7 +1218,7 @@ function renderOutput(run) {
   const flags = (r.opportunityFlags || []).map(f => '<span class="flag-tag">' + escapeHtml(f) + '</span>').join("") || '<span style="color:#9ca3af;font-size:12px;">none</span>';
 
   const emailBanner = r.emailedTo
-    ? '<div style="margin-bottom:12px;padding:10px 12px;background:#d1fae5;border-left:4px solid #065f46;border-radius:4px;font-size:12px;color:#065f46;"><strong>📧 Email triggered →</strong> ' + escapeHtml(r.emailedTo) + ' — GHL workflow for tier <code>' + escapeHtml(run.tier) + '</code> will deliver the production email within 1-2 min. Tagged <code>SWOT_CONSOLE_TEST</code> for cleanup.</div>'
+    ? '<div style="margin-bottom:12px;padding:10px 12px;background:#d1fae5;border-left:4px solid #065f46;border-radius:4px;font-size:12px;color:#065f46;"><strong>📧 Email triggered →</strong> ' + escapeHtml(r.emailedTo) + ' — GHL workflow for tier <code>' + escapeHtml(tierLabel(run.tier)) + '</code> will deliver the production email within 1-2 min. Tagged <code>SWOT_CONSOLE_TEST</code> for cleanup.</div>'
     : '<div style="margin-bottom:12px;padding:8px 12px;background:#f3f4f6;border-radius:4px;font-size:11px;color:#6b7280;">📭 No email sent — leave email field blank for pure preview, fill it to trigger the workflow.</div>';
 
   const timingBadge = typeof r.elapsedMs === "number"
@@ -1167,7 +1227,7 @@ function renderOutput(run) {
 
   document.getElementById("output-area").innerHTML = \`
     <div class="panel">
-      <h2>Output — \${escapeHtml(run.tier)} · \${escapeHtml(new Date(run.ts).toLocaleTimeString())} \${timingBadge}</h2>
+      <h2>Output — \${escapeHtml(tierLabel(run.tier))} · \${escapeHtml(caseTypeLabel(run.caseType))}\${run.contact?.contactId ? " · <code style=\\"font-size:11px;\\">" + escapeHtml(run.contact.contactId) + "</code>" : ""} · \${escapeHtml(new Date(run.ts).toLocaleTimeString())} \${timingBadge}</h2>
       <div style="margin-bottom: 16px;">
         <span class="\${badgeClass}">PATH: \${escapeHtml(path)}</span>
         <span style="margin-left: 8px; font-size: 12px; color: #6b7280;">Flags:</span> \${flags}
@@ -1278,10 +1338,13 @@ function loadInputsFromRun(id) {
   const run = history.find(r => r.id === id) || bookmarks.find(r => r.id === id);
   if (!run) return toast("Couldn't find that run.", "error");
   document.getElementById("tier").value = run.tier || "free";
+  document.getElementById("case-type").value = run.caseType || "hypothetical";
   document.getElementById("contact-name").value = run.contact?.name || "";
   document.getElementById("contact-email").value = run.contact?.email || "";
+  document.getElementById("contact-id").value = run.contact?.contactId || "";
   document.getElementById("answers").value = run.answersRaw || "";
   document.getElementById("rubric-override").value = run.rubricOverride || "";
+  applyCaseTypeVisibility();
   saveInputsToLocal();
   // Return to the top of the input panel so the user sees the loaded inputs.
   document.getElementById("input-panel").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1306,8 +1369,11 @@ function renderSidebar() {
     : history.map(run => {
         const path = run.result?.path || "—";
         const time = new Date(run.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const caseBadge = run.caseType === "existing_client"
+          ? ' <span style="font-size:9px;padding:1px 5px;background:#dcfce7;color:#065f46;border-radius:3px;">real</span>'
+          : ' <span style="font-size:9px;padding:1px 5px;background:#f3f4f6;color:#6b7280;border-radius:3px;">test</span>';
         return \`<div class="sidebar-entry" onclick='loadRun("\${run.id}")'>
-          <div>\${escapeHtml(run.tier)} · \${escapeHtml(path)}</div>
+          <div>\${escapeHtml(tierLabel(run.tier))} · \${escapeHtml(path)}\${caseBadge}</div>
           <div class="meta">\${escapeHtml(time)} · \${(run.result?.opener || "").length} char blurb</div>
         </div>\`;
       }).join("");
@@ -1326,10 +1392,15 @@ function renderSidebar() {
   document.getElementById("history-header").textContent = "Session History (" + history.length + " · last " + HISTORY_LIMIT + ")";
   document.getElementById("bookmarks-list").innerHTML = bookmarks.length === 0
     ? '<div class="sidebar-empty">No bookmarks</div>'
-    : bookmarks.map(b => \`<div class="sidebar-entry" onclick='loadBookmark("\${b.id}")'>
-        <div>\${escapeHtml(b.label || b.tier)} · \${escapeHtml(b.result?.path || "—")}</div>
-        <div class="meta">\${escapeHtml(new Date(b.ts).toLocaleDateString())}</div>
-      </div>\`).join("");
+    : bookmarks.map(b => {
+        const caseBadge = b.caseType === "existing_client"
+          ? ' <span style="font-size:9px;padding:1px 5px;background:#dcfce7;color:#065f46;border-radius:3px;">real</span>'
+          : '';
+        return \`<div class="sidebar-entry" onclick='loadBookmark("\${b.id}")'>
+          <div>\${escapeHtml(b.label || tierLabel(b.tier))} · \${escapeHtml(b.result?.path || "—")}\${caseBadge}</div>
+          <div class="meta">\${escapeHtml(new Date(b.ts).toLocaleDateString())}</div>
+        </div>\`;
+      }).join("");
 }
 
 async function loadRun(id) {
@@ -1416,7 +1487,7 @@ function bookmarkRun(id) {
   const history = readLocal(HISTORY_KEY, []);
   const run = history.find(r => r.id === id);
   if (!run) return toast("Couldn't find that run in session history (it may have been cleared).", "error");
-  const defaultLabel = (run.tier || "run") + " · " + (run.result?.path || "—");
+  const defaultLabel = tierLabel(run.tier) + " · " + (run.result?.path || "—");
   const label = prompt("Label this bookmark:", defaultLabel);
   if (label === null) return; // user cancelled
   const bookmarks = readLocal(BOOKMARKS_KEY, []);

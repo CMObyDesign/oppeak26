@@ -1485,7 +1485,11 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
 
       const tags = [
         `swot_path_${(agent.path || "").toLowerCase()}`,
-        "swot_console_test", // distinguishes test contacts from real leads
+        "swot_console_test", // distinguishes ALL console writes from real leads
+        // Additional marker when the operator explicitly said "existing client" —
+        // makes real-contact training runs distinguishable from hypothetical ones
+        // that just happened to be pointed at a valid contactId.
+        body.caseType === "existing_client" ? "swot_console_real_client" : null,
         ...(agent.opportunityFlags || []).map((f) => String(f).toLowerCase()),
       ].filter(Boolean);
 
