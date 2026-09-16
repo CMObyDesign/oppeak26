@@ -610,6 +610,8 @@ function checkPassword() {
       sessionStorage.setItem(PASSWORD_KEY, pw);
       document.getElementById("gate").style.display = "none";
       renderSidebar();
+      // Now that we have a password, pull the shared server-side history.
+      hydrateHistoryFromServer();
     } else {
       showGateError("Server error " + r.status);
     }
@@ -668,6 +670,10 @@ window.addEventListener("DOMContentLoaded", () => {
   initMicButtons();
   // Fetch + render the reference library on load.
   renderLibrary();
+  // Merge server-side history (Fix B) into the local cache so runs made on
+  // any teammate's browser show up here too. Non-blocking — the local
+  // sidebar renders first, then re-renders once the server responds.
+  if (getPassword()) hydrateHistoryFromServer();
 });
 
 // Wire every element with class .mic-btn to a Web Speech API recorder that
@@ -859,18 +865,138 @@ async function runSolomon() {
 }
 
 function saveRun(run) {
-  // History is stored in localStorage so it persists across tabs, browser
-  // restarts, and logouts — the operator can walk away, come back tomorrow,
-  // and still see their recent runs. Was previously sessionStorage which
-  // wiped the moment the tab closed (the "history never shows anything"
-  // symptom). Password stays in sessionStorage; only run history is
-  // persistent-per-device here. For cross-device history use Fix B (server-
-  // side manifest in R2).
+  // Local cache (Fix A): fast, offline-friendly, per-browser.
   const history = readLocal(HISTORY_KEY, []);
   history.unshift(run);
   if (history.length > HISTORY_LIMIT) history.length = HISTORY_LIMIT;
   localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
   renderSidebar();
+  // Server sync (Fix B): cross-device / team-shared history in R2.
+  // Fire-and-forget — local cache is still correct if the network hiccups.
+  syncRunToServer(run);
+}
+
+// ---------- Server-side history sync (Fix B) ----------
+// The worker holds a manifest of run summaries in R2 (see handleHistory* in
+// index.js). We push each new run and PATCH feedback changes so team members
+// on a different browser or device see the same list.
+
+async function syncRunToServer(run) {
+  try {
+    const res = await fetch("/asksolomon/history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-console-password": getPassword() },
+      body: JSON.stringify(run),
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+    if (!res.ok) {
+      // Non-fatal — the local copy is still saved.
+      console.warn("[history-sync] append failed:", res.status);
+    }
+  } catch (e) {
+    console.warn("[history-sync] append error:", e.message);
+  }
+}
+
+async function patchRunOnServer(id, patch) {
+  try {
+    const res = await fetch("/asksolomon/history/" + encodeURIComponent(id), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "x-console-password": getPassword() },
+      body: JSON.stringify(patch),
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+    if (!res.ok) console.warn("[history-sync] patch failed:", res.status);
+  } catch (e) {
+    console.warn("[history-sync] patch error:", e.message);
+  }
+}
+
+async function deleteRunOnServer(id) {
+  try {
+    const res = await fetch("/asksolomon/history/" + encodeURIComponent(id), {
+      method: "DELETE",
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+  } catch (e) {
+    console.warn("[history-sync] delete error:", e.message);
+  }
+}
+
+async function wipeServerHistory() {
+  try {
+    const res = await fetch("/asksolomon/history", {
+      method: "DELETE",
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+  } catch (e) {
+    console.warn("[history-sync] wipe error:", e.message);
+  }
+}
+
+// Fetch a full run body from the server. Used when the user clicks a sidebar
+// entry that came from the server manifest but whose body isn't in the local
+// cache (e.g., a run created on a teammate's browser).
+async function fetchRunFromServer(id) {
+  try {
+    const res = await fetch("/asksolomon/history/" + encodeURIComponent(id), {
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return null; }
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data && data.success) ? data.run : null;
+  } catch (e) {
+    console.warn("[history-sync] fetch error:", e.message);
+    return null;
+  }
+}
+
+// Hydrate localStorage from the server manifest on load. Merges server runs
+// into the local cache by id — anything the server has but the local browser
+// doesn't gets a placeholder entry so it renders in the sidebar; the full
+// body is lazy-fetched on click.
+async function hydrateHistoryFromServer() {
+  try {
+    const res = await fetch("/asksolomon/history", {
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data || !data.success || !Array.isArray(data.items)) return;
+
+    const local = readLocal(HISTORY_KEY, []);
+    const byId = new Map(local.map(r => [r.id, r]));
+    // Server order is authoritative (newest first). Fill in server-only ids
+    // as summaries; keep the local body when present.
+    const merged = data.items.map(summary => {
+      if (byId.has(summary.id)) return byId.get(summary.id);
+      // Placeholder from summary. renderSidebar only reads tier / ts /
+      // result.path / result.opener.length — provide just enough.
+      return {
+        id: summary.id,
+        ts: summary.ts,
+        tier: summary.tier,
+        contact: { name: summary.contactName || "", email: summary.contactEmail || "" },
+        result: { path: summary.path || "", opener: "" },
+        feedback: summary.feedback || null,
+        feedbackNote: summary.feedbackNote || "",
+        _serverOnly: true,
+      };
+    });
+    // Preserve local-only runs that haven't synced yet (e.g., offline saves).
+    const serverIds = new Set(data.items.map(i => i.id));
+    for (const r of local) if (!serverIds.has(r.id)) merged.push(r);
+    // Trim to local cap so the sidebar stays legible.
+    if (merged.length > HISTORY_LIMIT) merged.length = HISTORY_LIMIT;
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(merged));
+    renderSidebar();
+  } catch (e) {
+    console.warn("[history-sync] hydrate error:", e.message);
+  }
 }
 
 // ---------- Render output ----------
@@ -1055,10 +1181,26 @@ function renderSidebar() {
       </div>\`).join("");
 }
 
-function loadRun(id) {
+async function loadRun(id) {
   const history = readLocal(HISTORY_KEY, []);
   const run = history.find(r => r.id === id);
-  if (run) renderOutput(run);
+  if (!run) return;
+  // Server-only placeholder (created on another device / by a teammate). Lazy
+  // fetch the full body and swap it into the local cache so subsequent
+  // interactions (feedback, regenerate) have everything they need.
+  if (run._serverOnly) {
+    const fetched = await fetchRunFromServer(id);
+    if (!fetched) return toast("Couldn't load that run from the server.", "error");
+    const idx = history.findIndex(r => r.id === id);
+    if (idx !== -1) {
+      history[idx] = fetched;
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+      renderSidebar();
+    }
+    renderOutput(fetched);
+    return;
+  }
+  renderOutput(run);
 }
 function loadBookmark(id) {
   const bookmarks = readLocal(BOOKMARKS_KEY, []);
@@ -1073,10 +1215,21 @@ function setRunFeedback(id, rating) {
   if (!applied) return toast("Couldn't find that run.", "error");
   toast(rating === "up" ? "Thanks — flagged as a good response" : "Noted — we'll learn from what's off", "success");
   const cur = readLocal(HISTORY_KEY, []).find(r => r.id === id) || readLocal(BOOKMARKS_KEY, []).find(r => r.id === id);
-  if (cur) renderOutput(cur);
+  if (cur) {
+    renderOutput(cur);
+    // Server sync (Fix B): mirror the rating to the shared manifest so the
+    // whole team sees which runs you rated. Bookmarks-only rating is local.
+    if (readLocal(HISTORY_KEY, []).some(r => r.id === id)) {
+      patchRunOnServer(id, { feedback: cur.feedback });
+    }
+  }
 }
 function setRunFeedbackNote(id, note) {
-  updateRunEverywhere(id, r => ({ ...r, feedbackNote: String(note || "").slice(0, 500) }));
+  const trimmed = String(note || "").slice(0, 500);
+  updateRunEverywhere(id, r => ({ ...r, feedbackNote: trimmed }));
+  if (readLocal(HISTORY_KEY, []).some(r => r.id === id)) {
+    patchRunOnServer(id, { feedbackNote: trimmed });
+  }
 }
 // Update a run wherever it lives — session history + bookmarks. Returns true if found.
 function updateRunEverywhere(id, mutator) {
@@ -1117,8 +1270,9 @@ function bookmarkRun(id) {
   }
 }
 function clearHistory() {
-  if (!confirm("Clear all session history? Bookmarks and saved rubrics will stay.")) return;
+  if (!confirm("Clear all session history for EVERYONE on the team? This wipes the shared server manifest too. Bookmarks and saved rubrics stay.")) return;
   localStorage.removeItem(HISTORY_KEY); renderSidebar();
+  wipeServerHistory();
 }
 
 // ---------- Rubric ----------

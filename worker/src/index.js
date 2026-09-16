@@ -1724,6 +1724,213 @@ async function buildLibraryContext(env, ids) {
 }
 // ----- end reference library -----
 
+// ----- Server-side session history (Fix B) -----
+// Cross-device / team-shared history for Ask Solomon runs. Backed by the same
+// SOLOMON_LIBRARY R2 bucket under a `history/` prefix so no new binding is
+// required.
+//
+// Layout:
+//   history/manifest.json         — up to HISTORY_MANIFEST_LIMIT run summaries
+//   history/runs/{YYYY-MM-DD}/{id}.json — full run body (answers + full result)
+//   (soft-deletes archived to SOLOMON_LIBRARY_ARCHIVE under archived-history/)
+//
+// A "summary" is small enough to list hundreds cheaply; the full body is
+// lazy-loaded on demand when the user opens a run.
+
+const HISTORY_MANIFEST_KEY = "history/manifest.json";
+const HISTORY_MANIFEST_LIMIT = 500;
+const HISTORY_RUN_MAX_BYTES = 512 * 1024; // 512KB per run — plenty for even large reports
+
+async function readHistoryManifest(env) {
+  if (!env.SOLOMON_LIBRARY) return { items: [] };
+  const obj = await env.SOLOMON_LIBRARY.get(HISTORY_MANIFEST_KEY);
+  if (!obj) return { items: [] };
+  try { return JSON.parse(await obj.text()); }
+  catch { return { items: [] }; }
+}
+
+async function writeHistoryManifest(env, manifest) {
+  await env.SOLOMON_LIBRARY.put(HISTORY_MANIFEST_KEY, JSON.stringify(manifest), {
+    httpMetadata: { contentType: "application/json" },
+  });
+}
+
+// Extract the minimal summary shown in the sidebar. Kept small on purpose so
+// the manifest stays cheap to fetch on page load.
+function summarizeRun(run) {
+  const r = run.result || {};
+  return {
+    id: run.id,
+    ts: run.ts || new Date().toISOString(),
+    tier: run.tier || "free",
+    contactName: (run.contact && run.contact.name) || "",
+    contactEmail: (run.contact && run.contact.email) || "",
+    path: r.path || "",
+    opportunityFlagsCount: Array.isArray(r.opportunityFlags) ? r.opportunityFlags.length : 0,
+    feedback: run.feedback || null,
+    feedbackNote: run.feedbackNote || "",
+    // Storage path is server-controlled; used to fetch the full body.
+    storagePath: run.storagePath,
+  };
+}
+
+function historyStoragePath(id, ts) {
+  const day = (ts || new Date().toISOString()).slice(0, 10); // YYYY-MM-DD
+  return `history/runs/${day}/${id}.json`;
+}
+
+// GET /asksolomon/history — return manifest summaries.
+async function handleHistoryList(request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "History storage not configured" }, 500);
+  const manifest = await readHistoryManifest(env);
+  return json({ success: true, items: manifest.items || [] });
+}
+
+// GET /asksolomon/history/{id} — return the full run body.
+async function handleHistoryGet(id, request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "History storage not configured" }, 500);
+  const manifest = await readHistoryManifest(env);
+  const item = (manifest.items || []).find(i => i.id === id);
+  if (!item || !item.storagePath) return json({ success: false, error: "Run not found" }, 404);
+  const obj = await env.SOLOMON_LIBRARY.get(item.storagePath);
+  if (!obj) return json({ success: false, error: "Run body missing" }, 404);
+  try {
+    const run = JSON.parse(await obj.text());
+    return json({ success: true, run });
+  } catch {
+    return json({ success: false, error: "Run body corrupted" }, 500);
+  }
+}
+
+// POST /asksolomon/history — append a run.
+// Body: the run object as saved locally by the console page.
+async function handleHistoryAppend(request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "History storage not configured" }, 500);
+
+  let run;
+  try { run = await request.json(); }
+  catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+
+  if (!run || typeof run !== "object" || !run.id) {
+    return json({ success: false, error: "Missing run.id" }, 400);
+  }
+
+  const body = JSON.stringify(run);
+  if (body.length > HISTORY_RUN_MAX_BYTES) {
+    return json({ success: false, error: "Run body exceeds 512KB — refusing to persist" }, 413);
+  }
+
+  const storagePath = historyStoragePath(run.id, run.ts);
+  await env.SOLOMON_LIBRARY.put(storagePath, body, {
+    httpMetadata: { contentType: "application/json" },
+  });
+
+  const manifest = await readHistoryManifest(env);
+  manifest.items = manifest.items || [];
+
+  // Replace-or-prepend — a re-save (feedback edit, regenerate flow) shouldn't dupe.
+  const existingIdx = manifest.items.findIndex(i => i.id === run.id);
+  const summary = summarizeRun({ ...run, storagePath });
+  if (existingIdx !== -1) {
+    manifest.items.splice(existingIdx, 1);
+  }
+  manifest.items.unshift(summary);
+
+  // Trim tail — oldest entries fall off. Their bodies stay in R2 (small footprint,
+  // recoverable if we ever want lifetime history), just not listed on the dashboard.
+  if (manifest.items.length > HISTORY_MANIFEST_LIMIT) {
+    manifest.items.length = HISTORY_MANIFEST_LIMIT;
+  }
+
+  await writeHistoryManifest(env, manifest);
+  return json({ success: true, id: run.id, summary });
+}
+
+// PATCH /asksolomon/history/{id} — update feedback / feedbackNote on a run.
+// Small partial update that touches both the manifest summary and the full body.
+async function handleHistoryPatch(id, request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "History storage not configured" }, 500);
+
+  let patch;
+  try { patch = await request.json(); }
+  catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+
+  const manifest = await readHistoryManifest(env);
+  const idx = (manifest.items || []).findIndex(i => i.id === id);
+  if (idx === -1) return json({ success: false, error: "Run not found" }, 404);
+  const item = manifest.items[idx];
+
+  const allowed = {};
+  if (patch.feedback === "up" || patch.feedback === "down" || patch.feedback === null) allowed.feedback = patch.feedback;
+  if (typeof patch.feedbackNote === "string") allowed.feedbackNote = patch.feedbackNote.slice(0, 1000);
+  if (!Object.keys(allowed).length) return json({ success: false, error: "No supported fields to patch" }, 400);
+
+  Object.assign(item, allowed);
+
+  // Update the full body too, so a later GET returns the latest feedback.
+  const obj = await env.SOLOMON_LIBRARY.get(item.storagePath);
+  if (obj) {
+    try {
+      const run = JSON.parse(await obj.text());
+      Object.assign(run, allowed);
+      await env.SOLOMON_LIBRARY.put(item.storagePath, JSON.stringify(run), {
+        httpMetadata: { contentType: "application/json" },
+      });
+    } catch { /* body corrupt — manifest still updated */ }
+  }
+
+  await writeHistoryManifest(env, manifest);
+  return json({ success: true, id, item });
+}
+
+// DELETE /asksolomon/history/{id} — soft-delete: archive body, drop from manifest.
+async function handleHistoryDelete(id, request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "History storage not configured" }, 500);
+
+  const manifest = await readHistoryManifest(env);
+  const idx = (manifest.items || []).findIndex(i => i.id === id);
+  if (idx === -1) return json({ success: false, error: "Run not found" }, 404);
+  const item = manifest.items[idx];
+
+  const obj = await env.SOLOMON_LIBRARY.get(item.storagePath);
+  if (obj && env.SOLOMON_LIBRARY_ARCHIVE) {
+    const text = await obj.text();
+    const archivePath = `archived-history/${new Date().toISOString().slice(0, 10)}/${item.storagePath.replace(/^history\//, "")}`;
+    await env.SOLOMON_LIBRARY_ARCHIVE.put(archivePath, text, {
+      httpMetadata: { contentType: "application/json" },
+    });
+  }
+  await env.SOLOMON_LIBRARY.delete(item.storagePath);
+  manifest.items.splice(idx, 1);
+  await writeHistoryManifest(env, manifest);
+  return json({ success: true, id });
+}
+
+// DELETE /asksolomon/history — wipe the manifest. Archives a snapshot first so
+// a fat-finger from the dashboard's "Clear history" button is recoverable.
+async function handleHistoryWipe(request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "History storage not configured" }, 500);
+  const manifest = await readHistoryManifest(env);
+  if (env.SOLOMON_LIBRARY_ARCHIVE) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    await env.SOLOMON_LIBRARY_ARCHIVE.put(
+      `archived-history/manifest-snapshots/${stamp}.json`,
+      JSON.stringify(manifest),
+      { httpMetadata: { contentType: "application/json" } }
+    );
+  }
+  await writeHistoryManifest(env, { items: [] });
+  return json({ success: true, cleared: (manifest.items || []).length });
+}
+
+// ----- end server-side session history -----
+
 // ----- GHL survey webhook — the "no more Vibe" bridge -----
 // GHL surveys write answers into contact custom fields. This endpoint receives
 // a GHL workflow webhook after a survey submits, fetches the contact, maps
@@ -2266,6 +2473,15 @@ export default {
       if (path === "/asksolomon/library") {
         return handleLibraryList(request, env);
       }
+      // GET /asksolomon/history — list run summaries (Fix B, server-side history).
+      if (path === "/asksolomon/history") {
+        return handleHistoryList(request, env);
+      }
+      // GET /asksolomon/history/{id} — fetch full run body.
+      const historyGetMatch = path.match(/^\/asksolomon\/history\/([A-Za-z0-9_-]+)$/);
+      if (historyGetMatch) {
+        return handleHistoryGet(historyGetMatch[1], request, env);
+      }
       // GET /diag/webhook-secret — confirm WEBHOOK_SECRET is present on this deploy
       // without ever revealing its value. Use this after setting the secret in
       // Cloudflare and before wiring the GHL webhook headers.
@@ -2281,9 +2497,21 @@ export default {
     }
 
     // DELETE /asksolomon/library/{id} — soft-delete a library item (moves to archive).
+    // DELETE /asksolomon/history/{id} — soft-delete a run (moves body to archive).
+    // DELETE /asksolomon/history — wipe all run history (manifest snapshot archived).
     if (request.method === "DELETE") {
       const libMatch = path.match(/^\/asksolomon\/library\/([A-Za-z0-9_-]+)$/);
       if (libMatch) return handleLibraryDelete(libMatch[1], request, env);
+      const historyDelMatch = path.match(/^\/asksolomon\/history\/([A-Za-z0-9_-]+)$/);
+      if (historyDelMatch) return handleHistoryDelete(historyDelMatch[1], request, env);
+      if (path === "/asksolomon/history") return handleHistoryWipe(request, env);
+      return json({ success: false, error: "Not found" }, 404);
+    }
+
+    // PATCH /asksolomon/history/{id} — update feedback / feedbackNote on a run.
+    if (request.method === "PATCH") {
+      const historyPatchMatch = path.match(/^\/asksolomon\/history\/([A-Za-z0-9_-]+)$/);
+      if (historyPatchMatch) return handleHistoryPatch(historyPatchMatch[1], request, env);
       return json({ success: false, error: "Not found" }, 404);
     }
 
@@ -2313,6 +2541,11 @@ export default {
     // testimonial, example analysis, rubric fragment).
     if (path === "/asksolomon/library") {
       return handleLibraryUpload(request, env);
+    }
+
+    // POST /asksolomon/history — persist a run to server-side history (Fix B).
+    if (path === "/asksolomon/history") {
+      return handleHistoryAppend(request, env);
     }
 
     // POST /apply-solomon50 — tag a contact when they apply the SOLOMON50 beta code
