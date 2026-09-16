@@ -151,12 +151,28 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
   .start-here {
     background: linear-gradient(135deg, #fef3c7 0%, #fef9e6 100%);
     border-left: 4px solid #c4a647;
-    padding: 20px 24px; border-radius: 8px;
+    border-radius: 8px;
     margin-bottom: 20px;
   }
-  .start-here h2 {
-    font-size: 18px; color: #92400e; margin: 0 0 8px 0;
-    font-weight: 700; letter-spacing: -0.01em;
+  .start-here > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 12px 20px;
+    font-size: 14px; font-weight: 700; color: #92400e;
+    letter-spacing: -0.01em;
+    user-select: none;
+  }
+  .start-here > summary::-webkit-details-marker { display: none; }
+  .start-here > summary::before {
+    content: "▸";
+    display: inline-block;
+    margin-right: 8px;
+    transition: transform 0.15s ease;
+    color: #c4a647;
+  }
+  .start-here[open] > summary::before { transform: rotate(90deg); }
+  .start-here-body {
+    padding: 0 24px 20px 24px;
   }
   .start-here p {
     font-size: 13px; color: #78350f; margin: 0 0 12px 0; line-height: 1.55;
@@ -284,18 +300,20 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
 
   <main class="main">
 
-    <div class="start-here">
-      <h2>👋 Start here — Ask Solomon (Beta)</h2>
-      <p>You're training <strong>Solomon</strong>, the CFO diagnostic behind CFO By Design's SWOT engine. Your test runs and feedback shape how it thinks. Every response is generated fresh — nothing is canned.</p>
-      <ol>
-        <li><strong>Pick a tier</strong> below (<code>free</code>, <code>paid_47</code>, or <code>paid_297</code>) — matches what a real client would go through.</li>
-        <li><strong>Describe a business scenario</strong> — free-form prose in <em>📖 Story</em>, or fill Miguel's canonical intake questions in <em>📝 Guided</em>. Both work; Guided gives Solomon more structure.</li>
-        <li><strong>Click Run ▶</strong> — Solomon returns a badge, opportunity flags, personalized email hook, internal strategist brief, and rendered client-facing report.</li>
-        <li><strong>Love the response?</strong> Type any email in "Send it" to receive the actual production email exactly as a client would see it via HighLevel.</li>
-        <li><strong>Bookmark great runs</strong>, save rubric variants, and export your learnings anytime — everything persists across sessions.</li>
-      </ol>
-      <p style="margin-top:12px;font-style:italic;font-size:11px;color:#78350f;">🎤 Prefer to speak? Mic buttons on textareas let you dictate.</p>
-    </div>
+    <details class="start-here">
+      <summary>👋 Click here for guidance — Ask Solomon (Beta)</summary>
+      <div class="start-here-body">
+        <p>You're training <strong>Solomon</strong>, the CFO diagnostic behind CFO By Design's SWOT engine. Your test runs and feedback shape how it thinks. Every response is generated fresh — nothing is canned.</p>
+        <ol>
+          <li><strong>Pick a tier</strong> below (<code>free</code>, <code>paid_47</code>, or <code>paid_297</code>) — matches what a real client would go through.</li>
+          <li><strong>Describe a business scenario</strong> — free-form prose in <em>📖 Story</em>, or fill Miguel's canonical intake questions in <em>📝 Guided</em>. Both work; Guided gives Solomon more structure.</li>
+          <li><strong>Click Run ▶</strong> — Solomon returns a badge, opportunity flags, personalized email hook, internal strategist brief, and rendered client-facing report.</li>
+          <li><strong>Love the response?</strong> Type any email in "Send it" to receive the actual production email exactly as a client would see it via HighLevel.</li>
+          <li><strong>Bookmark great runs</strong>, save rubric variants, and export your learnings anytime — everything persists across sessions.</li>
+        </ol>
+        <p style="margin-top:12px;font-style:italic;font-size:11px;color:#78350f;">🎤 Prefer to speak? Mic buttons on textareas let you dictate.</p>
+      </div>
+    </details>
 
     <div class="panel" id="input-panel">
 
