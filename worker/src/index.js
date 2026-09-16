@@ -772,6 +772,24 @@ async function addGHLTag(contactId, tags, env) {
   return res.ok;
 }
 
+// Post a note on a GHL contact card. Preferred over adding tags for
+// human-readable audit trails ("Solomon ran a Full SWOT for this contact on
+// 2026-09-16") — notes appear in the Notes tab of the contact card and are
+// searchable, unlike a tag column that gets cluttered fast.
+async function addGHLNote(contactId, body, env) {
+  if (!contactId || !env.GHL_API_KEY || !body) return false;
+  const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}/notes`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${env.GHL_API_KEY}`,
+      Version: "2021-07-28",
+    },
+    body: JSON.stringify({ body: String(body).slice(0, 5000) }),
+  });
+  return res.ok;
+}
+
 // Tag a paid tier requires before the front-end can show its survey.
 // GHL workflows add these tags on "Payment Successful" so they cannot
 // be added or spoofed by the front-end / URL params.
@@ -1483,19 +1501,29 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
       if (agent.strategistBrief) fields.push({ key: "swot_strategist_brief", field_value: String(agent.strategistBrief) });
       fields.push({ key: "swot_report_path", field_value: `${requestUrl.origin}/report/${contactId}` });
 
-      const tags = [
-        `swot_path_${(agent.path || "").toLowerCase()}`,
-        "swot_console_test", // distinguishes ALL console writes from real leads
-        // Additional marker when the operator explicitly said "existing client" —
-        // makes real-contact training runs distinguishable from hypothetical ones
-        // that just happened to be pointed at a valid contactId.
-        body.caseType === "existing_client" ? "swot_console_real_client" : null,
-        ...(agent.opportunityFlags || []).map((f) => String(f).toLowerCase()),
-      ].filter(Boolean);
+      // Tag stack minimized — one marker only. The path + opportunity flags
+      // already live in the swot_path field and the report itself, so tagging
+      // them again just creates GHL tag sprawl. We keep swot_console_test as
+      // the single "this write is not from a real lead" marker.
+      const tags = ["swot_console_test"];
+
+      // Post a note describing what Solomon just did on this real contact.
+      // Notes are the richer, more findable audit trail — action + update in
+      // one place — and don't pollute the contact's tag column.
+      const flagList = (agent.opportunityFlags || []).map(String).join(", ") || "(none)";
+      const caseLabel = body.caseType === "existing_client" ? "Existing client" : "Hypothetical";
+      const noteBody = [
+        `Solomon test run · ${caseLabel}`,
+        `Tier: ${tier}`,
+        `Path: ${agent.path || "?"}`,
+        `Opportunity flags: ${flagList}`,
+        `At: ${new Date().toISOString()}`,
+      ].join("\n");
 
       ctx.waitUntil(Promise.allSettled([
         updateGHLContact(contactId, fields, env),
         addGHLTag(contactId, tags, env),
+        addGHLNote(contactId, noteBody, env),
       ]));
       emailedTo = contact.email || null; // for UI display only; no delivery email actually fires
     } catch (err) {
@@ -1573,22 +1601,32 @@ async function handleConsoleSendResult(request, env, ctx, requestUrl) {
   if (agent.strategistBrief) fields.push({ key: "swot_strategist_brief", field_value: String(agent.strategistBrief) });
   fields.push({ key: "swot_report_path", field_value: `${requestUrl.origin}/report/${contactId}` });
 
-  const tags = [
-    `swot_path_${(agent.path || "").toLowerCase()}`,
-    "swot_console_manual_send", // distinguishes from live leads and from swot_console_test auto-runs
-    ...(agent.opportunityFlags || []).map((f) => String(f).toLowerCase()),
-  ].filter(Boolean);
+  // Single identity marker. Path + opportunity flags already land in
+  // swot_path field + the stored report — no need to tag them separately.
+  const tags = ["swot_console_manual_send"];
+
+  const flagList = (agent.opportunityFlags || []).map(String).join(", ") || "(none)";
+  const caseLabel = body.caseType === "existing_client" ? "Existing client" : "Hypothetical";
+  const noteBody = [
+    `Solomon manual send · ${caseLabel}`,
+    `Tier: ${tier}`,
+    `Path: ${agent.path || "?"}`,
+    `Opportunity flags: ${flagList}`,
+    `Emailed to: ${contact.email || "(no delivery email fired)"}`,
+    `At: ${new Date().toISOString()}`,
+  ].join("\n");
 
   ctx.waitUntil(Promise.allSettled([
     updateGHLContact(contactId, fields, env),
     addGHLTag(contactId, tags, env),
+    addGHLNote(contactId, noteBody, env),
   ]));
 
   return json({
     success: true,
     tier,
     contactId,
-    note: "Report content written. No tier tag or report-ready tag was applied — those must be added manually in GHL if a delivery email is intended.",
+    note: "Report content written and a summary note posted on the contact. No tier tag or report-ready tag applied — those must be added manually in GHL if a delivery email is intended.",
   });
 }
 
