@@ -772,6 +772,24 @@ async function addGHLTag(contactId, tags, env) {
   return res.ok;
 }
 
+// Post a note on a GHL contact card. Preferred over adding tags for
+// human-readable audit trails ("Solomon ran a Full SWOT for this contact on
+// 2026-09-16") — notes appear in the Notes tab of the contact card and are
+// searchable, unlike a tag column that gets cluttered fast.
+async function addGHLNote(contactId, body, env) {
+  if (!contactId || !env.GHL_API_KEY || !body) return false;
+  const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}/notes`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${env.GHL_API_KEY}`,
+      Version: "2021-07-28",
+    },
+    body: JSON.stringify({ body: String(body).slice(0, 5000) }),
+  });
+  return res.ok;
+}
+
 // Tag a paid tier requires before the front-end can show its survey.
 // GHL workflows add these tags on "Payment Successful" so they cannot
 // be added or spoofed by the front-end / URL params.
@@ -1483,15 +1501,29 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
       if (agent.strategistBrief) fields.push({ key: "swot_strategist_brief", field_value: String(agent.strategistBrief) });
       fields.push({ key: "swot_report_path", field_value: `${requestUrl.origin}/report/${contactId}` });
 
-      const tags = [
-        `swot_path_${(agent.path || "").toLowerCase()}`,
-        "swot_console_test", // distinguishes test contacts from real leads
-        ...(agent.opportunityFlags || []).map((f) => String(f).toLowerCase()),
-      ].filter(Boolean);
+      // Tag stack minimized — one marker only. The path + opportunity flags
+      // already live in the swot_path field and the report itself, so tagging
+      // them again just creates GHL tag sprawl. We keep swot_console_test as
+      // the single "this write is not from a real lead" marker.
+      const tags = ["swot_console_test"];
+
+      // Post a note describing what Solomon just did on this real contact.
+      // Notes are the richer, more findable audit trail — action + update in
+      // one place — and don't pollute the contact's tag column.
+      const flagList = (agent.opportunityFlags || []).map(String).join(", ") || "(none)";
+      const caseLabel = body.caseType === "existing_client" ? "Existing client" : "Hypothetical";
+      const noteBody = [
+        `Solomon test run · ${caseLabel}`,
+        `Tier: ${tier}`,
+        `Path: ${agent.path || "?"}`,
+        `Opportunity flags: ${flagList}`,
+        `At: ${new Date().toISOString()}`,
+      ].join("\n");
 
       ctx.waitUntil(Promise.allSettled([
         updateGHLContact(contactId, fields, env),
         addGHLTag(contactId, tags, env),
+        addGHLNote(contactId, noteBody, env),
       ]));
       emailedTo = contact.email || null; // for UI display only; no delivery email actually fires
     } catch (err) {
@@ -1569,22 +1601,32 @@ async function handleConsoleSendResult(request, env, ctx, requestUrl) {
   if (agent.strategistBrief) fields.push({ key: "swot_strategist_brief", field_value: String(agent.strategistBrief) });
   fields.push({ key: "swot_report_path", field_value: `${requestUrl.origin}/report/${contactId}` });
 
-  const tags = [
-    `swot_path_${(agent.path || "").toLowerCase()}`,
-    "swot_console_manual_send", // distinguishes from live leads and from swot_console_test auto-runs
-    ...(agent.opportunityFlags || []).map((f) => String(f).toLowerCase()),
-  ].filter(Boolean);
+  // Single identity marker. Path + opportunity flags already land in
+  // swot_path field + the stored report — no need to tag them separately.
+  const tags = ["swot_console_manual_send"];
+
+  const flagList = (agent.opportunityFlags || []).map(String).join(", ") || "(none)";
+  const caseLabel = body.caseType === "existing_client" ? "Existing client" : "Hypothetical";
+  const noteBody = [
+    `Solomon manual send · ${caseLabel}`,
+    `Tier: ${tier}`,
+    `Path: ${agent.path || "?"}`,
+    `Opportunity flags: ${flagList}`,
+    `Emailed to: ${contact.email || "(no delivery email fired)"}`,
+    `At: ${new Date().toISOString()}`,
+  ].join("\n");
 
   ctx.waitUntil(Promise.allSettled([
     updateGHLContact(contactId, fields, env),
     addGHLTag(contactId, tags, env),
+    addGHLNote(contactId, noteBody, env),
   ]));
 
   return json({
     success: true,
     tier,
     contactId,
-    note: "Report content written. No tier tag or report-ready tag was applied — those must be added manually in GHL if a delivery email is intended.",
+    note: "Report content written and a summary note posted on the contact. No tier tag or report-ready tag applied — those must be added manually in GHL if a delivery email is intended.",
   });
 }
 
@@ -1723,6 +1765,449 @@ async function buildLibraryContext(env, ids) {
     : "";
 }
 // ----- end reference library -----
+
+// ----- Server-side session history (Fix B) -----
+// Cross-device / team-shared history for Ask Solomon runs. Backed by the same
+// SOLOMON_LIBRARY R2 bucket under a `history/` prefix so no new binding is
+// required.
+//
+// Layout:
+//   history/manifest.json         — up to HISTORY_MANIFEST_LIMIT run summaries
+//   history/runs/{YYYY-MM-DD}/{id}.json — full run body (answers + full result)
+//   (soft-deletes archived to SOLOMON_LIBRARY_ARCHIVE under archived-history/)
+//
+// A "summary" is small enough to list hundreds cheaply; the full body is
+// lazy-loaded on demand when the user opens a run.
+
+const HISTORY_MANIFEST_KEY = "history/manifest.json";
+const HISTORY_MANIFEST_LIMIT = 500;
+const HISTORY_RUN_MAX_BYTES = 512 * 1024; // 512KB per run — plenty for even large reports
+
+async function readHistoryManifest(env) {
+  if (!env.SOLOMON_LIBRARY) return { items: [] };
+  const obj = await env.SOLOMON_LIBRARY.get(HISTORY_MANIFEST_KEY);
+  if (!obj) return { items: [] };
+  try { return JSON.parse(await obj.text()); }
+  catch { return { items: [] }; }
+}
+
+async function writeHistoryManifest(env, manifest) {
+  await env.SOLOMON_LIBRARY.put(HISTORY_MANIFEST_KEY, JSON.stringify(manifest), {
+    httpMetadata: { contentType: "application/json" },
+  });
+}
+
+// Extract the minimal summary shown in the sidebar. Kept small on purpose so
+// the manifest stays cheap to fetch on page load.
+function summarizeRun(run) {
+  const r = run.result || {};
+  return {
+    id: run.id,
+    ts: run.ts || new Date().toISOString(),
+    tier: run.tier || "free",
+    contactName: (run.contact && run.contact.name) || "",
+    contactEmail: (run.contact && run.contact.email) || "",
+    path: r.path || "",
+    opportunityFlagsCount: Array.isArray(r.opportunityFlags) ? r.opportunityFlags.length : 0,
+    feedback: run.feedback || null,
+    feedbackNote: run.feedbackNote || "",
+    // Storage path is server-controlled; used to fetch the full body.
+    storagePath: run.storagePath,
+  };
+}
+
+function historyStoragePath(id, ts) {
+  const day = (ts || new Date().toISOString()).slice(0, 10); // YYYY-MM-DD
+  return `history/runs/${day}/${id}.json`;
+}
+
+// GET /asksolomon/history — return manifest summaries.
+async function handleHistoryList(request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "History storage not configured" }, 500);
+  const manifest = await readHistoryManifest(env);
+  return json({ success: true, items: manifest.items || [] });
+}
+
+// GET /asksolomon/history/{id} — return the full run body.
+async function handleHistoryGet(id, request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "History storage not configured" }, 500);
+  const manifest = await readHistoryManifest(env);
+  const item = (manifest.items || []).find(i => i.id === id);
+  if (!item || !item.storagePath) return json({ success: false, error: "Run not found" }, 404);
+  const obj = await env.SOLOMON_LIBRARY.get(item.storagePath);
+  if (!obj) return json({ success: false, error: "Run body missing" }, 404);
+  try {
+    const run = JSON.parse(await obj.text());
+    return json({ success: true, run });
+  } catch {
+    return json({ success: false, error: "Run body corrupted" }, 500);
+  }
+}
+
+// POST /asksolomon/history — append a run.
+// Body: the run object as saved locally by the console page.
+async function handleHistoryAppend(request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "History storage not configured" }, 500);
+
+  let run;
+  try { run = await request.json(); }
+  catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+
+  if (!run || typeof run !== "object" || !run.id) {
+    return json({ success: false, error: "Missing run.id" }, 400);
+  }
+
+  const body = JSON.stringify(run);
+  if (body.length > HISTORY_RUN_MAX_BYTES) {
+    return json({ success: false, error: "Run body exceeds 512KB — refusing to persist" }, 413);
+  }
+
+  const storagePath = historyStoragePath(run.id, run.ts);
+  await env.SOLOMON_LIBRARY.put(storagePath, body, {
+    httpMetadata: { contentType: "application/json" },
+  });
+
+  const manifest = await readHistoryManifest(env);
+  manifest.items = manifest.items || [];
+
+  // Replace-or-prepend — a re-save (feedback edit, regenerate flow) shouldn't dupe.
+  const existingIdx = manifest.items.findIndex(i => i.id === run.id);
+  const summary = summarizeRun({ ...run, storagePath });
+  if (existingIdx !== -1) {
+    manifest.items.splice(existingIdx, 1);
+  }
+  manifest.items.unshift(summary);
+
+  // Trim tail — oldest entries fall off. Their bodies stay in R2 (small footprint,
+  // recoverable if we ever want lifetime history), just not listed on the dashboard.
+  if (manifest.items.length > HISTORY_MANIFEST_LIMIT) {
+    manifest.items.length = HISTORY_MANIFEST_LIMIT;
+  }
+
+  await writeHistoryManifest(env, manifest);
+  return json({ success: true, id: run.id, summary });
+}
+
+// PATCH /asksolomon/history/{id} — update feedback / feedbackNote on a run.
+// Small partial update that touches both the manifest summary and the full body.
+async function handleHistoryPatch(id, request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "History storage not configured" }, 500);
+
+  let patch;
+  try { patch = await request.json(); }
+  catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+
+  const manifest = await readHistoryManifest(env);
+  const idx = (manifest.items || []).findIndex(i => i.id === id);
+  if (idx === -1) return json({ success: false, error: "Run not found" }, 404);
+  const item = manifest.items[idx];
+
+  const allowed = {};
+  if (patch.feedback === "up" || patch.feedback === "down" || patch.feedback === null) allowed.feedback = patch.feedback;
+  if (typeof patch.feedbackNote === "string") allowed.feedbackNote = patch.feedbackNote.slice(0, 1000);
+  if (!Object.keys(allowed).length) return json({ success: false, error: "No supported fields to patch" }, 400);
+
+  Object.assign(item, allowed);
+
+  // Update the full body too, so a later GET returns the latest feedback.
+  const obj = await env.SOLOMON_LIBRARY.get(item.storagePath);
+  if (obj) {
+    try {
+      const run = JSON.parse(await obj.text());
+      Object.assign(run, allowed);
+      await env.SOLOMON_LIBRARY.put(item.storagePath, JSON.stringify(run), {
+        httpMetadata: { contentType: "application/json" },
+      });
+    } catch { /* body corrupt — manifest still updated */ }
+  }
+
+  await writeHistoryManifest(env, manifest);
+  return json({ success: true, id, item });
+}
+
+// DELETE /asksolomon/history/{id} — soft-delete: archive body, drop from manifest.
+async function handleHistoryDelete(id, request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "History storage not configured" }, 500);
+
+  const manifest = await readHistoryManifest(env);
+  const idx = (manifest.items || []).findIndex(i => i.id === id);
+  if (idx === -1) return json({ success: false, error: "Run not found" }, 404);
+  const item = manifest.items[idx];
+
+  const obj = await env.SOLOMON_LIBRARY.get(item.storagePath);
+  if (obj && env.SOLOMON_LIBRARY_ARCHIVE) {
+    const text = await obj.text();
+    const archivePath = `archived-history/${new Date().toISOString().slice(0, 10)}/${item.storagePath.replace(/^history\//, "")}`;
+    await env.SOLOMON_LIBRARY_ARCHIVE.put(archivePath, text, {
+      httpMetadata: { contentType: "application/json" },
+    });
+  }
+  await env.SOLOMON_LIBRARY.delete(item.storagePath);
+  manifest.items.splice(idx, 1);
+  await writeHistoryManifest(env, manifest);
+  return json({ success: true, id });
+}
+
+// DELETE /asksolomon/history — wipe the manifest. Archives a snapshot first so
+// a fat-finger from the dashboard's "Clear history" button is recoverable.
+async function handleHistoryWipe(request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "History storage not configured" }, 500);
+  const manifest = await readHistoryManifest(env);
+  if (env.SOLOMON_LIBRARY_ARCHIVE) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    await env.SOLOMON_LIBRARY_ARCHIVE.put(
+      `archived-history/manifest-snapshots/${stamp}.json`,
+      JSON.stringify(manifest),
+      { httpMetadata: { contentType: "application/json" } }
+    );
+  }
+  await writeHistoryManifest(env, { items: [] });
+  return json({ success: true, cleared: (manifest.items || []).length });
+}
+
+// ----- end server-side session history -----
+
+// ----- Server-side bookmarks (Fix B, extended) -----
+// Same shape as history: a manifest of summaries + per-bookmark body files.
+// Bookmarks differ from history in three ways:
+//   - No upper cap (500) — bookmarks are Miguel's curated wins, keep them all
+//   - Include a `label` field
+//   - Never auto-trim, only explicit delete removes an entry
+
+const BOOKMARKS_MANIFEST_KEY = "bookmarks/manifest.json";
+const BOOKMARKS_RUN_MAX_BYTES = 512 * 1024;
+
+async function readBookmarksManifest(env) {
+  if (!env.SOLOMON_LIBRARY) return { items: [] };
+  const obj = await env.SOLOMON_LIBRARY.get(BOOKMARKS_MANIFEST_KEY);
+  if (!obj) return { items: [] };
+  try { return JSON.parse(await obj.text()); }
+  catch { return { items: [] }; }
+}
+
+async function writeBookmarksManifest(env, manifest) {
+  await env.SOLOMON_LIBRARY.put(BOOKMARKS_MANIFEST_KEY, JSON.stringify(manifest), {
+    httpMetadata: { contentType: "application/json" },
+  });
+}
+
+function summarizeBookmark(bookmark) {
+  const r = bookmark.result || {};
+  return {
+    id: bookmark.id,
+    ts: bookmark.ts || new Date().toISOString(),
+    label: bookmark.label || "",
+    tier: bookmark.tier || "free",
+    contactName: (bookmark.contact && bookmark.contact.name) || "",
+    contactEmail: (bookmark.contact && bookmark.contact.email) || "",
+    path: r.path || "",
+    feedback: bookmark.feedback || null,
+    feedbackNote: bookmark.feedbackNote || "",
+    storagePath: bookmark.storagePath,
+  };
+}
+
+function bookmarkStoragePath(id, ts) {
+  const day = (ts || new Date().toISOString()).slice(0, 10);
+  return `bookmarks/runs/${day}/${id}.json`;
+}
+
+async function handleBookmarksList(request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "Bookmarks storage not configured" }, 500);
+  const manifest = await readBookmarksManifest(env);
+  return json({ success: true, items: manifest.items || [] });
+}
+
+async function handleBookmarkGet(id, request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "Bookmarks storage not configured" }, 500);
+  const manifest = await readBookmarksManifest(env);
+  const item = (manifest.items || []).find(i => i.id === id);
+  if (!item || !item.storagePath) return json({ success: false, error: "Bookmark not found" }, 404);
+  const obj = await env.SOLOMON_LIBRARY.get(item.storagePath);
+  if (!obj) return json({ success: false, error: "Bookmark body missing" }, 404);
+  try {
+    const bookmark = JSON.parse(await obj.text());
+    return json({ success: true, bookmark });
+  } catch {
+    return json({ success: false, error: "Bookmark body corrupted" }, 500);
+  }
+}
+
+async function handleBookmarkAppend(request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "Bookmarks storage not configured" }, 500);
+
+  let bookmark;
+  try { bookmark = await request.json(); }
+  catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+  if (!bookmark || typeof bookmark !== "object" || !bookmark.id) {
+    return json({ success: false, error: "Missing bookmark.id" }, 400);
+  }
+
+  const body = JSON.stringify(bookmark);
+  if (body.length > BOOKMARKS_RUN_MAX_BYTES) {
+    return json({ success: false, error: "Bookmark body exceeds 512KB" }, 413);
+  }
+
+  const storagePath = bookmarkStoragePath(bookmark.id, bookmark.ts);
+  await env.SOLOMON_LIBRARY.put(storagePath, body, {
+    httpMetadata: { contentType: "application/json" },
+  });
+
+  const manifest = await readBookmarksManifest(env);
+  manifest.items = manifest.items || [];
+  const existingIdx = manifest.items.findIndex(i => i.id === bookmark.id);
+  const summary = summarizeBookmark({ ...bookmark, storagePath });
+  if (existingIdx !== -1) manifest.items.splice(existingIdx, 1);
+  manifest.items.unshift(summary);
+  await writeBookmarksManifest(env, manifest);
+  return json({ success: true, id: bookmark.id, summary });
+}
+
+async function handleBookmarkPatch(id, request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "Bookmarks storage not configured" }, 500);
+
+  let patch;
+  try { patch = await request.json(); }
+  catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+
+  const manifest = await readBookmarksManifest(env);
+  const idx = (manifest.items || []).findIndex(i => i.id === id);
+  if (idx === -1) return json({ success: false, error: "Bookmark not found" }, 404);
+  const item = manifest.items[idx];
+
+  const allowed = {};
+  if (typeof patch.label === "string") allowed.label = patch.label.slice(0, 200);
+  if (patch.feedback === "up" || patch.feedback === "down" || patch.feedback === null) allowed.feedback = patch.feedback;
+  if (typeof patch.feedbackNote === "string") allowed.feedbackNote = patch.feedbackNote.slice(0, 1000);
+  if (!Object.keys(allowed).length) return json({ success: false, error: "No supported fields to patch" }, 400);
+
+  Object.assign(item, allowed);
+  const obj = await env.SOLOMON_LIBRARY.get(item.storagePath);
+  if (obj) {
+    try {
+      const bookmark = JSON.parse(await obj.text());
+      Object.assign(bookmark, allowed);
+      await env.SOLOMON_LIBRARY.put(item.storagePath, JSON.stringify(bookmark), {
+        httpMetadata: { contentType: "application/json" },
+      });
+    } catch { /* body corrupt — manifest still updated */ }
+  }
+  await writeBookmarksManifest(env, manifest);
+  return json({ success: true, id, item });
+}
+
+async function handleBookmarkDelete(id, request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "Bookmarks storage not configured" }, 500);
+  const manifest = await readBookmarksManifest(env);
+  const idx = (manifest.items || []).findIndex(i => i.id === id);
+  if (idx === -1) return json({ success: false, error: "Bookmark not found" }, 404);
+  const item = manifest.items[idx];
+
+  const obj = await env.SOLOMON_LIBRARY.get(item.storagePath);
+  if (obj && env.SOLOMON_LIBRARY_ARCHIVE) {
+    const text = await obj.text();
+    const archivePath = `archived-bookmarks/${new Date().toISOString().slice(0, 10)}/${item.storagePath.replace(/^bookmarks\//, "")}`;
+    await env.SOLOMON_LIBRARY_ARCHIVE.put(archivePath, text, {
+      httpMetadata: { contentType: "application/json" },
+    });
+  }
+  await env.SOLOMON_LIBRARY.delete(item.storagePath);
+  manifest.items.splice(idx, 1);
+  await writeBookmarksManifest(env, manifest);
+  return json({ success: true, id });
+}
+
+// ----- end server-side bookmarks -----
+
+// ----- Server-side saved rubrics (Fix B, extended) -----
+// Rubric variants are small (a few KB of text) so we keep them all inline in
+// one manifest file — no per-item body objects. Simpler than history/bookmarks
+// and cheap to fetch on page load.
+
+const RUBRICS_MANIFEST_KEY = "rubrics/manifest.json";
+const RUBRIC_TEXT_MAX_BYTES = 64 * 1024; // 64KB per rubric variant — well beyond realistic length
+
+async function readRubricsManifest(env) {
+  if (!env.SOLOMON_LIBRARY) return { items: [] };
+  const obj = await env.SOLOMON_LIBRARY.get(RUBRICS_MANIFEST_KEY);
+  if (!obj) return { items: [] };
+  try { return JSON.parse(await obj.text()); }
+  catch { return { items: [] }; }
+}
+
+async function writeRubricsManifest(env, manifest) {
+  await env.SOLOMON_LIBRARY.put(RUBRICS_MANIFEST_KEY, JSON.stringify(manifest), {
+    httpMetadata: { contentType: "application/json" },
+  });
+}
+
+async function handleRubricsList(request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "Rubrics storage not configured" }, 500);
+  const manifest = await readRubricsManifest(env);
+  return json({ success: true, items: manifest.items || [] });
+}
+
+async function handleRubricsAppend(request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "Rubrics storage not configured" }, 500);
+
+  let rubric;
+  try { rubric = await request.json(); }
+  catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+  if (!rubric || typeof rubric !== "object") {
+    return json({ success: false, error: "Invalid rubric body" }, 400);
+  }
+  const label = String(rubric.label || "").trim().slice(0, 120);
+  const text = String(rubric.text || "").trim();
+  if (!label) return json({ success: false, error: "label is required" }, 400);
+  if (!text) return json({ success: false, error: "text is required" }, 400);
+  if (text.length > RUBRIC_TEXT_MAX_BYTES) return json({ success: false, error: "Rubric text exceeds 64KB" }, 413);
+
+  const id = rubric.id || ("rubric_" + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6));
+  const ts = rubric.ts || new Date().toISOString();
+
+  const manifest = await readRubricsManifest(env);
+  manifest.items = manifest.items || [];
+  const existingIdx = manifest.items.findIndex(i => i.id === id);
+  const entry = { id, label, text, ts };
+  if (existingIdx !== -1) manifest.items.splice(existingIdx, 1);
+  manifest.items.unshift(entry);
+  await writeRubricsManifest(env, manifest);
+  return json({ success: true, id, item: entry });
+}
+
+async function handleRubricDelete(id, request, env) {
+  if (!checkConsolePassword(request, env)) return json({ success: false, error: "Unauthorized" }, 401);
+  if (!env.SOLOMON_LIBRARY) return json({ success: false, error: "Rubrics storage not configured" }, 500);
+  const manifest = await readRubricsManifest(env);
+  const idx = (manifest.items || []).findIndex(i => i.id === id);
+  if (idx === -1) return json({ success: false, error: "Rubric not found" }, 404);
+  const [removed] = manifest.items.splice(idx, 1);
+  if (env.SOLOMON_LIBRARY_ARCHIVE) {
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    await env.SOLOMON_LIBRARY_ARCHIVE.put(
+      `archived-rubrics/${stamp}-${id}.json`,
+      JSON.stringify(removed),
+      { httpMetadata: { contentType: "application/json" } }
+    );
+  }
+  await writeRubricsManifest(env, manifest);
+  return json({ success: true, id });
+}
+
+// ----- end server-side saved rubrics -----
 
 // ----- GHL survey webhook — the "no more Vibe" bridge -----
 // GHL surveys write answers into contact custom fields. This endpoint receives
@@ -2266,6 +2751,28 @@ export default {
       if (path === "/asksolomon/library") {
         return handleLibraryList(request, env);
       }
+      // GET /asksolomon/history — list run summaries (Fix B, server-side history).
+      if (path === "/asksolomon/history") {
+        return handleHistoryList(request, env);
+      }
+      // GET /asksolomon/history/{id} — fetch full run body.
+      const historyGetMatch = path.match(/^\/asksolomon\/history\/([A-Za-z0-9_-]+)$/);
+      if (historyGetMatch) {
+        return handleHistoryGet(historyGetMatch[1], request, env);
+      }
+      // GET /asksolomon/bookmarks — list bookmark summaries.
+      if (path === "/asksolomon/bookmarks") {
+        return handleBookmarksList(request, env);
+      }
+      // GET /asksolomon/bookmarks/{id} — fetch full bookmark body.
+      const bookmarkGetMatch = path.match(/^\/asksolomon\/bookmarks\/([A-Za-z0-9_-]+)$/);
+      if (bookmarkGetMatch) {
+        return handleBookmarkGet(bookmarkGetMatch[1], request, env);
+      }
+      // GET /asksolomon/rubrics — list saved rubric variants (all fields inline).
+      if (path === "/asksolomon/rubrics") {
+        return handleRubricsList(request, env);
+      }
       // GET /diag/webhook-secret — confirm WEBHOOK_SECRET is present on this deploy
       // without ever revealing its value. Use this after setting the secret in
       // Cloudflare and before wiring the GHL webhook headers.
@@ -2281,9 +2788,28 @@ export default {
     }
 
     // DELETE /asksolomon/library/{id} — soft-delete a library item (moves to archive).
+    // DELETE /asksolomon/history/{id} — soft-delete a run (moves body to archive).
+    // DELETE /asksolomon/history — wipe all run history (manifest snapshot archived).
     if (request.method === "DELETE") {
       const libMatch = path.match(/^\/asksolomon\/library\/([A-Za-z0-9_-]+)$/);
       if (libMatch) return handleLibraryDelete(libMatch[1], request, env);
+      const historyDelMatch = path.match(/^\/asksolomon\/history\/([A-Za-z0-9_-]+)$/);
+      if (historyDelMatch) return handleHistoryDelete(historyDelMatch[1], request, env);
+      if (path === "/asksolomon/history") return handleHistoryWipe(request, env);
+      const bookmarkDelMatch = path.match(/^\/asksolomon\/bookmarks\/([A-Za-z0-9_-]+)$/);
+      if (bookmarkDelMatch) return handleBookmarkDelete(bookmarkDelMatch[1], request, env);
+      const rubricDelMatch = path.match(/^\/asksolomon\/rubrics\/([A-Za-z0-9_-]+)$/);
+      if (rubricDelMatch) return handleRubricDelete(rubricDelMatch[1], request, env);
+      return json({ success: false, error: "Not found" }, 404);
+    }
+
+    // PATCH /asksolomon/history/{id} — update feedback / feedbackNote on a run.
+    // PATCH /asksolomon/bookmarks/{id} — update label / feedback / feedbackNote.
+    if (request.method === "PATCH") {
+      const historyPatchMatch = path.match(/^\/asksolomon\/history\/([A-Za-z0-9_-]+)$/);
+      if (historyPatchMatch) return handleHistoryPatch(historyPatchMatch[1], request, env);
+      const bookmarkPatchMatch = path.match(/^\/asksolomon\/bookmarks\/([A-Za-z0-9_-]+)$/);
+      if (bookmarkPatchMatch) return handleBookmarkPatch(bookmarkPatchMatch[1], request, env);
       return json({ success: false, error: "Not found" }, 404);
     }
 
@@ -2313,6 +2839,21 @@ export default {
     // testimonial, example analysis, rubric fragment).
     if (path === "/asksolomon/library") {
       return handleLibraryUpload(request, env);
+    }
+
+    // POST /asksolomon/history — persist a run to server-side history (Fix B).
+    if (path === "/asksolomon/history") {
+      return handleHistoryAppend(request, env);
+    }
+
+    // POST /asksolomon/bookmarks — persist a bookmark to the shared manifest.
+    if (path === "/asksolomon/bookmarks") {
+      return handleBookmarkAppend(request, env);
+    }
+
+    // POST /asksolomon/rubrics — save a rubric variant to the shared manifest.
+    if (path === "/asksolomon/rubrics") {
+      return handleRubricsAppend(request, env);
     }
 
     // POST /apply-solomon50 — tag a contact when they apply the SOLOMON50 beta code

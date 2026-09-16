@@ -305,7 +305,8 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
       <div class="start-here-body">
         <p>You're training <strong>Solomon</strong>, the CFO diagnostic behind CFO By Design's SWOT engine. Your test runs and feedback shape how it thinks. Every response is generated fresh — nothing is canned.</p>
         <ol>
-          <li><strong>Pick a tier</strong> below (<code>free</code>, <code>paid_47</code>, or <code>paid_297</code>) — matches what a real client would go through.</li>
+          <li><strong>Pick a tier</strong> below (<code>Free</code>, <code>Partial SWOT</code>, or <code>Full SWOT</code>) — matches what a real client would go through.</li>
+          <li><strong>Pick a scenario type</strong> — <em>Hypothetical case</em> for a made-up business (default), or <em>Existing client</em> if you want to run the diagnostic against a real GHL contact (requires the GHL contactId).</li>
           <li><strong>Describe a business scenario</strong> — free-form prose in <em>📖 Story</em>, or fill Miguel's canonical intake questions in <em>📝 Guided</em>. Both work; Guided gives Solomon more structure.</li>
           <li><strong>Click Run ▶</strong> — Solomon returns a badge, opportunity flags, personalized email hook, internal strategist brief, and rendered client-facing report.</li>
           <li><strong>Love the response?</strong> Type any email in "Send it" to receive the actual production email exactly as a client would see it via HighLevel.</li>
@@ -321,18 +322,32 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
         <div>
           <label for="tier">Tier</label>
           <select id="tier">
-            <option value="free" selected>free</option>
-            <option value="paid_47">paid_47</option>
-            <option value="paid_297">paid_297</option>
+            <option value="free" selected>Free</option>
+            <option value="paid_47">Partial SWOT</option>
+            <option value="paid_297">Full SWOT</option>
+          </select>
+        </div>
+        <div>
+          <label for="case-type">Scenario type</label>
+          <select id="case-type">
+            <option value="hypothetical" selected>Hypothetical case</option>
+            <option value="existing_client">Existing client</option>
           </select>
         </div>
         <div>
           <label for="contact-name">Contact name</label>
           <input type="text" id="contact-name" placeholder="Test Owner" value="Test Owner">
         </div>
+      </div>
+
+      <div class="form-row">
         <div>
           <label for="contact-email">Email — leave blank for pure test · fill to receive the actual workflow email</label>
           <input type="email" id="contact-email" placeholder="your@email.com (will trigger the tier email workflow)">
+        </div>
+        <div id="contact-id-wrap" style="display:none;">
+          <label for="contact-id">GHL contact ID — <strong>required for existing clients</strong></label>
+          <input type="text" id="contact-id" placeholder="e.g. abc123XYZ… (from the contact card URL in GHL)">
         </div>
       </div>
 
@@ -433,6 +448,13 @@ const HISTORY_LIMIT = 20;
 const INPUT_DRAFT_KEY = "asksolomon_input_draft";
 const GUIDED_ANSWERS_KEY = "asksolomon_guided_answers"; // per-question values keyed by q.key, persist across tier switches
 const LIBRARY_SELECTED_KEY = "asksolomon_library_selected"; // array of library item ids currently checked-in for the next run
+
+// Display labels for tiers — server + GHL tags still use the raw values
+// (free / paid_47 / paid_297); only the dashboard shows the friendly names.
+const TIER_LABELS = { free: "Free", paid_47: "Partial SWOT", paid_297: "Full SWOT" };
+function tierLabel(t) { return TIER_LABELS[t] || t || "—"; }
+const CASE_TYPE_LABELS = { hypothetical: "Hypothetical", existing_client: "Existing client" };
+function caseTypeLabel(t) { return CASE_TYPE_LABELS[t] || CASE_TYPE_LABELS.hypothetical; }
 const LIBRARY_CATEGORIES = [
   { key: "transcript", label: "🎙️ Transcripts", hint: "Client meeting transcripts (Fireflies, Gong, manual)" },
   { key: "testimonial", label: "🗨️ Testimonials", hint: "Verbatim client quotes about outcomes" },
@@ -610,6 +632,10 @@ function checkPassword() {
       sessionStorage.setItem(PASSWORD_KEY, pw);
       document.getElementById("gate").style.display = "none";
       renderSidebar();
+      // Now that we have a password, pull all shared server-side state.
+      hydrateHistoryFromServer();
+      hydrateBookmarksFromServer();
+      hydrateRubricsFromServer();
     } else {
       showGateError("Server error " + r.status);
     }
@@ -660,14 +686,27 @@ window.addEventListener("DOMContentLoaded", () => {
   restoreInputsFromLocal();
   renderSidebar();
   // Wire auto-save on every meaningful input change.
-  ["tier", "contact-name", "contact-email", "answers", "rubric-override"].forEach(id => {
+  ["tier", "case-type", "contact-name", "contact-email", "contact-id", "answers", "rubric-override"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener("input", saveInputsToLocal);
-    if (el && id === "tier") el.addEventListener("change", saveInputsToLocal);
+    if (el && (id === "tier" || id === "case-type")) el.addEventListener("change", saveInputsToLocal);
   });
+  // Show/hide the GHL contact ID field based on scenario type.
+  const caseSel = document.getElementById("case-type");
+  if (caseSel) caseSel.addEventListener("change", applyCaseTypeVisibility);
+  applyCaseTypeVisibility();
   initMicButtons();
   // Fetch + render the reference library on load.
   renderLibrary();
+  // Merge server-side history / bookmarks / rubrics (Fix B) into the local
+  // caches so anything the team saved from another browser shows up here too.
+  // Non-blocking — the local sidebar renders first, then re-renders as each
+  // hydrate resolves.
+  if (getPassword()) {
+    hydrateHistoryFromServer();
+    hydrateBookmarksFromServer();
+    hydrateRubricsFromServer();
+  }
 });
 
 // Wire every element with class .mic-btn to a Web Speech API recorder that
@@ -720,13 +759,25 @@ function initMicButtons() {
   });
 }
 
+// Show / hide the GHL contact ID input based on the Scenario type dropdown.
+// Existing-client runs must be tied to a real GHL contact; hypothetical runs
+// don't need one and shouldn't accidentally push writeback to a real record.
+function applyCaseTypeVisibility() {
+  const sel = document.getElementById("case-type");
+  const wrap = document.getElementById("contact-id-wrap");
+  if (!sel || !wrap) return;
+  wrap.style.display = sel.value === "existing_client" ? "" : "none";
+}
+
 // Persist current form inputs to localStorage so refresh doesn't nuke work in progress.
 function saveInputsToLocal() {
   try {
     const draft = {
       tier: document.getElementById("tier")?.value || "free",
+      caseType: document.getElementById("case-type")?.value || "hypothetical",
       contactName: document.getElementById("contact-name")?.value || "",
       contactEmail: document.getElementById("contact-email")?.value || "",
+      contactId: document.getElementById("contact-id")?.value || "",
       answersRaw: document.getElementById("answers")?.value || "",
       rubricOverride: document.getElementById("rubric-override")?.value || "",
       mode: document.getElementById("answers")?.dataset.mode || "story",
@@ -759,8 +810,11 @@ function restoreInputsFromLocal() {
     const draft = JSON.parse(localStorage.getItem(INPUT_DRAFT_KEY) || "null");
     if (!draft) return;
     if (draft.tier) document.getElementById("tier").value = draft.tier;
+    if (draft.caseType) document.getElementById("case-type").value = draft.caseType;
     if (draft.contactName) document.getElementById("contact-name").value = draft.contactName;
     if (draft.contactEmail) document.getElementById("contact-email").value = draft.contactEmail;
+    if (draft.contactId) document.getElementById("contact-id").value = draft.contactId;
+    applyCaseTypeVisibility();
     if (draft.answersRaw) document.getElementById("answers").value = draft.answersRaw;
     if (draft.rubricOverride) {
       document.getElementById("rubric-override").value = draft.rubricOverride;
@@ -790,10 +844,19 @@ function readLocal(key, fallback) {
 // ---------- Run ----------
 async function runSolomon() {
   const tier = document.getElementById("tier").value;
+  const caseType = document.getElementById("case-type").value;
   const contactName = document.getElementById("contact-name").value.trim();
   const contactEmail = document.getElementById("contact-email").value.trim();
+  const contactId = document.getElementById("contact-id").value.trim();
   const answersRaw = document.getElementById("answers").value.trim();
   const rubricOverride = document.getElementById("rubric-override").value.trim();
+
+  // Existing-client runs must be tied to a real GHL contact — the worker
+  // requires contactId for any writeback and Solomon should never touch a
+  // real record on a typo.
+  if (caseType === "existing_client" && !contactId) {
+    return toast("Enter the GHL contact ID for existing-client scenarios.", "error");
+  }
 
   const mode = document.getElementById("answers").dataset.mode || "story";
   let answers;
@@ -822,7 +885,12 @@ async function runSolomon() {
       headers: { "Content-Type": "application/json", "x-console-password": getPassword() },
       body: JSON.stringify({
         tier,
-        contact: { name: contactName, email: contactEmail },
+        caseType,
+        contact: {
+          name: contactName,
+          email: contactEmail,
+          ...(contactId ? { contactId } : {}),
+        },
         answers,
         rubricOverride: rubricOverride || undefined,
         libraryIds: getSelectedLibraryIds(),
@@ -841,7 +909,12 @@ async function runSolomon() {
       id: "run_" + Date.now(),
       ts: new Date().toISOString(),
       tier,
-      contact: { name: contactName, email: contactEmail },
+      caseType,
+      contact: {
+        name: contactName,
+        email: contactEmail,
+        ...(contactId ? { contactId } : {}),
+      },
       answersRaw,
       rubricOverride: rubricOverride || null,
       result: data,
@@ -859,18 +932,282 @@ async function runSolomon() {
 }
 
 function saveRun(run) {
-  // History is stored in localStorage so it persists across tabs, browser
-  // restarts, and logouts — the operator can walk away, come back tomorrow,
-  // and still see their recent runs. Was previously sessionStorage which
-  // wiped the moment the tab closed (the "history never shows anything"
-  // symptom). Password stays in sessionStorage; only run history is
-  // persistent-per-device here. For cross-device history use Fix B (server-
-  // side manifest in R2).
+  // Local cache (Fix A): fast, offline-friendly, per-browser.
   const history = readLocal(HISTORY_KEY, []);
   history.unshift(run);
   if (history.length > HISTORY_LIMIT) history.length = HISTORY_LIMIT;
   localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
   renderSidebar();
+  // Server sync (Fix B): cross-device / team-shared history in R2.
+  // Fire-and-forget — local cache is still correct if the network hiccups.
+  syncRunToServer(run);
+}
+
+// ---------- Server-side history sync (Fix B) ----------
+// The worker holds a manifest of run summaries in R2 (see handleHistory* in
+// index.js). We push each new run and PATCH feedback changes so team members
+// on a different browser or device see the same list.
+
+async function syncRunToServer(run) {
+  try {
+    const res = await fetch("/asksolomon/history", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-console-password": getPassword() },
+      body: JSON.stringify(run),
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+    if (!res.ok) {
+      // Non-fatal — the local copy is still saved.
+      console.warn("[history-sync] append failed:", res.status);
+    }
+  } catch (e) {
+    console.warn("[history-sync] append error:", e.message);
+  }
+}
+
+async function patchRunOnServer(id, patch) {
+  try {
+    const res = await fetch("/asksolomon/history/" + encodeURIComponent(id), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "x-console-password": getPassword() },
+      body: JSON.stringify(patch),
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+    if (!res.ok) console.warn("[history-sync] patch failed:", res.status);
+  } catch (e) {
+    console.warn("[history-sync] patch error:", e.message);
+  }
+}
+
+async function deleteRunOnServer(id) {
+  try {
+    const res = await fetch("/asksolomon/history/" + encodeURIComponent(id), {
+      method: "DELETE",
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+  } catch (e) {
+    console.warn("[history-sync] delete error:", e.message);
+  }
+}
+
+async function wipeServerHistory() {
+  try {
+    const res = await fetch("/asksolomon/history", {
+      method: "DELETE",
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+  } catch (e) {
+    console.warn("[history-sync] wipe error:", e.message);
+  }
+}
+
+// Fetch a full run body from the server. Used when the user clicks a sidebar
+// entry that came from the server manifest but whose body isn't in the local
+// cache (e.g., a run created on a teammate's browser).
+async function fetchRunFromServer(id) {
+  try {
+    const res = await fetch("/asksolomon/history/" + encodeURIComponent(id), {
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return null; }
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data && data.success) ? data.run : null;
+  } catch (e) {
+    console.warn("[history-sync] fetch error:", e.message);
+    return null;
+  }
+}
+
+// ---------- Bookmarks + rubrics server sync (Fix B extended) ----------
+async function syncBookmarkToServer(bookmark) {
+  try {
+    const res = await fetch("/asksolomon/bookmarks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-console-password": getPassword() },
+      body: JSON.stringify(bookmark),
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+    if (!res.ok) console.warn("[bookmarks-sync] append failed:", res.status);
+  } catch (e) {
+    console.warn("[bookmarks-sync] append error:", e.message);
+  }
+}
+
+async function patchBookmarkOnServer(id, patch) {
+  try {
+    const res = await fetch("/asksolomon/bookmarks/" + encodeURIComponent(id), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "x-console-password": getPassword() },
+      body: JSON.stringify(patch),
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+    if (!res.ok) console.warn("[bookmarks-sync] patch failed:", res.status);
+  } catch (e) {
+    console.warn("[bookmarks-sync] patch error:", e.message);
+  }
+}
+
+async function deleteBookmarkOnServer(id) {
+  try {
+    const res = await fetch("/asksolomon/bookmarks/" + encodeURIComponent(id), {
+      method: "DELETE",
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+  } catch (e) {
+    console.warn("[bookmarks-sync] delete error:", e.message);
+  }
+}
+
+async function fetchBookmarkFromServer(id) {
+  try {
+    const res = await fetch("/asksolomon/bookmarks/" + encodeURIComponent(id), {
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return null; }
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data && data.success) ? data.bookmark : null;
+  } catch (e) {
+    console.warn("[bookmarks-sync] fetch error:", e.message);
+    return null;
+  }
+}
+
+async function hydrateBookmarksFromServer() {
+  try {
+    const res = await fetch("/asksolomon/bookmarks", {
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data || !data.success || !Array.isArray(data.items)) return;
+
+    const local = readLocal(BOOKMARKS_KEY, []);
+    const byId = new Map(local.map(b => [b.id, b]));
+    const merged = data.items.map(summary => {
+      if (byId.has(summary.id)) return byId.get(summary.id);
+      return {
+        id: summary.id,
+        ts: summary.ts,
+        label: summary.label || "",
+        tier: summary.tier,
+        contact: { name: summary.contactName || "", email: summary.contactEmail || "" },
+        result: { path: summary.path || "" },
+        feedback: summary.feedback || null,
+        feedbackNote: summary.feedbackNote || "",
+        _serverOnly: true,
+      };
+    });
+    const serverIds = new Set(data.items.map(i => i.id));
+    for (const b of local) if (!serverIds.has(b.id)) merged.push(b);
+    localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(merged));
+    renderSidebar();
+  } catch (e) {
+    console.warn("[bookmarks-sync] hydrate error:", e.message);
+  }
+}
+
+async function syncRubricToServer(rubric) {
+  try {
+    const res = await fetch("/asksolomon/rubrics", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-console-password": getPassword() },
+      body: JSON.stringify(rubric),
+    });
+    if (res.status === 401) { handleAuthFailure(); return null; }
+    if (!res.ok) { console.warn("[rubrics-sync] append failed:", res.status); return null; }
+    const data = await res.json();
+    return (data && data.success) ? data.item : null;
+  } catch (e) {
+    console.warn("[rubrics-sync] append error:", e.message);
+    return null;
+  }
+}
+
+async function deleteRubricOnServer(id) {
+  try {
+    const res = await fetch("/asksolomon/rubrics/" + encodeURIComponent(id), {
+      method: "DELETE",
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+  } catch (e) {
+    console.warn("[rubrics-sync] delete error:", e.message);
+  }
+}
+
+async function hydrateRubricsFromServer() {
+  try {
+    const res = await fetch("/asksolomon/rubrics", {
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data || !data.success || !Array.isArray(data.items)) return;
+
+    // Rubric text is small — full inline hydration by id. Server is source of
+    // truth for the shared team library; local-only entries (offline saves)
+    // get appended if they exist.
+    const local = readLocal(SAVED_RUBRICS_KEY, []);
+    const serverIds = new Set(data.items.map(i => i.id));
+    const localOnly = local.filter(r => r.id && !serverIds.has(r.id));
+    const merged = [...data.items, ...localOnly];
+    localStorage.setItem(SAVED_RUBRICS_KEY, JSON.stringify(merged));
+    renderSidebar();
+  } catch (e) {
+    console.warn("[rubrics-sync] hydrate error:", e.message);
+  }
+}
+
+// Hydrate localStorage from the server manifest on load. Merges server runs
+// into the local cache by id — anything the server has but the local browser
+// doesn't gets a placeholder entry so it renders in the sidebar; the full
+// body is lazy-fetched on click.
+async function hydrateHistoryFromServer() {
+  try {
+    const res = await fetch("/asksolomon/history", {
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data || !data.success || !Array.isArray(data.items)) return;
+
+    const local = readLocal(HISTORY_KEY, []);
+    const byId = new Map(local.map(r => [r.id, r]));
+    // Server order is authoritative (newest first). Fill in server-only ids
+    // as summaries; keep the local body when present.
+    const merged = data.items.map(summary => {
+      if (byId.has(summary.id)) return byId.get(summary.id);
+      // Placeholder from summary. renderSidebar only reads tier / ts /
+      // result.path / result.opener.length — provide just enough.
+      return {
+        id: summary.id,
+        ts: summary.ts,
+        tier: summary.tier,
+        contact: { name: summary.contactName || "", email: summary.contactEmail || "" },
+        result: { path: summary.path || "", opener: "" },
+        feedback: summary.feedback || null,
+        feedbackNote: summary.feedbackNote || "",
+        _serverOnly: true,
+      };
+    });
+    // Preserve local-only runs that haven't synced yet (e.g., offline saves).
+    const serverIds = new Set(data.items.map(i => i.id));
+    for (const r of local) if (!serverIds.has(r.id)) merged.push(r);
+    // Trim to local cap so the sidebar stays legible.
+    if (merged.length > HISTORY_LIMIT) merged.length = HISTORY_LIMIT;
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(merged));
+    renderSidebar();
+  } catch (e) {
+    console.warn("[history-sync] hydrate error:", e.message);
+  }
 }
 
 // ---------- Render output ----------
@@ -881,7 +1218,7 @@ function renderOutput(run) {
   const flags = (r.opportunityFlags || []).map(f => '<span class="flag-tag">' + escapeHtml(f) + '</span>').join("") || '<span style="color:#9ca3af;font-size:12px;">none</span>';
 
   const emailBanner = r.emailedTo
-    ? '<div style="margin-bottom:12px;padding:10px 12px;background:#d1fae5;border-left:4px solid #065f46;border-radius:4px;font-size:12px;color:#065f46;"><strong>📧 Email triggered →</strong> ' + escapeHtml(r.emailedTo) + ' — GHL workflow for tier <code>' + escapeHtml(run.tier) + '</code> will deliver the production email within 1-2 min. Tagged <code>SWOT_CONSOLE_TEST</code> for cleanup.</div>'
+    ? '<div style="margin-bottom:12px;padding:10px 12px;background:#d1fae5;border-left:4px solid #065f46;border-radius:4px;font-size:12px;color:#065f46;"><strong>📧 Email triggered →</strong> ' + escapeHtml(r.emailedTo) + ' — GHL workflow for tier <code>' + escapeHtml(tierLabel(run.tier)) + '</code> will deliver the production email within 1-2 min. Tagged <code>SWOT_CONSOLE_TEST</code> for cleanup.</div>'
     : '<div style="margin-bottom:12px;padding:8px 12px;background:#f3f4f6;border-radius:4px;font-size:11px;color:#6b7280;">📭 No email sent — leave email field blank for pure preview, fill it to trigger the workflow.</div>';
 
   const timingBadge = typeof r.elapsedMs === "number"
@@ -890,7 +1227,7 @@ function renderOutput(run) {
 
   document.getElementById("output-area").innerHTML = \`
     <div class="panel">
-      <h2>Output — \${escapeHtml(run.tier)} · \${escapeHtml(new Date(run.ts).toLocaleTimeString())} \${timingBadge}</h2>
+      <h2>Output — \${escapeHtml(tierLabel(run.tier))} · \${escapeHtml(caseTypeLabel(run.caseType))}\${run.contact?.contactId ? " · <code style=\\"font-size:11px;\\">" + escapeHtml(run.contact.contactId) + "</code>" : ""} · \${escapeHtml(new Date(run.ts).toLocaleTimeString())} \${timingBadge}</h2>
       <div style="margin-bottom: 16px;">
         <span class="\${badgeClass}">PATH: \${escapeHtml(path)}</span>
         <span style="margin-left: 8px; font-size: 12px; color: #6b7280;">Flags:</span> \${flags}
@@ -1001,10 +1338,13 @@ function loadInputsFromRun(id) {
   const run = history.find(r => r.id === id) || bookmarks.find(r => r.id === id);
   if (!run) return toast("Couldn't find that run.", "error");
   document.getElementById("tier").value = run.tier || "free";
+  document.getElementById("case-type").value = run.caseType || "hypothetical";
   document.getElementById("contact-name").value = run.contact?.name || "";
   document.getElementById("contact-email").value = run.contact?.email || "";
+  document.getElementById("contact-id").value = run.contact?.contactId || "";
   document.getElementById("answers").value = run.answersRaw || "";
   document.getElementById("rubric-override").value = run.rubricOverride || "";
+  applyCaseTypeVisibility();
   saveInputsToLocal();
   // Return to the top of the input panel so the user sees the loaded inputs.
   document.getElementById("input-panel").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -1029,8 +1369,11 @@ function renderSidebar() {
     : history.map(run => {
         const path = run.result?.path || "—";
         const time = new Date(run.ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const caseBadge = run.caseType === "existing_client"
+          ? ' <span style="font-size:9px;padding:1px 5px;background:#dcfce7;color:#065f46;border-radius:3px;">real</span>'
+          : ' <span style="font-size:9px;padding:1px 5px;background:#f3f4f6;color:#6b7280;border-radius:3px;">test</span>';
         return \`<div class="sidebar-entry" onclick='loadRun("\${run.id}")'>
-          <div>\${escapeHtml(run.tier)} · \${escapeHtml(path)}</div>
+          <div>\${escapeHtml(tierLabel(run.tier))} · \${escapeHtml(path)}\${caseBadge}</div>
           <div class="meta">\${escapeHtml(time)} · \${(run.result?.opener || "").length} char blurb</div>
         </div>\`;
       }).join("");
@@ -1049,21 +1392,55 @@ function renderSidebar() {
   document.getElementById("history-header").textContent = "Session History (" + history.length + " · last " + HISTORY_LIMIT + ")";
   document.getElementById("bookmarks-list").innerHTML = bookmarks.length === 0
     ? '<div class="sidebar-empty">No bookmarks</div>'
-    : bookmarks.map(b => \`<div class="sidebar-entry" onclick='loadBookmark("\${b.id}")'>
-        <div>\${escapeHtml(b.label || b.tier)} · \${escapeHtml(b.result?.path || "—")}</div>
-        <div class="meta">\${escapeHtml(new Date(b.ts).toLocaleDateString())}</div>
-      </div>\`).join("");
+    : bookmarks.map(b => {
+        const caseBadge = b.caseType === "existing_client"
+          ? ' <span style="font-size:9px;padding:1px 5px;background:#dcfce7;color:#065f46;border-radius:3px;">real</span>'
+          : '';
+        return \`<div class="sidebar-entry" onclick='loadBookmark("\${b.id}")'>
+          <div>\${escapeHtml(b.label || tierLabel(b.tier))} · \${escapeHtml(b.result?.path || "—")}\${caseBadge}</div>
+          <div class="meta">\${escapeHtml(new Date(b.ts).toLocaleDateString())}</div>
+        </div>\`;
+      }).join("");
 }
 
-function loadRun(id) {
+async function loadRun(id) {
   const history = readLocal(HISTORY_KEY, []);
   const run = history.find(r => r.id === id);
-  if (run) renderOutput(run);
+  if (!run) return;
+  // Server-only placeholder (created on another device / by a teammate). Lazy
+  // fetch the full body and swap it into the local cache so subsequent
+  // interactions (feedback, regenerate) have everything they need.
+  if (run._serverOnly) {
+    const fetched = await fetchRunFromServer(id);
+    if (!fetched) return toast("Couldn't load that run from the server.", "error");
+    const idx = history.findIndex(r => r.id === id);
+    if (idx !== -1) {
+      history[idx] = fetched;
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+      renderSidebar();
+    }
+    renderOutput(fetched);
+    return;
+  }
+  renderOutput(run);
 }
-function loadBookmark(id) {
+async function loadBookmark(id) {
   const bookmarks = readLocal(BOOKMARKS_KEY, []);
   const run = bookmarks.find(r => r.id === id);
-  if (run) renderOutput(run);
+  if (!run) return;
+  if (run._serverOnly) {
+    const fetched = await fetchBookmarkFromServer(id);
+    if (!fetched) return toast("Couldn't load that bookmark from the server.", "error");
+    const idx = bookmarks.findIndex(r => r.id === id);
+    if (idx !== -1) {
+      bookmarks[idx] = fetched;
+      localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
+      renderSidebar();
+    }
+    renderOutput(fetched);
+    return;
+  }
+  renderOutput(run);
 }
 
 // Set 👍 / 👎 rating on a run. Persists to session history AND to bookmarks
@@ -1073,10 +1450,26 @@ function setRunFeedback(id, rating) {
   if (!applied) return toast("Couldn't find that run.", "error");
   toast(rating === "up" ? "Thanks — flagged as a good response" : "Noted — we'll learn from what's off", "success");
   const cur = readLocal(HISTORY_KEY, []).find(r => r.id === id) || readLocal(BOOKMARKS_KEY, []).find(r => r.id === id);
-  if (cur) renderOutput(cur);
+  if (cur) {
+    renderOutput(cur);
+    // Server sync (Fix B): mirror the rating wherever the run lives.
+    if (readLocal(HISTORY_KEY, []).some(r => r.id === id)) {
+      patchRunOnServer(id, { feedback: cur.feedback });
+    }
+    if (readLocal(BOOKMARKS_KEY, []).some(r => r.id === id)) {
+      patchBookmarkOnServer(id, { feedback: cur.feedback });
+    }
+  }
 }
 function setRunFeedbackNote(id, note) {
-  updateRunEverywhere(id, r => ({ ...r, feedbackNote: String(note || "").slice(0, 500) }));
+  const trimmed = String(note || "").slice(0, 500);
+  updateRunEverywhere(id, r => ({ ...r, feedbackNote: trimmed }));
+  if (readLocal(HISTORY_KEY, []).some(r => r.id === id)) {
+    patchRunOnServer(id, { feedbackNote: trimmed });
+  }
+  if (readLocal(BOOKMARKS_KEY, []).some(r => r.id === id)) {
+    patchBookmarkOnServer(id, { feedbackNote: trimmed });
+  }
 }
 // Update a run wherever it lives — session history + bookmarks. Returns true if found.
 function updateRunEverywhere(id, mutator) {
@@ -1094,11 +1487,12 @@ function bookmarkRun(id) {
   const history = readLocal(HISTORY_KEY, []);
   const run = history.find(r => r.id === id);
   if (!run) return toast("Couldn't find that run in session history (it may have been cleared).", "error");
-  const defaultLabel = (run.tier || "run") + " · " + (run.result?.path || "—");
+  const defaultLabel = tierLabel(run.tier) + " · " + (run.result?.path || "—");
   const label = prompt("Label this bookmark:", defaultLabel);
   if (label === null) return; // user cancelled
   const bookmarks = readLocal(BOOKMARKS_KEY, []);
-  bookmarks.unshift({ ...run, label: label || defaultLabel });
+  const bookmark = { ...run, label: label || defaultLabel };
+  bookmarks.unshift(bookmark);
   try {
     localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
   } catch (e) {
@@ -1107,6 +1501,8 @@ function bookmarkRun(id) {
   }
   toast("✓ Bookmarked — see sidebar 'Bookmarked Runs (" + bookmarks.length + ")'", "success");
   renderSidebar();
+  // Sync to shared server manifest so teammates see the same bookmarks.
+  syncBookmarkToServer(bookmark);
   // Briefly highlight the bookmarks section so it's obvious where it landed
   const header = document.getElementById("bookmarks-header");
   if (header) {
@@ -1117,8 +1513,9 @@ function bookmarkRun(id) {
   }
 }
 function clearHistory() {
-  if (!confirm("Clear all session history? Bookmarks and saved rubrics will stay.")) return;
+  if (!confirm("Clear all session history for EVERYONE on the team? This wipes the shared server manifest too. Bookmarks and saved rubrics stay.")) return;
   localStorage.removeItem(HISTORY_KEY); renderSidebar();
+  wipeServerHistory();
 }
 
 // ---------- Rubric ----------
@@ -1137,9 +1534,13 @@ function saveCurrentRubric() {
   const label = prompt("Name this rubric variant:");
   if (!label) return;
   const saved = readLocal(SAVED_RUBRICS_KEY, []);
-  saved.unshift({ label, text, ts: new Date().toISOString() });
+  const id = "rubric_" + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+  const entry = { id, label, text, ts: new Date().toISOString() };
+  saved.unshift(entry);
   localStorage.setItem(SAVED_RUBRICS_KEY, JSON.stringify(saved));
   toast("Saved.", "success"); renderSidebar();
+  // Sync to shared server manifest so the whole team sees the variant.
+  syncRubricToServer(entry);
 }
 function loadRubric(idx) {
   const saved = readLocal(SAVED_RUBRICS_KEY, []);
