@@ -610,8 +610,10 @@ function checkPassword() {
       sessionStorage.setItem(PASSWORD_KEY, pw);
       document.getElementById("gate").style.display = "none";
       renderSidebar();
-      // Now that we have a password, pull the shared server-side history.
+      // Now that we have a password, pull all shared server-side state.
       hydrateHistoryFromServer();
+      hydrateBookmarksFromServer();
+      hydrateRubricsFromServer();
     } else {
       showGateError("Server error " + r.status);
     }
@@ -670,10 +672,15 @@ window.addEventListener("DOMContentLoaded", () => {
   initMicButtons();
   // Fetch + render the reference library on load.
   renderLibrary();
-  // Merge server-side history (Fix B) into the local cache so runs made on
-  // any teammate's browser show up here too. Non-blocking — the local
-  // sidebar renders first, then re-renders once the server responds.
-  if (getPassword()) hydrateHistoryFromServer();
+  // Merge server-side history / bookmarks / rubrics (Fix B) into the local
+  // caches so anything the team saved from another browser shows up here too.
+  // Non-blocking — the local sidebar renders first, then re-renders as each
+  // hydrate resolves.
+  if (getPassword()) {
+    hydrateHistoryFromServer();
+    hydrateBookmarksFromServer();
+    hydrateRubricsFromServer();
+  }
 });
 
 // Wire every element with class .mic-btn to a Web Speech API recorder that
@@ -954,6 +961,150 @@ async function fetchRunFromServer(id) {
   }
 }
 
+// ---------- Bookmarks + rubrics server sync (Fix B extended) ----------
+async function syncBookmarkToServer(bookmark) {
+  try {
+    const res = await fetch("/asksolomon/bookmarks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-console-password": getPassword() },
+      body: JSON.stringify(bookmark),
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+    if (!res.ok) console.warn("[bookmarks-sync] append failed:", res.status);
+  } catch (e) {
+    console.warn("[bookmarks-sync] append error:", e.message);
+  }
+}
+
+async function patchBookmarkOnServer(id, patch) {
+  try {
+    const res = await fetch("/asksolomon/bookmarks/" + encodeURIComponent(id), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "x-console-password": getPassword() },
+      body: JSON.stringify(patch),
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+    if (!res.ok) console.warn("[bookmarks-sync] patch failed:", res.status);
+  } catch (e) {
+    console.warn("[bookmarks-sync] patch error:", e.message);
+  }
+}
+
+async function deleteBookmarkOnServer(id) {
+  try {
+    const res = await fetch("/asksolomon/bookmarks/" + encodeURIComponent(id), {
+      method: "DELETE",
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+  } catch (e) {
+    console.warn("[bookmarks-sync] delete error:", e.message);
+  }
+}
+
+async function fetchBookmarkFromServer(id) {
+  try {
+    const res = await fetch("/asksolomon/bookmarks/" + encodeURIComponent(id), {
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return null; }
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data && data.success) ? data.bookmark : null;
+  } catch (e) {
+    console.warn("[bookmarks-sync] fetch error:", e.message);
+    return null;
+  }
+}
+
+async function hydrateBookmarksFromServer() {
+  try {
+    const res = await fetch("/asksolomon/bookmarks", {
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data || !data.success || !Array.isArray(data.items)) return;
+
+    const local = readLocal(BOOKMARKS_KEY, []);
+    const byId = new Map(local.map(b => [b.id, b]));
+    const merged = data.items.map(summary => {
+      if (byId.has(summary.id)) return byId.get(summary.id);
+      return {
+        id: summary.id,
+        ts: summary.ts,
+        label: summary.label || "",
+        tier: summary.tier,
+        contact: { name: summary.contactName || "", email: summary.contactEmail || "" },
+        result: { path: summary.path || "" },
+        feedback: summary.feedback || null,
+        feedbackNote: summary.feedbackNote || "",
+        _serverOnly: true,
+      };
+    });
+    const serverIds = new Set(data.items.map(i => i.id));
+    for (const b of local) if (!serverIds.has(b.id)) merged.push(b);
+    localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(merged));
+    renderSidebar();
+  } catch (e) {
+    console.warn("[bookmarks-sync] hydrate error:", e.message);
+  }
+}
+
+async function syncRubricToServer(rubric) {
+  try {
+    const res = await fetch("/asksolomon/rubrics", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-console-password": getPassword() },
+      body: JSON.stringify(rubric),
+    });
+    if (res.status === 401) { handleAuthFailure(); return null; }
+    if (!res.ok) { console.warn("[rubrics-sync] append failed:", res.status); return null; }
+    const data = await res.json();
+    return (data && data.success) ? data.item : null;
+  } catch (e) {
+    console.warn("[rubrics-sync] append error:", e.message);
+    return null;
+  }
+}
+
+async function deleteRubricOnServer(id) {
+  try {
+    const res = await fetch("/asksolomon/rubrics/" + encodeURIComponent(id), {
+      method: "DELETE",
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+  } catch (e) {
+    console.warn("[rubrics-sync] delete error:", e.message);
+  }
+}
+
+async function hydrateRubricsFromServer() {
+  try {
+    const res = await fetch("/asksolomon/rubrics", {
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { handleAuthFailure(); return; }
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data || !data.success || !Array.isArray(data.items)) return;
+
+    // Rubric text is small — full inline hydration by id. Server is source of
+    // truth for the shared team library; local-only entries (offline saves)
+    // get appended if they exist.
+    const local = readLocal(SAVED_RUBRICS_KEY, []);
+    const serverIds = new Set(data.items.map(i => i.id));
+    const localOnly = local.filter(r => r.id && !serverIds.has(r.id));
+    const merged = [...data.items, ...localOnly];
+    localStorage.setItem(SAVED_RUBRICS_KEY, JSON.stringify(merged));
+    renderSidebar();
+  } catch (e) {
+    console.warn("[rubrics-sync] hydrate error:", e.message);
+  }
+}
+
 // Hydrate localStorage from the server manifest on load. Merges server runs
 // into the local cache by id — anything the server has but the local browser
 // doesn't gets a placeholder entry so it renders in the sidebar; the full
@@ -1202,10 +1353,23 @@ async function loadRun(id) {
   }
   renderOutput(run);
 }
-function loadBookmark(id) {
+async function loadBookmark(id) {
   const bookmarks = readLocal(BOOKMARKS_KEY, []);
   const run = bookmarks.find(r => r.id === id);
-  if (run) renderOutput(run);
+  if (!run) return;
+  if (run._serverOnly) {
+    const fetched = await fetchBookmarkFromServer(id);
+    if (!fetched) return toast("Couldn't load that bookmark from the server.", "error");
+    const idx = bookmarks.findIndex(r => r.id === id);
+    if (idx !== -1) {
+      bookmarks[idx] = fetched;
+      localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
+      renderSidebar();
+    }
+    renderOutput(fetched);
+    return;
+  }
+  renderOutput(run);
 }
 
 // Set 👍 / 👎 rating on a run. Persists to session history AND to bookmarks
@@ -1217,10 +1381,12 @@ function setRunFeedback(id, rating) {
   const cur = readLocal(HISTORY_KEY, []).find(r => r.id === id) || readLocal(BOOKMARKS_KEY, []).find(r => r.id === id);
   if (cur) {
     renderOutput(cur);
-    // Server sync (Fix B): mirror the rating to the shared manifest so the
-    // whole team sees which runs you rated. Bookmarks-only rating is local.
+    // Server sync (Fix B): mirror the rating wherever the run lives.
     if (readLocal(HISTORY_KEY, []).some(r => r.id === id)) {
       patchRunOnServer(id, { feedback: cur.feedback });
+    }
+    if (readLocal(BOOKMARKS_KEY, []).some(r => r.id === id)) {
+      patchBookmarkOnServer(id, { feedback: cur.feedback });
     }
   }
 }
@@ -1229,6 +1395,9 @@ function setRunFeedbackNote(id, note) {
   updateRunEverywhere(id, r => ({ ...r, feedbackNote: trimmed }));
   if (readLocal(HISTORY_KEY, []).some(r => r.id === id)) {
     patchRunOnServer(id, { feedbackNote: trimmed });
+  }
+  if (readLocal(BOOKMARKS_KEY, []).some(r => r.id === id)) {
+    patchBookmarkOnServer(id, { feedbackNote: trimmed });
   }
 }
 // Update a run wherever it lives — session history + bookmarks. Returns true if found.
@@ -1251,7 +1420,8 @@ function bookmarkRun(id) {
   const label = prompt("Label this bookmark:", defaultLabel);
   if (label === null) return; // user cancelled
   const bookmarks = readLocal(BOOKMARKS_KEY, []);
-  bookmarks.unshift({ ...run, label: label || defaultLabel });
+  const bookmark = { ...run, label: label || defaultLabel };
+  bookmarks.unshift(bookmark);
   try {
     localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks));
   } catch (e) {
@@ -1260,6 +1430,8 @@ function bookmarkRun(id) {
   }
   toast("✓ Bookmarked — see sidebar 'Bookmarked Runs (" + bookmarks.length + ")'", "success");
   renderSidebar();
+  // Sync to shared server manifest so teammates see the same bookmarks.
+  syncBookmarkToServer(bookmark);
   // Briefly highlight the bookmarks section so it's obvious where it landed
   const header = document.getElementById("bookmarks-header");
   if (header) {
@@ -1291,9 +1463,13 @@ function saveCurrentRubric() {
   const label = prompt("Name this rubric variant:");
   if (!label) return;
   const saved = readLocal(SAVED_RUBRICS_KEY, []);
-  saved.unshift({ label, text, ts: new Date().toISOString() });
+  const id = "rubric_" + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+  const entry = { id, label, text, ts: new Date().toISOString() };
+  saved.unshift(entry);
   localStorage.setItem(SAVED_RUBRICS_KEY, JSON.stringify(saved));
   toast("Saved.", "success"); renderSidebar();
+  // Sync to shared server manifest so the whole team sees the variant.
+  syncRubricToServer(entry);
 }
 function loadRubric(idx) {
   const saved = readLocal(SAVED_RUBRICS_KEY, []);
