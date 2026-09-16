@@ -736,13 +736,26 @@ async function createGHLContact(contact, env) {
   return data?.contact?.id || data?.id || null;
 }
 
-// Resolve a contactId: pass-through if given, otherwise find-by-email, otherwise create.
-async function resolveGHLContactId(contact, env) {
+// Resolve a contactId:
+//   - contactId in the payload wins (the intended target is unambiguous)
+//   - else lookup by email
+//   - creating a new contact is now OPT-IN via mode="create_if_missing" to
+//     prevent Solomon from silently minting contacts from public POSTs or
+//     console tools. Default "match_only" returns null when no match found;
+//     callers can decide whether that's a hard error, a silent skip, or
+//     grounds for an explicit upsert flow (see upsertGHLContactByEmail).
+//
+// Only /apply-solomon50's beta-cohort upsert path is authorized to use
+// create_if_missing — every other write site must know its target contactId
+// so paid entitlements and email-trigger tags can never land on a contact
+// the caller didn't intend.
+async function resolveGHLContactId(contact, env, mode = "match_only") {
   if (contact?.contactId) return contact.contactId;
   if (!contact?.email) return null;
   const existing = await findGHLContactByEmail(contact.email, env);
   if (existing) return existing;
-  return await createGHLContact(contact, env);
+  if (mode === "create_if_missing") return await createGHLContact(contact, env);
+  return null;
 }
 
 async function addGHLTag(contactId, tags, env) {
@@ -1443,52 +1456,49 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
 
   const reportHtml = buildReportHtml(agent);
 
-  // OPT-IN GHL writeback: if an email is provided, treat this like a real submission —
-  // create/update the contact, populate fields, apply tags. The existing tier
-  // workflow in GHL (00 SWOT Free Report / 01 $47 / 02 $297) will then fire and send
-  // the production-style email to whoever's address was provided. Tag with
-  // SWOT_CONSOLE_TEST so these contacts can be distinguished from real leads.
+  // TIGHTENED (2026-09-16): OPT-IN GHL writeback for console test runs.
+  // Requires an explicit contactId — email-only lookups are refused so a
+  // typo in the console can't retarget an unrelated contact. Solomon
+  // NEVER applies tier tags (swot_paid_47 / swot_paid_297) or the
+  // report-ready email trigger from a test run — a test run must never
+  // fire a delivery email to a real customer. Only the report content
+  // fields, path signal, and the distinguishing swot_console_test tag.
+  // Operators who genuinely want to fire the delivery email from a test
+  // run must add the report-ready tag manually in the GHL UI.
   let emailedTo = null;
-  if (contact.email && ctx && requestUrl) {
+  if (contact.contactId && ctx && requestUrl) {
     try {
-      const contactId = await resolveGHLContactId(contact, env);
-      if (contactId) {
-        const reportFieldKey =
-          tier === "paid_297" ? "business_playbook"
-          : tier === "paid_47" ? "swot_full_report"
-          : "swot_free_report";
+      const contactId = contact.contactId; // trust the caller — no email lookup
+      const reportFieldKey =
+        tier === "paid_297" ? "business_playbook"
+        : tier === "paid_47" ? "swot_full_report"
+        : "swot_free_report";
 
-        const fields = [
-          { key: "swot_path", field_value: String(agent.path || "") },
-          { key: "swot_rehab_flag", field_value: agent.path === "rehab" ? "true" : "false" },
-          { key: reportFieldKey, field_value: reportHtml },
-        ];
-        if (agent.opener) fields.push({ key: "swot_email_blurb", field_value: String(agent.opener) });
-        if (agent.strategistBrief) fields.push({ key: "swot_strategist_brief", field_value: String(agent.strategistBrief) });
-        fields.push({ key: "swot_report_path", field_value: `${requestUrl.origin}/report/${contactId}` });
-        if (tier === "paid_297") fields.push({ key: "swot_deep_dive_booked", field_value: "true" });
+      const fields = [
+        { key: "swot_path", field_value: String(agent.path || "") },
+        { key: "swot_rehab_flag", field_value: agent.path === "rehab" ? "true" : "false" },
+        { key: reportFieldKey, field_value: reportHtml },
+      ];
+      if (agent.opener) fields.push({ key: "swot_email_blurb", field_value: String(agent.opener) });
+      if (agent.strategistBrief) fields.push({ key: "swot_strategist_brief", field_value: String(agent.strategistBrief) });
+      fields.push({ key: "swot_report_path", field_value: `${requestUrl.origin}/report/${contactId}` });
 
-        const tierTag =
-          tier === "paid_297" ? "swot_paid_297"
-          : tier === "paid_47" ? "swot_paid_47"
-          : "swot_free_lead";
-        const tags = [
-          tierTag,
-          `swot_report_ready_${tier.replace(/^paid_/, "")}`,
-          `swot_path_${(agent.path || "").toLowerCase()}`,
-          "swot_console_test", // distinguishes test contacts from real leads
-          ...(agent.opportunityFlags || []).map((f) => String(f).toLowerCase()),
-        ].filter(Boolean);
+      const tags = [
+        `swot_path_${(agent.path || "").toLowerCase()}`,
+        "swot_console_test", // distinguishes test contacts from real leads
+        ...(agent.opportunityFlags || []).map((f) => String(f).toLowerCase()),
+      ].filter(Boolean);
 
-        ctx.waitUntil(Promise.allSettled([
-          updateGHLContact(contactId, fields, env),
-          addGHLTag(contactId, tags, env),
-        ]));
-        emailedTo = contact.email;
-      }
+      ctx.waitUntil(Promise.allSettled([
+        updateGHLContact(contactId, fields, env),
+        addGHLTag(contactId, tags, env),
+      ]));
+      emailedTo = contact.email || null; // for UI display only; no delivery email actually fires
     } catch (err) {
       console.error("Console GHL writeback failed:", err.message);
     }
+  } else if (contact.email && !contact.contactId) {
+    console.warn(`[/asksolomon/run] email=${contact.email} provided without contactId — writeback refused. Look up the contact and pass contactId explicitly.`);
   }
 
   return json({
@@ -1504,9 +1514,23 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
   });
 }
 
-// POST /asksolomon/send-result — take a previously-generated agent output
-// and email it via the tier's GHL workflow to any specified address.
+// POST /asksolomon/send-result — take a previously-generated agent output and
+// write it to a specific GHL contact so staff can review/hand-deliver it.
 // Does NOT invoke Solomon. Reuses production writeback path.
+//
+// TIGHTENED (2026-09-16): after the Rosaline Perez incident where the console
+// tagged a legitimate customer as swot_paid_297 + swot_report_ready_297 based
+// on an email lookup that returned the wrong record (Miguel's email on
+// Roseline's row), this endpoint now:
+//   1. Requires body.contact.contactId — email lookup / create is refused.
+//      The operator MUST see the contact record they're targeting.
+//   2. Does NOT apply tier tags (swot_paid_47 / swot_paid_297). Payment tags
+//      belong exclusively to the GHL payment workflow.
+//   3. Does NOT apply the report-ready email trigger (swot_report_ready_*).
+//      A test/manual send must never fire a delivery email to a customer.
+//      If the operator wants to fire delivery, they add that tag manually
+//      in the GHL UI while looking at the correct contact.
+// Only report content + path signal + swot_console_manual_send are written.
 async function handleConsoleSendResult(request, env, ctx, requestUrl) {
   if (!checkConsolePassword(request, env)) {
     return json({ success: false, error: "Unauthorized" }, 401);
@@ -1520,18 +1544,17 @@ async function handleConsoleSendResult(request, env, ctx, requestUrl) {
   const agent = body.agent || {};
   const reportHtml = body.reportHtml || "";
 
-  if (!contact.email || !contact.email.includes("@")) {
-    return json({ success: false, error: "Valid recipient email required" }, 400);
+  if (!contact.contactId) {
+    return json({
+      success: false,
+      error: "contact.contactId is required — look up the target contact in GHL and pass its id explicitly. Email-only send has been removed for data integrity.",
+    }, 400);
   }
   if (!agent.path) {
     return json({ success: false, error: "Missing agent output (path required)" }, 400);
   }
 
-  const contactId = await resolveGHLContactId(contact, env);
-  if (!contactId) {
-    return json({ success: false, error: "Couldn't resolve or create GHL contact" }, 500);
-  }
-
+  const contactId = contact.contactId; // trust the caller — no email resolution
   const reportFieldKey =
     tier === "paid_297" ? "business_playbook"
     : tier === "paid_47" ? "swot_full_report"
@@ -1545,15 +1568,8 @@ async function handleConsoleSendResult(request, env, ctx, requestUrl) {
   if (agent.opener) fields.push({ key: "swot_email_blurb", field_value: String(agent.opener) });
   if (agent.strategistBrief) fields.push({ key: "swot_strategist_brief", field_value: String(agent.strategistBrief) });
   fields.push({ key: "swot_report_path", field_value: `${requestUrl.origin}/report/${contactId}` });
-  if (tier === "paid_297") fields.push({ key: "swot_deep_dive_booked", field_value: "true" });
 
-  const tierTag =
-    tier === "paid_297" ? "swot_paid_297"
-    : tier === "paid_47" ? "swot_paid_47"
-    : "swot_free_lead";
   const tags = [
-    tierTag,
-    `swot_report_ready_${tier.replace(/^paid_/, "")}`,
     `swot_path_${(agent.path || "").toLowerCase()}`,
     "swot_console_manual_send", // distinguishes from live leads and from swot_console_test auto-runs
     ...(agent.opportunityFlags || []).map((f) => String(f).toLowerCase()),
@@ -1567,8 +1583,8 @@ async function handleConsoleSendResult(request, env, ctx, requestUrl) {
   return json({
     success: true,
     tier,
-    sentTo: contact.email,
     contactId,
+    note: "Report content written. No tier tag or report-ready tag was applied — those must be added manually in GHL if a delivery email is intended.",
   });
 }
 
@@ -2369,16 +2385,49 @@ export default {
       }
     }
 
-    // Resolve a GHL contactId from email if one wasn't passed in.
+    // TIGHTENED (2026-09-16): paid-tier POSTs require an explicit contactId
+    // AND that contactId must already carry the matching paid-entitlement
+    // tag. Solomon no longer applies swot_paid_47 / swot_paid_297 or their
+    // report-ready email triggers from this public endpoint — those belong
+    // to the GHL payment workflow. Prevents an unauthenticated curl POST
+    // with tier="paid_297" from tagging any contact as paid and firing a
+    // delivery email. See handleGHLSurveyWebhook for the same shape of gate.
+    if (tier === "paid_47" || tier === "paid_297") {
+      if (!contact?.contactId) {
+        return json({
+          success: false,
+          error: `tier="${tier}" requires contact.contactId — public tier upgrades are not permitted`,
+        }, 400);
+      }
+      // Fetch the contact and verify entitlement. paid_47 accepts the beta
+      // cohort tag (SOLOMON50) as an equivalent; paid_297 requires either
+      // real paid_297, real paid_47 (upgrade in progress via sell-first),
+      // or the beta cohort tag.
+      const c = await fetchGHLContact(contact.contactId, env);
+      if (!c) {
+        return json({ success: false, error: "Contact not found in GHL" }, 404);
+      }
+      const contactTags = (c.tags || []).map((t) => String(t).toLowerCase());
+      const accepted = tier === "paid_297"
+        ? ["swot_paid_297", "swot_paid_47", "swot_solomon50_applied"]
+        : ["swot_paid_47", "swot_solomon50_applied"];
+      if (!accepted.some((t) => contactTags.includes(t))) {
+        console.warn(`[POST /] tier=${tier} contactId=${contact.contactId} — no entitlement tag; expected one of [${accepted.join(",")}]. Refusing writeback.`);
+        return json({
+          success: false,
+          error: `Contact does not carry a required entitlement tag for tier="${tier}"`,
+        }, 403);
+      }
+    }
+
+    // Resolve a GHL contactId — match_only (default) so a public POST cannot
+    // silently create arbitrary contacts. If the caller provided only an
+    // email that doesn't match an existing contact, we generate the report
+    // in memory and return it without writeback.
     const contactId = await resolveGHLContactId(contact, env);
     if (!contactId) {
-      // This is the root cause of the classic "/report/{cid} stuck on
-      // analyzing forever" bug: React app called runAssessment, Solomon
-      // generated a report in-memory, but no contactId means no writeback,
-      // so /report/{cid} finds an empty field and shows the spinner
-      // indefinitely. Surface this loudly so wrangler tail catches it.
       console.warn(`[POST /] tier=${tier} — NO CONTACT RESOLVED for email=${contact.email || "(none)"}; ` +
-        `report generated in-memory but NOT written to GHL. /report/{cid} will show analyzing forever. ` +
+        `report generated in-memory but NOT written to GHL (no create-if-missing on public POST). ` +
         `contactId in payload=${contact.contactId || "(none)"}. GHL_API_KEY set=${Boolean(env.GHL_API_KEY)}.`);
     } else {
       console.log(`[POST /] tier=${tier} contactId=${contactId} email=${contact.email || "(none)"} — starting writeback`);
@@ -2426,17 +2475,24 @@ export default {
         fields.push({ key: "swot_deep_dive_booked", field_value: "true" });
       }
 
-      // Tag pattern matches the workflows built in GHL. HL tags ARE case-sensitive,
-      // and the existing email automations trigger on lowercase swot_paid_47 /
-      // swot_paid_297 / swot_free_lead / swot_path_<path>. Do NOT switch back to
-      // uppercase — that silently breaks the email sends.
-      const tierTag =
-        tier === "paid_297" ? "swot_paid_297"
-        : tier === "paid_47" ? "swot_paid_47"
-        : "swot_free_lead";
-      const reportReadyTag = `swot_report_ready_${tier.replace(/^paid_/, "")}`;
-      // Same ordering rule as /from-ghl-survey: report-ready tag (email trigger)
-      // must land AFTER the writeback. Lifecycle tags are safe to run concurrently.
+      // TIGHTENED tag policy for the public POST endpoint:
+      //   free tier  — swot_free_lead + swot_report_ready_free (email trigger)
+      //                fire as before. The path/opportunity tags are safe
+      //                LLM-derived signals.
+      //   paid tiers — Solomon does NOT apply swot_paid_47 / swot_paid_297
+      //                (the entitlement is already on the contact — gated
+      //                above at request boundary). Solomon does NOT fire
+      //                swot_report_ready_paid_* here either — for paid_47
+      //                the entitlement contact already had the tier tag,
+      //                and firing the ready tag from an unauthenticated
+      //                endpoint would let anyone with a known contactId
+      //                re-fire the delivery email. Instead we apply
+      //                swot_playbook_written on writeback success so the
+      //                GHL payment / delivery workflow can gate on it.
+      const isPaidTier = tier === "paid_47" || tier === "paid_297";
+      const tierTag = isPaidTier ? null : "swot_free_lead";
+      const reportReadyTag = isPaidTier ? null : "swot_report_ready_free";
+      const writebackSignalTag = isPaidTier ? "swot_playbook_written" : null;
       const lifecycleTags = [
         tierTag,
         `swot_path_${(agent.path || "").toLowerCase()}`,
@@ -2445,14 +2501,20 @@ export default {
 
       ctx.waitUntil(
         Promise.allSettled([
-          updateGHLContact(contactId, fields, env).then(ok => {
+          updateGHLContact(contactId, fields, env).then(async ok => {
             if (ok) {
-              console.log(`[POST /] tier=${tier} contactId=${contactId} — writeback OK, applying ${reportReadyTag}`);
-              return addGHLTag(contactId, [reportReadyTag], env);
+              const postWriteTags = [];
+              if (reportReadyTag) postWriteTags.push(reportReadyTag);
+              if (writebackSignalTag) postWriteTags.push(writebackSignalTag);
+              if (postWriteTags.length) {
+                console.log(`[POST /] tier=${tier} contactId=${contactId} — writeback OK, applying [${postWriteTags.join(",")}]`);
+                return addGHLTag(contactId, postWriteTags, env);
+              }
+              return;
             }
-            console.warn(`[POST /] tier=${tier} contactId=${contactId} — writeback FAILED; skipping ${reportReadyTag}. /report/${contactId} will show analyzing forever until this contact is re-generated.`);
+            console.warn(`[POST /] tier=${tier} contactId=${contactId} — writeback FAILED; skipping post-write tags. /report/${contactId} will show analyzing until re-generated.`);
           }),
-          addGHLTag(contactId, lifecycleTags, env),
+          lifecycleTags.length ? addGHLTag(contactId, lifecycleTags, env) : Promise.resolve(),
           fireTrackingEvent({
             event_type: `report_generated_${tier}`,
             tier,
