@@ -44,9 +44,15 @@
     var data = ev && ev.data;
     if (!data || typeof data !== "object") return;
 
+    // Only trust messages from the OUR app iframe. Another cross-origin
+    // frame on the same funnel page (a chat widget, a video embed) could
+    // send messages carrying either public type and either resize the
+    // app iframe to any height or hijack the parent scroll. Reject
+    // anything whose source window isn't the app iframe's contentWindow.
+    var el = findIframe();
+    if (!el || ev.source !== el.contentWindow) return;
+
     if (data.type === "cfobd-iframe-height" && typeof data.height === "number") {
-      var el = findIframe();
-      if (!el) return;
       // Add a small buffer so any absolute-positioned tooltips near the
       // bottom edge aren't clipped. Cap at 20 000 px as a sanity guard.
       var h = Math.min(20000, Math.max(200, Math.ceil(data.height) + 12));
@@ -57,8 +63,6 @@
 
     if (data.type === "cfobd-iframe-scrolltop") {
       if (!throttleScroll()) return;
-      var el = findIframe();
-      if (!el) return;
       // Scroll the iframe's top edge into view. Small offset accounts for
       // the funnel's sticky header if there is one.
       var rect = el.getBoundingClientRect();
