@@ -151,12 +151,28 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
   .start-here {
     background: linear-gradient(135deg, #fef3c7 0%, #fef9e6 100%);
     border-left: 4px solid #c4a647;
-    padding: 20px 24px; border-radius: 8px;
+    border-radius: 8px;
     margin-bottom: 20px;
   }
-  .start-here h2 {
-    font-size: 18px; color: #92400e; margin: 0 0 8px 0;
-    font-weight: 700; letter-spacing: -0.01em;
+  .start-here > summary {
+    list-style: none;
+    cursor: pointer;
+    padding: 12px 20px;
+    font-size: 14px; font-weight: 700; color: #92400e;
+    letter-spacing: -0.01em;
+    user-select: none;
+  }
+  .start-here > summary::-webkit-details-marker { display: none; }
+  .start-here > summary::before {
+    content: "▸";
+    display: inline-block;
+    margin-right: 8px;
+    transition: transform 0.15s ease;
+    color: #c4a647;
+  }
+  .start-here[open] > summary::before { transform: rotate(90deg); }
+  .start-here-body {
+    padding: 0 24px 20px 24px;
   }
   .start-here p {
     font-size: 13px; color: #78350f; margin: 0 0 12px 0; line-height: 1.55;
@@ -284,18 +300,20 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
 
   <main class="main">
 
-    <div class="start-here">
-      <h2>👋 Start here — Ask Solomon (Beta)</h2>
-      <p>You're training <strong>Solomon</strong>, the CFO diagnostic behind CFO By Design's SWOT engine. Your test runs and feedback shape how it thinks. Every response is generated fresh — nothing is canned.</p>
-      <ol>
-        <li><strong>Pick a tier</strong> below (<code>free</code>, <code>paid_47</code>, or <code>paid_297</code>) — matches what a real client would go through.</li>
-        <li><strong>Describe a business scenario</strong> — free-form prose in <em>📖 Story</em>, or fill Miguel's canonical intake questions in <em>📝 Guided</em>. Both work; Guided gives Solomon more structure.</li>
-        <li><strong>Click Run ▶</strong> — Solomon returns a badge, opportunity flags, personalized email hook, internal strategist brief, and rendered client-facing report.</li>
-        <li><strong>Love the response?</strong> Type any email in "Send it" to receive the actual production email exactly as a client would see it via HighLevel.</li>
-        <li><strong>Bookmark great runs</strong>, save rubric variants, and export your learnings anytime — everything persists across sessions.</li>
-      </ol>
-      <p style="margin-top:12px;font-style:italic;font-size:11px;color:#78350f;">🎤 Prefer to speak? Mic buttons on textareas let you dictate.</p>
-    </div>
+    <details class="start-here">
+      <summary>👋 Click here for guidance — Ask Solomon (Beta)</summary>
+      <div class="start-here-body">
+        <p>You're training <strong>Solomon</strong>, the CFO diagnostic behind CFO By Design's SWOT engine. Your test runs and feedback shape how it thinks. Every response is generated fresh — nothing is canned.</p>
+        <ol>
+          <li><strong>Pick a tier</strong> below (<code>free</code>, <code>paid_47</code>, or <code>paid_297</code>) — matches what a real client would go through.</li>
+          <li><strong>Describe a business scenario</strong> — free-form prose in <em>📖 Story</em>, or fill Miguel's canonical intake questions in <em>📝 Guided</em>. Both work; Guided gives Solomon more structure.</li>
+          <li><strong>Click Run ▶</strong> — Solomon returns a badge, opportunity flags, personalized email hook, internal strategist brief, and rendered client-facing report.</li>
+          <li><strong>Love the response?</strong> Type any email in "Send it" to receive the actual production email exactly as a client would see it via HighLevel.</li>
+          <li><strong>Bookmark great runs</strong>, save rubric variants, and export your learnings anytime — everything persists across sessions.</li>
+        </ol>
+        <p style="margin-top:12px;font-style:italic;font-size:11px;color:#78350f;">🎤 Prefer to speak? Mic buttons on textareas let you dictate.</p>
+      </div>
+    </details>
 
     <div class="panel" id="input-panel">
 
@@ -841,10 +859,17 @@ async function runSolomon() {
 }
 
 function saveRun(run) {
-  const history = readSession(HISTORY_KEY, []);
+  // History is stored in localStorage so it persists across tabs, browser
+  // restarts, and logouts — the operator can walk away, come back tomorrow,
+  // and still see their recent runs. Was previously sessionStorage which
+  // wiped the moment the tab closed (the "history never shows anything"
+  // symptom). Password stays in sessionStorage; only run history is
+  // persistent-per-device here. For cross-device history use Fix B (server-
+  // side manifest in R2).
+  const history = readLocal(HISTORY_KEY, []);
   history.unshift(run);
   if (history.length > HISTORY_LIMIT) history.length = HISTORY_LIMIT;
-  sessionStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
   renderSidebar();
 }
 
@@ -919,7 +944,7 @@ function renderOutput(run) {
 // Send the exact output of a past run to a specific email via GHL.
 // Does NOT re-run Solomon — reuses the stored run.result verbatim.
 async function sendResultToEmail(runId) {
-  const history = readSession(HISTORY_KEY, []);
+  const history = readLocal(HISTORY_KEY, []);
   const bookmarks = readLocal(BOOKMARKS_KEY, []);
   const run = history.find(r => r.id === runId) || bookmarks.find(r => r.id === runId);
   if (!run) return toast("Couldn't find that run.", "error");
@@ -971,7 +996,7 @@ async function copyToClipboard(btn, text) {
 
 // Load a past run's inputs into the input form so you can tweak and re-run.
 function loadInputsFromRun(id) {
-  const history = readSession(HISTORY_KEY, []);
+  const history = readLocal(HISTORY_KEY, []);
   const bookmarks = readLocal(BOOKMARKS_KEY, []);
   const run = history.find(r => r.id === id) || bookmarks.find(r => r.id === id);
   if (!run) return toast("Couldn't find that run.", "error");
@@ -988,7 +1013,7 @@ function loadInputsFromRun(id) {
 
 // Regenerate a run using the same inputs (surface any nondeterminism).
 async function regenerateRun(id) {
-  const history = readSession(HISTORY_KEY, []);
+  const history = readLocal(HISTORY_KEY, []);
   const bookmarks = readLocal(BOOKMARKS_KEY, []);
   const run = history.find(r => r.id === id) || bookmarks.find(r => r.id === id);
   if (!run) return toast("Couldn't find that run.", "error");
@@ -998,7 +1023,7 @@ async function regenerateRun(id) {
 
 // ---------- Sidebar ----------
 function renderSidebar() {
-  const history = readSession(HISTORY_KEY, []);
+  const history = readLocal(HISTORY_KEY, []);
   document.getElementById("history-list").innerHTML = history.length === 0
     ? '<div class="sidebar-empty">No runs yet</div>'
     : history.map(run => {
@@ -1031,7 +1056,7 @@ function renderSidebar() {
 }
 
 function loadRun(id) {
-  const history = readSession(HISTORY_KEY, []);
+  const history = readLocal(HISTORY_KEY, []);
   const run = history.find(r => r.id === id);
   if (run) renderOutput(run);
 }
@@ -1047,7 +1072,7 @@ function setRunFeedback(id, rating) {
   const applied = updateRunEverywhere(id, r => ({ ...r, feedback: r.feedback === rating ? null : rating }));
   if (!applied) return toast("Couldn't find that run.", "error");
   toast(rating === "up" ? "Thanks — flagged as a good response" : "Noted — we'll learn from what's off", "success");
-  const cur = readSession(HISTORY_KEY, []).find(r => r.id === id) || readLocal(BOOKMARKS_KEY, []).find(r => r.id === id);
+  const cur = readLocal(HISTORY_KEY, []).find(r => r.id === id) || readLocal(BOOKMARKS_KEY, []).find(r => r.id === id);
   if (cur) renderOutput(cur);
 }
 function setRunFeedbackNote(id, note) {
@@ -1056,9 +1081,9 @@ function setRunFeedbackNote(id, note) {
 // Update a run wherever it lives — session history + bookmarks. Returns true if found.
 function updateRunEverywhere(id, mutator) {
   let found = false;
-  const history = readSession(HISTORY_KEY, []);
+  const history = readLocal(HISTORY_KEY, []);
   const hIdx = history.findIndex(r => r.id === id);
-  if (hIdx !== -1) { history[hIdx] = mutator(history[hIdx]); sessionStorage.setItem(HISTORY_KEY, JSON.stringify(history)); found = true; }
+  if (hIdx !== -1) { history[hIdx] = mutator(history[hIdx]); localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); found = true; }
   const bookmarks = readLocal(BOOKMARKS_KEY, []);
   const bIdx = bookmarks.findIndex(r => r.id === id);
   if (bIdx !== -1) { bookmarks[bIdx] = mutator(bookmarks[bIdx]); localStorage.setItem(BOOKMARKS_KEY, JSON.stringify(bookmarks)); found = true; }
@@ -1066,7 +1091,7 @@ function updateRunEverywhere(id, mutator) {
 }
 
 function bookmarkRun(id) {
-  const history = readSession(HISTORY_KEY, []);
+  const history = readLocal(HISTORY_KEY, []);
   const run = history.find(r => r.id === id);
   if (!run) return toast("Couldn't find that run in session history (it may have been cleared).", "error");
   const defaultLabel = (run.tier || "run") + " · " + (run.result?.path || "—");
@@ -1093,7 +1118,7 @@ function bookmarkRun(id) {
 }
 function clearHistory() {
   if (!confirm("Clear all session history? Bookmarks and saved rubrics will stay.")) return;
-  sessionStorage.removeItem(HISTORY_KEY); renderSidebar();
+  localStorage.removeItem(HISTORY_KEY); renderSidebar();
 }
 
 // ---------- Rubric ----------
