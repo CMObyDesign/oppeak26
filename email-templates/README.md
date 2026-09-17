@@ -97,4 +97,3 @@ delivery workflows above:
 | `swot_email_blurb` | LARGE_TEXT | Worker on every run |
 | `swot_report_path` | Single line | Worker on every run |
 | `swot_strategist_brief` | LARGE_TEXT | Worker on every run (INTERNAL only — never merged into emails) |
-</content>

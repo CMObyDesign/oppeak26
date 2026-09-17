@@ -57,4 +57,3 @@
 
   ready(render);
 })();
-</content>
