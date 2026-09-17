@@ -12,11 +12,22 @@ PAYMENT_LINK_47 = "https://my.cfobydesign.com/payment-link/6a0db7aa1a6dcdeebb53b
 PAYMENT_LINK_297 = "https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0"
 
 # BETA COUPON BYPASS — HL payment links require a card even on 100%-off coupons,
-# which blocks SOLOMON50 beta users. Setting these swaps the free→$47 and $47→$297
-# upgrade CTAs on /report to skip payment and go direct to the survey.
-# UNSET / REMOVE both lines to restore normal payment flow.
+# which blocks SOLOMON50 beta users. Setting these swaps the corresponding
+# upgrade CTA on /report to skip payment and go direct to the survey.
+# UNSET / REMOVE a line to restore payment for that tier.
+#
+# 2026-09-16: UPGRADE_297_URL removed — Full SWOT / Deep Dive must actually
+# charge for the beta cohort. The $47→$297 upgrade CTA on the paid_47 report
+# now points at PAYMENT_LINK_297 (real payment). $47 tier remains coupon-
+# bypassed via UPGRADE_47_URL below.
 UPGRADE_47_URL = "https://success.cfobydesign.com/mid-analysis"
-UPGRADE_297_URL = "https://success.cfobydesign.com/deeper-analysis"
+
+# Optional interstitial sales page for the paid_47 → paid_297 upgrade CTA.
+# If set, the "Keep the momentum" button on the paid_47 report opens this URL
+# instead of jumping straight to the payment link — giving Liz a place to put
+# a persuasive Deep Dive sales pitch that then CTAs to payment → survey.
+# Leave unset (or delete this line) to send users straight to PAYMENT_LINK_297.
+# DEEP_DIVE_SALES_URL = "https://success.cfobydesign.com/deep-dive-sales"
 
 # Secrets (ANTHROPIC_API_KEY, GHL_API_KEY, CONSOLE_PASSWORD) are set in the
 # Cloudflare dashboard under Settings > Variables and Secrets.

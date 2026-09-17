@@ -1,0 +1,132 @@
+/* CFO By Design — HighLevel funnel wrapper styles.
+ *
+ * Loaded by every HL funnel page via a <link rel="stylesheet"> in the funnel
+ * header tracking code. Gives the parent page around the iframe a
+ * consistent brand background + a legal footer that matches the free-tier
+ * React app's aesthetic exactly.
+ *
+ * Design tokens mirror app/src/index.css so nothing drifts.
+ */
+
+:root {
+  --cfobd-bg:          hsl(224, 44%, 7%);   /* dark navy */
+  --cfobd-fg:          hsl(226, 100%, 97%); /* near-white */
+  --cfobd-muted:       hsl(215, 20%, 80%);
+  --cfobd-primary:     hsl(45, 95%, 60%);   /* gold */
+  --cfobd-line:        rgba(255, 255, 255, 0.05);
+  --cfobd-footer-bg:   hsla(224, 44%, 7%, 0.5);
+  --cfobd-mono:        'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --cfobd-body:        'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+}
+
+/* Force the parent HL page to match the app's dark aesthetic. Without this
+ * the funnel wrapper defaults to whatever HL's page template gives us,
+ * which typically clashes with the iframe's dark background at the edges. */
+body.cfobd-funnel {
+  background: var(--cfobd-bg);
+  color: var(--cfobd-fg);
+  font-family: var(--cfobd-body);
+  margin: 0;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Footer rendered by footer.js. Class-scoped so it can't collide with
+ * anything HL's own theme drops on the page. */
+.cfobd-footer {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 32px 32px;
+  margin-top: auto;
+  z-index: 40;
+  border-top: 1px solid var(--cfobd-line);
+  background: var(--cfobd-footer-bg);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  opacity: 0.65;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--cfobd-fg);
+}
+@media (min-width: 768px) {
+  .cfobd-footer {
+    flex-direction: row;
+    gap: 24px;
+  }
+}
+
+.cfobd-footer__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+@media (min-width: 768px) {
+  .cfobd-footer__brand {
+    flex-direction: row;
+    gap: 24px;
+  }
+}
+
+.cfobd-footer__logo {
+  height: 40px;
+  filter: brightness(1.5);
+  flex-shrink: 0;
+  object-fit: contain;
+}
+@media (min-width: 768px) {
+  .cfobd-footer__logo { height: 48px; }
+}
+
+.cfobd-footer__brand-text {
+  text-align: center;
+}
+@media (min-width: 768px) {
+  .cfobd-footer__brand-text { text-align: left; }
+}
+
+.cfobd-footer__line1 {
+  font-family: var(--cfobd-mono);
+  font-size: 12px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--cfobd-fg);
+  margin: 0 0 8px 0;
+}
+
+.cfobd-footer__line1 a {
+  color: inherit;
+  text-decoration: underline;
+  transition: color 0.15s ease;
+}
+.cfobd-footer__line1 a:hover { color: var(--cfobd-primary); }
+
+.cfobd-footer__tagline {
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--cfobd-muted);
+  font-weight: 500;
+  margin: 0;
+}
+@media (max-width: 767px) {
+  .cfobd-footer__tagline { font-size: 10px; }
+}
+
+.cfobd-footer__legal {
+  display: flex;
+  gap: 32px;
+}
+.cfobd-footer__legal a {
+  font-family: var(--cfobd-mono);
+  font-size: 12px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--cfobd-fg);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.cfobd-footer__legal a:hover { color: var(--cfobd-primary); }

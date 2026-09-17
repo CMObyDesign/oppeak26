@@ -438,16 +438,26 @@ ${couponRow}
 ${couponScript}
       </div>`;
   } else if (tier === "paid_47") {
+    // "Keep going" opens a sales/story page for the Deep Dive (env-configurable).
+    // The sales page's own CTA fires payment → survey. If DEEP_DIVE_SALES_URL is
+    // unset, "keep going" falls through to the payment link directly (current
+    // behavior). This lets Liz build a persuasive interstitial without a code
+    // change — just set the env var to the funnel page URL.
+    const deepDiveSalesHref = (env && env.DEEP_DIVE_SALES_URL) || upgrade297Href;
     cta = `
       <div class="cta-panel">
         <span class="upgrade-chip">↑ UPGRADE · DEEP DIVE ENGAGEMENT</span>
         <p class="eyebrow gold">FROM DIAGNOSIS TO EXECUTION</p>
         <h2>You have the diagnosis.<br><em>Now let's build the intervention.</em></h2>
-        <p class="sub">The Deep Dive is a 90-day engagement with a real CFO who walks the plan with you — Business Playbook, weekly check-ins, hands-on implementation.</p>
-        <a class="btn btn-primary" target="_top" href="${upgrade297Href}">Upgrade to Deep Dive — <span style="text-decoration:line-through;opacity:0.6;font-weight:400;">$297</span> $150 <span class="arrow">→</span></a>
-        <p class="micro" style="margin-top:8px;">◆ Action-Taker Discount · $147 off, limited-time</p>
-        <p class="micro">Or book your included 30-minute strategy call first:<br>
-          <a class="ghost-link" target="_top" href="${bookingLink47}">Book my strategy session →</a></p>
+        <p class="sub">Two ways forward — pick whichever fits how you work. The Deep Dive gives you a written 90-day Business Playbook + Marketing Audit and a 50-minute strategy session with a real CFO. Book the strategy call first if you'd rather talk it through before committing.</p>
+
+        <div style="display:flex; flex-wrap:wrap; gap:14px; margin:24px 0 12px; justify-content:center;">
+          <a class="btn btn-primary" target="_top" href="${deepDiveSalesHref}" style="flex:1 1 220px;">Keep the momentum — Deep Dive <span class="arrow">→</span></a>
+          <a class="btn btn-secondary" target="_top" href="${bookingLink47}" style="flex:1 1 220px;">Book my 30-min strategy call</a>
+        </div>
+
+        <p class="micro" style="margin-top:8px;">◆ Deep Dive: <span style="text-decoration:line-through;opacity:0.6;">$297</span> $150 · Action-Taker Discount, limited-time</p>
+        <p class="micro" style="margin-top:16px;color:#6b7280;font-style:italic;">Not sure which? Book the call — it's included in what you already paid.</p>
       </div>`;
   } else if (tier === "paid_297") {
     cta = `
@@ -762,6 +772,23 @@ async function addGHLTag(contactId, tags, env) {
   if (!contactId || !env.GHL_API_KEY || !tags.length) return false;
   const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}/tags`, {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${env.GHL_API_KEY}`,
+      Version: "2021-07-28",
+    },
+    body: JSON.stringify({ tags }),
+  });
+  return res.ok;
+}
+
+// Bulk-remove tags from a GHL contact. Used by /reset-contact-tags when Liz
+// wants to clear a contact's swot_* / path / opportunity / console_test tags
+// to re-run a test or reset a real customer's lifecycle.
+async function removeGHLTags(contactId, tags, env) {
+  if (!contactId || !env.GHL_API_KEY || !tags.length) return false;
+  const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}/tags`, {
+    method: "DELETE",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${env.GHL_API_KEY}`,
@@ -2650,6 +2677,205 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
 }
 // ----- end GHL survey webhook -----
 
+// ----- Payment-status webhook (LC Payments → Solomon) -----
+// GHL fires this on every payment event (success OR failure). We do TWO
+// things with it:
+//
+//   1. AUDIT LOG — write a JSON record to R2 under payments/{YYYY-MM-DD}/
+//      so every payment attempt has a durable trail we can search later.
+//      Critical for refund disputes, retries, and "did they actually pay?"
+//      customer-support questions.
+//
+//   2. STATE ROUTING — depending on status:
+//        success → re-apply swot_paid_{tier} tag as a safety net (redundant
+//                  with what LC Payments already did, but idempotent — GHL
+//                  no-ops if the tag is already there. Prevents a payment
+//                  from silently failing to trigger anything downstream if
+//                  the LC Payments tag-add step ever fails.)
+//        failed  → apply swot_payment_failed_{tier} tag → GHL's "update
+//                  payment method" workflow fires the retry email.
+//
+// This endpoint does NOT run Solomon. Solomon only runs when there are
+// survey answers to analyze, via /from-ghl-survey or the React app.
+
+async function handlePaymentStatusWebhook(request, env, ctx) {
+  // Same webhook secret as /from-ghl-survey. Accepted as either
+  // 'x-webhook-secret' or 'Authorization: Bearer'.
+  if (env.WEBHOOK_SECRET) {
+    const auth = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    const provided = request.headers.get("x-webhook-secret") || auth;
+    if (!provided || provided !== env.WEBHOOK_SECRET) {
+      return json({ success: false, error: "Unauthorized" }, 401);
+    }
+  }
+
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+
+  const contactId = String(body.contactId || body.contact_id || "").trim();
+  const tier = String(body.tier || "").trim().toLowerCase();
+  const status = String(body.status || "").trim().toLowerCase();
+
+  if (!contactId) return json({ success: false, error: "contactId required" }, 400);
+  if (!["paid_47", "paid_297"].includes(tier)) {
+    return json({ success: false, error: "tier must be paid_47 or paid_297" }, 400);
+  }
+  if (!["success", "succeeded", "failed", "failure"].includes(status)) {
+    return json({ success: false, error: "status must be success or failed" }, 400);
+  }
+  const isSuccess = status === "success" || status === "succeeded";
+
+  const ts = new Date().toISOString();
+  const auditRecord = {
+    contactId,
+    tier,
+    status: isSuccess ? "success" : "failed",
+    amount: body.amount ?? null,
+    productName: body.productName || body.product_name || null,
+    paymentId: body.paymentId || body.payment_id || null,
+    email: body.email || null,
+    reason: body.reason || null,
+    ts,
+    receivedAt: ts,
+  };
+
+  // Audit log to R2. Non-fatal if R2 is unavailable — we still route the
+  // tag so downstream workflows fire.
+  if (env.SOLOMON_LIBRARY) {
+    const key = `payments/${ts.slice(0, 10)}/${contactId}-${ts.replace(/[:.]/g, "-")}.json`;
+    ctx.waitUntil(
+      env.SOLOMON_LIBRARY.put(key, JSON.stringify(auditRecord), {
+        httpMetadata: { contentType: "application/json" },
+      }).catch((err) => console.warn("[/payment-status] audit write failed:", err?.message)),
+    );
+  }
+
+  // Tag routing.
+  const successTag = tier === "paid_297" ? "swot_paid_297" : "swot_paid_47";
+  const failureTag = tier === "paid_297" ? "swot_payment_failed_297" : "swot_payment_failed_47";
+  const tagToApply = isSuccess ? successTag : failureTag;
+
+  ctx.waitUntil(
+    addGHLTag(contactId, [tagToApply], env).catch((err) =>
+      console.warn(`[/payment-status] tag apply failed (${tagToApply}):`, err?.message),
+    ),
+  );
+
+  // Also post a contact note so the payment event shows up in the human-
+  // readable audit trail on the contact card (less digging than R2).
+  if (isSuccess) {
+    const noteBody = [
+      `Payment received · ${auditRecord.productName || tier}`,
+      auditRecord.amount != null ? `Amount: $${auditRecord.amount}` : null,
+      auditRecord.paymentId ? `Payment ID: ${auditRecord.paymentId}` : null,
+      `At: ${ts}`,
+    ].filter(Boolean).join("\n");
+    ctx.waitUntil(addGHLNote(contactId, noteBody, env).catch(() => {}));
+  } else {
+    const noteBody = [
+      `Payment FAILED · ${auditRecord.productName || tier}`,
+      auditRecord.reason ? `Reason: ${auditRecord.reason}` : null,
+      auditRecord.paymentId ? `Payment ID: ${auditRecord.paymentId}` : null,
+      `At: ${ts}`,
+      `Applied tag: ${failureTag} — retry workflow will fire from HL.`,
+    ].filter(Boolean).join("\n");
+    ctx.waitUntil(addGHLNote(contactId, noteBody, env).catch(() => {}));
+  }
+
+  // Tracking event so "00 SWOT Inbound" (or similar) can pick this up and
+  // route to internal notifications.
+  ctx.waitUntil(
+    fireTrackingEvent({
+      event_type: isSuccess ? `payment_confirmed_${tier}` : `payment_failed_${tier}`,
+      tier,
+      contact_id: contactId,
+      email: auditRecord.email || "",
+      amount: auditRecord.amount,
+      product_name: auditRecord.productName,
+      payment_id: auditRecord.paymentId,
+      reason: auditRecord.reason,
+      ts,
+      source: "payment_webhook",
+    }, env),
+  );
+
+  return json({
+    success: true,
+    status: auditRecord.status,
+    tagApplied: tagToApply,
+    contactId,
+    tier,
+  });
+}
+
+// ----- end payment-status webhook -----
+
+// ----- Reset contact tags (testing / lifecycle reset) -----
+// POST /reset-contact-tags
+//   Body: { contactId, keep?: [tag, tag], onlyPrefixed?: true (default) }
+// Removes every tag on the contact that starts with a known SWOT prefix
+// (or every non-kept tag if onlyPrefixed:false) so the contact can be
+// re-tested end-to-end without stale state. Auth via WEBHOOK_SECRET so this
+// isn't publicly callable — testing tool for Liz / Miguel via curl or an
+// internal HL workflow, not the customer-facing surface.
+//
+// Prefixes considered "SWOT-owned":
+//   swot_*   path_* (legacy)   *_opp (opportunity flags)
+//
+// Non-SWOT tags on the contact are left untouched by default.
+
+const TAG_PREFIXES_TO_RESET = ["swot_", "path_"];
+const TAG_SUFFIXES_TO_RESET = ["_opp"];
+
+async function handleResetContactTags(request, env) {
+  if (env.WEBHOOK_SECRET) {
+    const auth = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    const provided = request.headers.get("x-webhook-secret") || auth;
+    if (!provided || provided !== env.WEBHOOK_SECRET) {
+      return json({ success: false, error: "Unauthorized" }, 401);
+    }
+  }
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+
+  const contactId = String(body.contactId || body.contact_id || "").trim();
+  if (!contactId) return json({ success: false, error: "contactId required" }, 400);
+  const keep = Array.isArray(body.keep) ? body.keep.map((t) => String(t).toLowerCase()) : [];
+  const onlyPrefixed = body.onlyPrefixed === false ? false : true;
+
+  const contact = await fetchGHLContact(contactId, env);
+  if (!contact) return json({ success: false, error: "Contact not found" }, 404);
+  const allTags = (contact.tags || []).map((t) => String(t).toLowerCase());
+
+  const toRemove = allTags.filter((t) => {
+    if (keep.includes(t)) return false;
+    if (!onlyPrefixed) return true;
+    return TAG_PREFIXES_TO_RESET.some((p) => t.startsWith(p))
+        || TAG_SUFFIXES_TO_RESET.some((s) => t.endsWith(s));
+  });
+
+  if (!toRemove.length) {
+    return json({ success: true, contactId, removed: [], message: "No matching tags to remove." });
+  }
+
+  const ok = await removeGHLTags(contactId, toRemove, env);
+  if (!ok) return json({ success: false, error: "GHL tag removal failed", tried: toRemove }, 502);
+
+  // Audit note so the reset shows up on the contact card.
+  const noteBody = [
+    `SWOT tag reset · ${new Date().toISOString()}`,
+    `Removed (${toRemove.length}): ${toRemove.join(", ")}`,
+    keep.length ? `Preserved: ${keep.join(", ")}` : null,
+  ].filter(Boolean).join("\n");
+  await addGHLNote(contactId, noteBody, env).catch(() => {});
+
+  return json({ success: true, contactId, removed: toRemove, kept: keep });
+}
+
+// ----- end reset contact tags -----
+
 // Like callClaude but accepts an explicit rubric (for the console's override path).
 // When the rubric is the default, cache_control still applies — repeated runs hit the cache.
 async function callClaudeWithRubric(prompt, rubric, env) {
@@ -2871,6 +3097,21 @@ export default {
     // GHL's tier email workflow (00 / 01 / 02) then fires the delivery email.
     if (path === "/from-ghl-survey") {
       return handleGHLSurveyWebhook(request, env, ctx, url);
+    }
+
+    // POST /payment-status — payment confirmation channel from LC Payments.
+    // Runs regardless of whether the customer has taken the assessment yet.
+    // Success path: safety-net tag apply + audit log.
+    // Failure path: apply retry tag → GHL "update payment method" email fires.
+    if (path === "/payment-status") {
+      return handlePaymentStatusWebhook(request, env, ctx);
+    }
+
+    // POST /reset-contact-tags — testing / lifecycle-reset tool. Removes every
+    // SWOT-owned tag from a contact so it can be re-tested end-to-end. Auth via
+    // WEBHOOK_SECRET.
+    if (path === "/reset-contact-tags") {
+      return handleResetContactTags(request, env);
     }
 
     let body;
