@@ -4,6 +4,20 @@ Source-of-truth HTML for every delivery email that fires off a `swot_report_read
 or `swot_growth_plan_ready` / `swot_marketing_audit_ready` / `swot_financials_uploaded`
 tag. Paste these into the corresponding HighLevel workflow's Email node.
 
+## Preview in the browser
+
+Every template is mirrored to `app/public/email-preview/` so Cloudflare Pages serves them:
+
+- **Production:** https://oppeak26.pages.dev/email-preview/
+- **Branch preview:** https://claude-beta-readiness-real-clients-5zc7at.oppeak26.pages.dev/email-preview/
+
+The index page there lists all seven with per-template preview links. Merge fields render as literal `{{contact.first_name}}` in the browser — actual HL sends interpolate them from the contact record.
+
+**When you edit a template in this folder**, mirror the change to `app/public/email-preview/` before pushing so the preview stays in sync — or run:
+```
+cp email-templates/*.html app/public/email-preview/
+```
+
 ## Templates
 
 | File | Workflow | Trigger tag | Body merge field |

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SWOT Email Templates — Preview</title>
+<style>
+  :root { color-scheme: dark; }
+  body {
+    margin: 0;
+    padding: 32px 20px;
+    background: hsl(224, 44%, 7%);
+    color: hsl(226, 100%, 97%);
+    font-family: 'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+  }
+  header {
+    max-width: 960px;
+    margin: 0 auto 32px;
+  }
+  h1 {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-weight: 600;
+    margin: 0 0 8px;
+    font-size: 28px;
+  }
+  p.lead {
+    margin: 0;
+    color: hsl(215, 20%, 80%);
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  .grid {
+    max-width: 960px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+  }
+  .card {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px;
+    padding: 20px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .card h2 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+    color: hsl(226, 100%, 97%);
+  }
+  .card .num {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    color: hsl(45, 95%, 60%);
+    letter-spacing: 0.15em;
+  }
+  .card .meta {
+    font-size: 12px;
+    color: hsl(215, 20%, 70%);
+    line-height: 1.55;
+  }
+  .card code {
+    background: rgba(0,0,0,0.35);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    color: hsl(45, 95%, 80%);
+  }
+  .card a.open {
+    margin-top: auto;
+    display: inline-block;
+    text-align: center;
+    background: hsl(45, 95%, 60%);
+    color: hsl(224, 44%, 7%);
+    padding: 8px 12px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.03em;
+  }
+  .card a.open:hover { filter: brightness(1.1); }
+  .card a.raw {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    color: hsl(215, 20%, 70%);
+    text-decoration: none;
+    text-align: center;
+  }
+  .card a.raw:hover { color: hsl(45, 95%, 60%); text-decoration: underline; }
+  footer {
+    max-width: 960px;
+    margin: 40px auto 0;
+    padding-top: 24px;
+    border-top: 1px solid rgba(255,255,255,0.08);
+    font-size: 12px;
+    color: hsl(215, 20%, 60%);
+    line-height: 1.6;
+  }
+  footer code {
+    background: rgba(0,0,0,0.35);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 11px;
+    color: hsl(45, 95%, 80%);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>SWOT delivery email templates</h1>
+  <p class="lead">Preview of every workflow email in the funnel. Merge fields render as literal <code>{{contact.first_name}}</code> here — actual sends interpolate them in HL.</p>
+</header>
+
+<div class="grid">
+
+  <div class="card">
+    <div class="num">01 / 07</div>
+    <h2>Free Report Delivery</h2>
+    <div class="meta">
+      Workflow: <code>02. SWOT Free Report</code><br>
+      Trigger tag: <code>swot_report_ready_free</code><br>
+      Body field: <code>swot_free_report</code>
+    </div>
+    <a class="open" href="01_free_report_delivery.html" target="_blank" rel="noopener">Preview →</a>
+  </div>
+
+  <div class="card">
+    <div class="num">02 / 07</div>
+    <h2>Partial SWOT ($47) Delivery</h2>
+    <div class="meta">
+      Workflow: <code>03b. SWOT $47 Report Delivery</code><br>
+      Trigger tag: <code>swot_report_ready_paid_47</code><br>
+      Body field: <code>swot_full_report</code>
+    </div>
+    <a class="open" href="02_partial_swot_delivery.html" target="_blank" rel="noopener">Preview →</a>
+  </div>
+
+  <div class="card">
+    <div class="num">03 / 07</div>
+    <h2>Deep Dive — Part 1 Strategist Brief</h2>
+    <div class="meta">
+      Workflow: <code>04b. SWOT $297 Part 1 Delivery</code><br>
+      Trigger tag: <code>swot_report_ready_paid_297</code><br>
+      Body field: <code>business_playbook</code>
+    </div>
+    <a class="open" href="03_deep_dive_part1.html" target="_blank" rel="noopener">Preview →</a>
+  </div>
+
+  <div class="card">
+    <div class="num">04 / 07</div>
+    <h2>Deep Dive — Part 2 Growth Plan</h2>
+    <div class="meta">
+      Workflow: <code>04c. SWOT $297 Part 2 Delivery</code><br>
+      Trigger tag: <code>swot_growth_plan_ready</code> (Miguel manual)<br>
+      Body field: <code>swot_growth_plan</code>
+    </div>
+    <a class="open" href="04_deep_dive_part2.html" target="_blank" rel="noopener">Preview →</a>
+  </div>
+
+  <div class="card">
+    <div class="num">05 / 07</div>
+    <h2>Marketing Audit Delivery</h2>
+    <div class="meta">
+      Workflow: <code>04d. SWOT $297 Marketing Audit</code><br>
+      Trigger tag: <code>swot_marketing_audit_ready</code> (Spark manual)<br>
+      Body field: <code>swot_marketing_audit</code>
+    </div>
+    <a class="open" href="05_marketing_audit.html" target="_blank" rel="noopener">Preview →</a>
+  </div>
+
+  <div class="card">
+    <div class="num">06 / 07</div>
+    <h2>Financials Upload Received</h2>
+    <div class="meta">
+      Workflow: <code>06. Financial Upload Received</code><br>
+      Trigger tag: <code>swot_financials_uploaded</code><br>
+      Body field: none (holding email)
+    </div>
+    <a class="open" href="06_financials_upload_received.html" target="_blank" rel="noopener">Preview →</a>
+  </div>
+
+  <div class="card">
+    <div class="num">07 / 07</div>
+    <h2>Payment Failed — Retry</h2>
+    <div class="meta">
+      Workflow: <code>08. SWOT Payment Failed Retry</code><br>
+      Trigger tag: <code>swot_payment_failed_47</code> or <code>swot_payment_failed_297</code><br>
+      Body field: none (retry email)
+    </div>
+    <a class="open" href="07_payment_failed_retry.html" target="_blank" rel="noopener">Preview →</a>
+  </div>
+
+</div>
+
+<footer>
+  Source-of-truth templates live at <code>email-templates/</code> in the repo. This preview folder is a copy so Cloudflare Pages can serve renderable HTML. When you edit a template in <code>email-templates/</code>, run <code>cp email-templates/*.html app/public/email-preview/</code> before pushing so the preview stays in sync — or edit both together.
+</footer>
+
+</body>
+</html>
+</content>
