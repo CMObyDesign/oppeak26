@@ -2650,6 +2650,140 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
 }
 // ----- end GHL survey webhook -----
 
+// ----- Payment-status webhook (LC Payments → Solomon) -----
+// GHL fires this on every payment event (success OR failure). We do TWO
+// things with it:
+//
+//   1. AUDIT LOG — write a JSON record to R2 under payments/{YYYY-MM-DD}/
+//      so every payment attempt has a durable trail we can search later.
+//      Critical for refund disputes, retries, and "did they actually pay?"
+//      customer-support questions.
+//
+//   2. STATE ROUTING — depending on status:
+//        success → re-apply swot_paid_{tier} tag as a safety net (redundant
+//                  with what LC Payments already did, but idempotent — GHL
+//                  no-ops if the tag is already there. Prevents a payment
+//                  from silently failing to trigger anything downstream if
+//                  the LC Payments tag-add step ever fails.)
+//        failed  → apply swot_payment_failed_{tier} tag → GHL's "update
+//                  payment method" workflow fires the retry email.
+//
+// This endpoint does NOT run Solomon. Solomon only runs when there are
+// survey answers to analyze, via /from-ghl-survey or the React app.
+
+async function handlePaymentStatusWebhook(request, env, ctx) {
+  // Same webhook secret as /from-ghl-survey. Accepted as either
+  // 'x-webhook-secret' or 'Authorization: Bearer'.
+  if (env.WEBHOOK_SECRET) {
+    const auth = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    const provided = request.headers.get("x-webhook-secret") || auth;
+    if (!provided || provided !== env.WEBHOOK_SECRET) {
+      return json({ success: false, error: "Unauthorized" }, 401);
+    }
+  }
+
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+
+  const contactId = String(body.contactId || body.contact_id || "").trim();
+  const tier = String(body.tier || "").trim().toLowerCase();
+  const status = String(body.status || "").trim().toLowerCase();
+
+  if (!contactId) return json({ success: false, error: "contactId required" }, 400);
+  if (!["paid_47", "paid_297"].includes(tier)) {
+    return json({ success: false, error: "tier must be paid_47 or paid_297" }, 400);
+  }
+  if (!["success", "succeeded", "failed", "failure"].includes(status)) {
+    return json({ success: false, error: "status must be success or failed" }, 400);
+  }
+  const isSuccess = status === "success" || status === "succeeded";
+
+  const ts = new Date().toISOString();
+  const auditRecord = {
+    contactId,
+    tier,
+    status: isSuccess ? "success" : "failed",
+    amount: body.amount ?? null,
+    productName: body.productName || body.product_name || null,
+    paymentId: body.paymentId || body.payment_id || null,
+    email: body.email || null,
+    reason: body.reason || null,
+    ts,
+    receivedAt: ts,
+  };
+
+  // Audit log to R2. Non-fatal if R2 is unavailable — we still route the
+  // tag so downstream workflows fire.
+  if (env.SOLOMON_LIBRARY) {
+    const key = `payments/${ts.slice(0, 10)}/${contactId}-${ts.replace(/[:.]/g, "-")}.json`;
+    ctx.waitUntil(
+      env.SOLOMON_LIBRARY.put(key, JSON.stringify(auditRecord), {
+        httpMetadata: { contentType: "application/json" },
+      }).catch((err) => console.warn("[/payment-status] audit write failed:", err?.message)),
+    );
+  }
+
+  // Tag routing.
+  const successTag = tier === "paid_297" ? "swot_paid_297" : "swot_paid_47";
+  const failureTag = tier === "paid_297" ? "swot_payment_failed_297" : "swot_payment_failed_47";
+  const tagToApply = isSuccess ? successTag : failureTag;
+
+  ctx.waitUntil(
+    addGHLTag(contactId, [tagToApply], env).catch((err) =>
+      console.warn(`[/payment-status] tag apply failed (${tagToApply}):`, err?.message),
+    ),
+  );
+
+  // Also post a contact note so the payment event shows up in the human-
+  // readable audit trail on the contact card (less digging than R2).
+  if (isSuccess) {
+    const noteBody = [
+      `Payment received · ${auditRecord.productName || tier}`,
+      auditRecord.amount != null ? `Amount: $${auditRecord.amount}` : null,
+      auditRecord.paymentId ? `Payment ID: ${auditRecord.paymentId}` : null,
+      `At: ${ts}`,
+    ].filter(Boolean).join("\n");
+    ctx.waitUntil(addGHLNote(contactId, noteBody, env).catch(() => {}));
+  } else {
+    const noteBody = [
+      `Payment FAILED · ${auditRecord.productName || tier}`,
+      auditRecord.reason ? `Reason: ${auditRecord.reason}` : null,
+      auditRecord.paymentId ? `Payment ID: ${auditRecord.paymentId}` : null,
+      `At: ${ts}`,
+      `Applied tag: ${failureTag} — retry workflow will fire from HL.`,
+    ].filter(Boolean).join("\n");
+    ctx.waitUntil(addGHLNote(contactId, noteBody, env).catch(() => {}));
+  }
+
+  // Tracking event so "00 SWOT Inbound" (or similar) can pick this up and
+  // route to internal notifications.
+  ctx.waitUntil(
+    fireTrackingEvent({
+      event_type: isSuccess ? `payment_confirmed_${tier}` : `payment_failed_${tier}`,
+      tier,
+      contact_id: contactId,
+      email: auditRecord.email || "",
+      amount: auditRecord.amount,
+      product_name: auditRecord.productName,
+      payment_id: auditRecord.paymentId,
+      reason: auditRecord.reason,
+      ts,
+      source: "payment_webhook",
+    }, env),
+  );
+
+  return json({
+    success: true,
+    status: auditRecord.status,
+    tagApplied: tagToApply,
+    contactId,
+    tier,
+  });
+}
+
+// ----- end payment-status webhook -----
+
 // Like callClaude but accepts an explicit rubric (for the console's override path).
 // When the rubric is the default, cache_control still applies — repeated runs hit the cache.
 async function callClaudeWithRubric(prompt, rubric, env) {
@@ -2871,6 +3005,14 @@ export default {
     // GHL's tier email workflow (00 / 01 / 02) then fires the delivery email.
     if (path === "/from-ghl-survey") {
       return handleGHLSurveyWebhook(request, env, ctx, url);
+    }
+
+    // POST /payment-status — payment confirmation channel from LC Payments.
+    // Runs regardless of whether the customer has taken the assessment yet.
+    // Success path: safety-net tag apply + audit log.
+    // Failure path: apply retry tag → GHL "update payment method" email fires.
+    if (path === "/payment-status") {
+      return handlePaymentStatusWebhook(request, env, ctx);
     }
 
     let body;

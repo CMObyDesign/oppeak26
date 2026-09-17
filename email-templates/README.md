@@ -14,6 +14,43 @@ tag. Paste these into the corresponding HighLevel workflow's Email node.
 | `04_deep_dive_part2.html` | 04c. SWOT $297 Part 2 Delivery | `swot_growth_plan_ready` (manual) | `{{contact.swot_growth_plan}}` |
 | `05_marketing_audit.html` | 04d. SWOT $297 Marketing Audit Delivery | `swot_marketing_audit_ready` (manual) | `{{contact.swot_marketing_audit}}` |
 | `06_financials_upload_received.html` | 06. Financial Upload Received | `swot_financials_uploaded` | (no report body — holding email) |
+| `07_payment_failed_retry.html` | 08. SWOT Payment Failed Retry | `swot_payment_failed_47` OR `swot_payment_failed_297` | (no report body — retry email) |
+
+## Related worker endpoint — `/payment-status`
+
+The retry email in `07_payment_failed_retry.html` fires when the worker
+applies the `swot_payment_failed_47` / `swot_payment_failed_297` tag,
+which happens via a POST to `/payment-status` on the worker.
+
+**LC Payments (or the payment workflow in HL) should fire this webhook on
+every payment event — both success and failure.**
+
+Endpoint: `POST https://swot-engine.cfobydesign.workers.dev/payment-status`
+Auth: `Authorization: Bearer <WEBHOOK_SECRET>` (same secret as `/from-ghl-survey`)
+
+Body:
+```json
+{
+  "contactId": "...",
+  "tier": "paid_47" | "paid_297",
+  "status": "success" | "failed",
+  "amount": 47,
+  "productName": "Partial SWOT",
+  "paymentId": "...",
+  "email": "customer@example.com",
+  "reason": "insufficient_funds"
+}
+```
+
+On success: the worker safety-net-applies `swot_paid_{tier}` (idempotent
+with LC Payments) and posts a "Payment received" contact note.
+
+On failure: the worker applies `swot_payment_failed_{tier}` — this fires
+the retry-email workflow — and posts a "Payment FAILED" contact note with
+the reason.
+
+Every payment event is written to R2 under `payments/{YYYY-MM-DD}/` for
+audit/refund/dispute history.
 
 ## Conventions applied across all templates
 
