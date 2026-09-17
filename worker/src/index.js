@@ -438,16 +438,26 @@ ${couponRow}
 ${couponScript}
       </div>`;
   } else if (tier === "paid_47") {
+    // "Keep going" opens a sales/story page for the Deep Dive (env-configurable).
+    // The sales page's own CTA fires payment → survey. If DEEP_DIVE_SALES_URL is
+    // unset, "keep going" falls through to the payment link directly (current
+    // behavior). This lets Liz build a persuasive interstitial without a code
+    // change — just set the env var to the funnel page URL.
+    const deepDiveSalesHref = (env && env.DEEP_DIVE_SALES_URL) || upgrade297Href;
     cta = `
       <div class="cta-panel">
         <span class="upgrade-chip">↑ UPGRADE · DEEP DIVE ENGAGEMENT</span>
         <p class="eyebrow gold">FROM DIAGNOSIS TO EXECUTION</p>
         <h2>You have the diagnosis.<br><em>Now let's build the intervention.</em></h2>
-        <p class="sub">The Deep Dive is a 90-day engagement with a real CFO who walks the plan with you — Business Playbook, weekly check-ins, hands-on implementation.</p>
-        <a class="btn btn-primary" target="_top" href="${upgrade297Href}">Upgrade to Deep Dive — <span style="text-decoration:line-through;opacity:0.6;font-weight:400;">$297</span> $150 <span class="arrow">→</span></a>
-        <p class="micro" style="margin-top:8px;">◆ Action-Taker Discount · $147 off, limited-time</p>
-        <p class="micro">Or book your included 30-minute strategy call first:<br>
-          <a class="ghost-link" target="_top" href="${bookingLink47}">Book my strategy session →</a></p>
+        <p class="sub">Two ways forward — pick whichever fits how you work. The Deep Dive gives you a written 90-day Business Playbook + Marketing Audit and a 50-minute strategy session with a real CFO. Book the strategy call first if you'd rather talk it through before committing.</p>
+
+        <div style="display:flex; flex-wrap:wrap; gap:14px; margin:24px 0 12px; justify-content:center;">
+          <a class="btn btn-primary" target="_top" href="${deepDiveSalesHref}" style="flex:1 1 220px;">Keep the momentum — Deep Dive <span class="arrow">→</span></a>
+          <a class="btn btn-secondary" target="_top" href="${bookingLink47}" style="flex:1 1 220px;">Book my 30-min strategy call</a>
+        </div>
+
+        <p class="micro" style="margin-top:8px;">◆ Deep Dive: <span style="text-decoration:line-through;opacity:0.6;">$297</span> $150 · Action-Taker Discount, limited-time</p>
+        <p class="micro" style="margin-top:16px;color:#6b7280;font-style:italic;">Not sure which? Book the call — it's included in what you already paid.</p>
       </div>`;
   } else if (tier === "paid_297") {
     cta = `
@@ -762,6 +772,23 @@ async function addGHLTag(contactId, tags, env) {
   if (!contactId || !env.GHL_API_KEY || !tags.length) return false;
   const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}/tags`, {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${env.GHL_API_KEY}`,
+      Version: "2021-07-28",
+    },
+    body: JSON.stringify({ tags }),
+  });
+  return res.ok;
+}
+
+// Bulk-remove tags from a GHL contact. Used by /reset-contact-tags when Liz
+// wants to clear a contact's swot_* / path / opportunity / console_test tags
+// to re-run a test or reset a real customer's lifecycle.
+async function removeGHLTags(contactId, tags, env) {
+  if (!contactId || !env.GHL_API_KEY || !tags.length) return false;
+  const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}/tags`, {
+    method: "DELETE",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${env.GHL_API_KEY}`,
@@ -2784,6 +2811,71 @@ async function handlePaymentStatusWebhook(request, env, ctx) {
 
 // ----- end payment-status webhook -----
 
+// ----- Reset contact tags (testing / lifecycle reset) -----
+// POST /reset-contact-tags
+//   Body: { contactId, keep?: [tag, tag], onlyPrefixed?: true (default) }
+// Removes every tag on the contact that starts with a known SWOT prefix
+// (or every non-kept tag if onlyPrefixed:false) so the contact can be
+// re-tested end-to-end without stale state. Auth via WEBHOOK_SECRET so this
+// isn't publicly callable — testing tool for Liz / Miguel via curl or an
+// internal HL workflow, not the customer-facing surface.
+//
+// Prefixes considered "SWOT-owned":
+//   swot_*   path_* (legacy)   *_opp (opportunity flags)
+//
+// Non-SWOT tags on the contact are left untouched by default.
+
+const TAG_PREFIXES_TO_RESET = ["swot_", "path_"];
+const TAG_SUFFIXES_TO_RESET = ["_opp"];
+
+async function handleResetContactTags(request, env) {
+  if (env.WEBHOOK_SECRET) {
+    const auth = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
+    const provided = request.headers.get("x-webhook-secret") || auth;
+    if (!provided || provided !== env.WEBHOOK_SECRET) {
+      return json({ success: false, error: "Unauthorized" }, 401);
+    }
+  }
+  let body;
+  try { body = await request.json(); }
+  catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+
+  const contactId = String(body.contactId || body.contact_id || "").trim();
+  if (!contactId) return json({ success: false, error: "contactId required" }, 400);
+  const keep = Array.isArray(body.keep) ? body.keep.map((t) => String(t).toLowerCase()) : [];
+  const onlyPrefixed = body.onlyPrefixed === false ? false : true;
+
+  const contact = await fetchGHLContact(contactId, env);
+  if (!contact) return json({ success: false, error: "Contact not found" }, 404);
+  const allTags = (contact.tags || []).map((t) => String(t).toLowerCase());
+
+  const toRemove = allTags.filter((t) => {
+    if (keep.includes(t)) return false;
+    if (!onlyPrefixed) return true;
+    return TAG_PREFIXES_TO_RESET.some((p) => t.startsWith(p))
+        || TAG_SUFFIXES_TO_RESET.some((s) => t.endsWith(s));
+  });
+
+  if (!toRemove.length) {
+    return json({ success: true, contactId, removed: [], message: "No matching tags to remove." });
+  }
+
+  const ok = await removeGHLTags(contactId, toRemove, env);
+  if (!ok) return json({ success: false, error: "GHL tag removal failed", tried: toRemove }, 502);
+
+  // Audit note so the reset shows up on the contact card.
+  const noteBody = [
+    `SWOT tag reset · ${new Date().toISOString()}`,
+    `Removed (${toRemove.length}): ${toRemove.join(", ")}`,
+    keep.length ? `Preserved: ${keep.join(", ")}` : null,
+  ].filter(Boolean).join("\n");
+  await addGHLNote(contactId, noteBody, env).catch(() => {});
+
+  return json({ success: true, contactId, removed: toRemove, kept: keep });
+}
+
+// ----- end reset contact tags -----
+
 // Like callClaude but accepts an explicit rubric (for the console's override path).
 // When the rubric is the default, cache_control still applies — repeated runs hit the cache.
 async function callClaudeWithRubric(prompt, rubric, env) {
@@ -3013,6 +3105,13 @@ export default {
     // Failure path: apply retry tag → GHL "update payment method" email fires.
     if (path === "/payment-status") {
       return handlePaymentStatusWebhook(request, env, ctx);
+    }
+
+    // POST /reset-contact-tags — testing / lifecycle-reset tool. Removes every
+    // SWOT-owned tag from a contact so it can be re-tested end-to-end. Auth via
+    // WEBHOOK_SECRET.
+    if (path === "/reset-contact-tags") {
+      return handleResetContactTags(request, env);
     }
 
     let body;
