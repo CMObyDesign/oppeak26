@@ -85,6 +85,12 @@ export function formatAnswersForAgent(
     });
 }
 
+// 90s is well above a typical Solomon run (5-30s) but low enough that a
+// hung request doesn't strand the user on the analyzing spinner forever.
+// If we hit this, the caller shows the "we hit a snag" fallback and
+// Miguel's team gets notified via the failure tag on the contact.
+const RUN_ASSESSMENT_TIMEOUT_MS = 90_000;
+
 export async function runAssessment(params: {
   tier?: AssessmentTier;
   answers: { question: string; answer: string }[];
@@ -98,19 +104,33 @@ export async function runAssessment(params: {
     country?: string;
   };
 }): Promise<AgentReport> {
-  const res = await fetch(WORKER_URL, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      tier: params.tier ?? "free",
-      contact: params.contact ?? {},
-      businessProfile: params.businessProfile ?? {},
-      answers: params.answers,
-    }),
-  });
-  const data = await res.json();
-  if (!data.success) throw new Error(data.error || "Assessment failed");
-  return data as AgentReport;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), RUN_ASSESSMENT_TIMEOUT_MS);
+  try {
+    const res = await fetch(WORKER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        tier: params.tier ?? "free",
+        contact: params.contact ?? {},
+        businessProfile: params.businessProfile ?? {},
+        answers: params.answers,
+      }),
+      signal: controller.signal,
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || "Assessment failed");
+    return data as AgentReport;
+  } catch (err: any) {
+    if (err?.name === "AbortError") {
+      throw new Error(
+        "The report is taking longer than expected. Miguel's team has been alerted and will follow up with you shortly.",
+      );
+    }
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** Verify a contact has paid for the given tier (by GHL tag check via worker). */

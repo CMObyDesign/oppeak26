@@ -89,13 +89,41 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
   };
   if (error || !report) {
     return (
-      <div className="w-full max-w-2xl mx-auto pt-48 md:pt-64 pb-32 px-4 text-center space-y-6">
-        <h2 className="font-display text-3xl font-bold text-destructive">Report unavailable</h2>
-        <p className="text-muted-foreground">
-          We could not generate your report just now. Please refresh and try again, or email{" "}
-          <a className="underline" href="mailto:support@cfobydesign.com">support@cfobydesign.com</a>.
-        </p>
-        {error && <pre className="text-xs text-left text-muted-foreground bg-secondary/30 p-4 rounded-xl overflow-x-auto">{error}</pre>}
+      <div className="w-full max-w-2xl mx-auto pt-48 md:pt-64 pb-32 px-4 text-center space-y-8">
+        <div className="space-y-3">
+          <p className="text-xs md:text-sm font-bold text-accent uppercase tracking-[0.3em]">
+            ◆ WE HIT A SNAG
+          </p>
+          <h2 className="font-display text-3xl md:text-4xl text-foreground font-bold leading-tight">
+            Your responses came through — the report didn't.
+          </h2>
+        </div>
+        <div className="p-6 md:p-8 rounded-2xl bg-secondary/30 border border-white/5 text-left space-y-4">
+          <p className="text-foreground leading-relaxed">
+            Solomon couldn't finish generating your analysis just now. This is on us, not on you.
+          </p>
+          <p className="text-foreground leading-relaxed">
+            <strong>What happens next:</strong> Miguel's team has been alerted with your submission. Someone will personally reach out within one business day to walk you through your results — no need to re-take the assessment.
+          </p>
+          <p className="text-muted-foreground text-sm leading-relaxed">
+            If you'd like to retry now, refresh this page. If you have questions in the meantime, reply to any email from us or write to{" "}
+            <a className="underline hover:text-primary" href="mailto:support@cfobydesign.com">support@cfobydesign.com</a>.
+          </p>
+        </div>
+        <button
+          onClick={() => window.location.reload()}
+          className="text-xs uppercase tracking-widest font-mono text-muted-foreground hover:text-primary transition-colors border border-white/10 rounded-full px-5 py-2"
+        >
+          ↻ Try again
+        </button>
+        {error && (
+          <details className="text-left">
+            <summary className="text-xs uppercase tracking-widest font-mono text-muted-foreground cursor-pointer hover:text-primary">
+              Technical details
+            </summary>
+            <pre className="mt-3 text-xs text-left text-muted-foreground bg-secondary/30 p-4 rounded-xl overflow-x-auto">{error}</pre>
+          </details>
+        )}
       </div>
     );
   }
