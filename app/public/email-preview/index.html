@@ -121,7 +121,7 @@
 <div class="grid">
 
   <div class="card">
-    <div class="num">01 / 07</div>
+    <div class="num">01 / 10</div>
     <h2>Free Report Delivery</h2>
     <div class="meta">
       Workflow: <code>02. SWOT Free Report</code><br>
@@ -132,7 +132,7 @@
   </div>
 
   <div class="card">
-    <div class="num">02 / 07</div>
+    <div class="num">02 / 10</div>
     <h2>Partial SWOT ($47) Delivery</h2>
     <div class="meta">
       Workflow: <code>03b. SWOT $47 Report Delivery</code><br>
@@ -143,7 +143,7 @@
   </div>
 
   <div class="card">
-    <div class="num">03 / 07</div>
+    <div class="num">03 / 10</div>
     <h2>Deep Dive — Part 1 Strategist Brief</h2>
     <div class="meta">
       Workflow: <code>04b. SWOT $297 Part 1 Delivery</code><br>
@@ -154,7 +154,7 @@
   </div>
 
   <div class="card">
-    <div class="num">04 / 07</div>
+    <div class="num">04 / 10</div>
     <h2>Deep Dive — Part 2 Growth Plan</h2>
     <div class="meta">
       Workflow: <code>04c. SWOT $297 Part 2 Delivery</code><br>
@@ -165,7 +165,7 @@
   </div>
 
   <div class="card">
-    <div class="num">05 / 07</div>
+    <div class="num">05 / 10</div>
     <h2>Marketing Audit Delivery</h2>
     <div class="meta">
       Workflow: <code>04d. SWOT $297 Marketing Audit</code><br>
@@ -176,7 +176,7 @@
   </div>
 
   <div class="card">
-    <div class="num">06 / 07</div>
+    <div class="num">06 / 10</div>
     <h2>Financials Upload Received</h2>
     <div class="meta">
       Workflow: <code>06. Financial Upload Received</code><br>
@@ -187,7 +187,7 @@
   </div>
 
   <div class="card">
-    <div class="num">07 / 07</div>
+    <div class="num">07 / 10</div>
     <h2>Payment Failed — Retry</h2>
     <div class="meta">
       Workflow: <code>08. SWOT Payment Failed Retry</code><br>
@@ -195,6 +195,39 @@
       Body field: none (retry email)
     </div>
     <a class="open" href="07_payment_failed_retry.html" target="_blank" rel="noopener">Preview →</a>
+  </div>
+
+  <div class="card">
+    <div class="num">08 / 10</div>
+    <h2>Deep Dive Intake — Pickup #1 (post-purchase)</h2>
+    <div class="meta">
+      Workflow: <code>09. SWOT $297 Intake Pickup 1</code><br>
+      Trigger tag: <code>swot_paid_297</code> (fires on payment)<br>
+      Body field: none (confirmation + expectation-setting)
+    </div>
+    <a class="open" href="09_deep_dive_intake_pickup_1.html" target="_blank" rel="noopener">Preview →</a>
+  </div>
+
+  <div class="card">
+    <div class="num">09 / 10</div>
+    <h2>Deep Dive Intake — Pickup #2 (nudge)</h2>
+    <div class="meta">
+      Workflow: <code>10. SWOT $297 Intake Pickup 2</code><br>
+      Trigger: <code>swot_paid_297</code> AND NOT <code>swot_paid_297_intake_complete</code> after ~24h<br>
+      Body field: none (nudge)
+    </div>
+    <a class="open" href="10_deep_dive_intake_pickup_2.html" target="_blank" rel="noopener">Preview →</a>
+  </div>
+
+  <div class="card">
+    <div class="num">10 / 10</div>
+    <h2>Deep Dive Intake — Pickup #3 (final)</h2>
+    <div class="meta">
+      Workflow: <code>11. SWOT $297 Intake Pickup 3</code><br>
+      Trigger: same cohort, ~72h after payment, still no <code>swot_paid_297_intake_complete</code><br>
+      Body field: none (finish-it-yourself vs 15-min call fork)
+    </div>
+    <a class="open" href="11_deep_dive_intake_pickup_3.html" target="_blank" rel="noopener">Preview →</a>
   </div>
 
 </div>
