@@ -37,7 +37,7 @@ const PaidTier47 = () => {
   // Pre-flight: verify payment on mount.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const contactId = params.get("contactId") || "";
+    const contactId = params.get("contactId") || params.get("contact_id") || "";
     if (!contactId) { setScreen("not-paid"); return; }
 
     verifyPayment(contactId, "paid_47").then((r) => {

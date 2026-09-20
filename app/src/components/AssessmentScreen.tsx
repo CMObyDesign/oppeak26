@@ -10,6 +10,8 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 
+const FREE_PROGRESS_KEY = "swot_free_assessment_progress";
+
 interface AssessmentScreenProps {
   onComplete: (answers: Record<number, any>, leadData?: { name: string; email: string; businessName?: string; contactId?: string }) => void;
 }
@@ -139,9 +141,39 @@ export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
     } catch (error) {
       console.error("Error submitting final to HighLevel:", error);
     } finally {
+      // Completed — clear the saved draft so a fresh visit starts clean.
+      try { localStorage.removeItem(FREE_PROGRESS_KEY); } catch { /* ignore */ }
       onComplete(finalAnswers, { name, email, businessName, contactId });
     }
   };
+
+  // Restore in-progress answers so a refresh or accidental tab-close doesn't
+  // wipe everything and force a restart from Q1 (per-browser resume).
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(FREE_PROGRESS_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (s && typeof s === "object") {
+        if (s.answers && typeof s.answers === "object") setAnswers(s.answers);
+        if (typeof s.currentIdx === "number") setCurrentIdx(s.currentIdx);
+        if (s.name) setName(s.name);
+        if (s.businessName) setBusinessName(s.businessName);
+        if (s.email) setEmail(s.email);
+        if (s.hasCapturedLead) setHasCapturedLead(true);
+        if (s.contactId) setContactId(s.contactId);
+      }
+    } catch { /* private mode or bad JSON — start fresh */ }
+  }, []);
+
+  // Persist progress on every meaningful change.
+  useEffect(() => {
+    try {
+      localStorage.setItem(FREE_PROGRESS_KEY, JSON.stringify({
+        currentIdx, answers, name, businessName, email, hasCapturedLead, contactId,
+      }));
+    } catch { /* localStorage disabled — skip, non-fatal */ }
+  }, [currentIdx, answers, name, businessName, email, hasCapturedLead, contactId]);
 
   // Exit prevention logic
   useEffect(() => {
