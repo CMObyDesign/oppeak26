@@ -5,6 +5,7 @@ import { getReadableAnswer } from "@/lib/assessment";
 import { GHL_SURVEY_SUBMIT_URL } from "@/lib/ghl-config";
 import { QuestionCard } from "./QuestionCard";
 import { ProgressBar } from "./ProgressBar";
+import { SaveForLater } from "./SaveForLater";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -321,6 +322,8 @@ export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
             </motion.div>
           )}
         </AnimatePresence>
+
+        <SaveForLater />
       </div>
     </div>
   );

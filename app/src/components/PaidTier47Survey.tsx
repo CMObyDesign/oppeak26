@@ -10,6 +10,7 @@ import {
   getPaid47Sections,
   PaidTier47Question,
 } from "@/data/paidTier47Questions";
+import { SaveForLater } from "@/components/SaveForLater";
 
 interface Props {
   contact: { name: string; email: string; contactId?: string };
@@ -213,6 +214,8 @@ export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props
           {isLast ? "Generate My Diagnostic →" : "Continue →"}
         </Button>
       </div>
+
+      <SaveForLater emailHint />
     </div>
   );
 };

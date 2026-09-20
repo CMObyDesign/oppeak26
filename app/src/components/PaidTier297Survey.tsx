@@ -9,6 +9,7 @@ import {
   PaidTier297Question,
 } from "@/data/paidTier297Questions";
 import { uploadFile } from "@/lib/assessment";
+import { SaveForLater } from "@/components/SaveForLater";
 
 interface Props {
   contact: { name: string; email: string; contactId?: string };
@@ -226,6 +227,8 @@ export const PaidTier297Survey = ({ contact, onComplete }: Props) => {
           {isLast ? "Generate My Deep Dive →" : "Continue →"}
         </Button>
       </div>
+
+      <SaveForLater emailHint />
     </div>
   );
 };
