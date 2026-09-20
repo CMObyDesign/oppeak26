@@ -2672,7 +2672,7 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
     path: agent.path,
     flags: agent.opportunityFlags || [],
     elapsedMs,
-    tagsAppliedAsync: tags,
+    tagsAppliedAsync: lifecycleTags,
   });
 }
 // ----- end GHL survey webhook -----
@@ -3202,11 +3202,12 @@ export default {
       }
     }
 
-    // Resolve a GHL contactId — match_only (default) so a public POST cannot
-    // silently create arbitrary contacts. If the caller provided only an
-    // email that doesn't match an existing contact, we generate the report
-    // in memory and return it without writeback.
-    const contactId = await resolveGHLContactId(contact, env);
+    // Resolve a GHL contactId. Free tier is the public React app: a brand-new
+    // lead usually has only an email and no contact yet, so create-on-miss
+    // (email required) — otherwise the report generates in memory but never
+    // stores, and /report + the reveal page stay blank. Paid tiers stay
+    // match_only: they must already exist with an entitlement tag (gated above).
+    const contactId = await resolveGHLContactId(contact, env, tier === "free" ? "create_if_missing" : "match_only");
     if (!contactId) {
       console.warn(`[POST /] tier=${tier} — NO CONTACT RESOLVED for email=${contact.email || "(none)"}; ` +
         `report generated in-memory but NOT written to GHL (no create-if-missing on public POST). ` +
