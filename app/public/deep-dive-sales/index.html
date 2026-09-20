@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Business Health Analysis — CFO by Design</title>
+<meta name="description" content="Every other fractional CFO firm gives you one person. We put our whole bench on it. A pre-call, five specialists, 50 minutes with Miguel, and a written 90-day plan. $297, one time.">
+<meta name="robots" content="noindex,nofollow">
+<meta property="og:title" content="Business Health Analysis — CFO by Design">
+<meta property="og:description" content="Every other firm gives you one person. We put our whole bench on it. $297, one time.">
+<meta property="og:type" content="website">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --ink:         #0f0f0f;
+    --bg:          #fafaf7;
+    --surface:     #ffffff;
+    --line:        #e5e7eb;
+    --line-strong: #d1d5db;
+    --muted:       #4b5563;
+    --muted-2:     #6b7280;
+    --gold:        #c4a647;
+    --gold-dark:   #a08536;
+    --green:       #2f5c48;   /* deep, honest, non-neon */
+    --green-tint:  #edf2ee;
+    --serif: 'Playfair Display', Georgia, 'Times New Roman', serif;
+    --sans:  'DM Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --mono:  'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 17px;
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+  }
+  p { margin: 0 0 1em; }
+  strong { font-weight: 600; }
+  a { color: var(--ink); }
+  a.link { border-bottom: 1px solid var(--line-strong); text-decoration: none; }
+  a.link:hover { border-bottom-color: var(--ink); }
+
+  .wrap { max-width: 780px; margin: 0 auto; padding: 0 22px; }
+  .wrap-wide { max-width: 1040px; margin: 0 auto; padding: 0 22px; }
+
+  h1, h2, h3 { font-family: var(--serif); font-weight: 600; color: var(--ink); letter-spacing: -0.005em; margin: 0; }
+  h1 { font-size: 42px; line-height: 1.15; }
+  h2 { font-size: 30px; line-height: 1.2; }
+  h3 { font-size: 20px; line-height: 1.3; font-family: var(--sans); font-weight: 600; letter-spacing: 0; }
+  @media (min-width: 720px) {
+    h1 { font-size: 54px; }
+    h2 { font-size: 36px; }
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--gold-dark);
+    margin: 0 0 14px;
+  }
+  .eyebrow-ink { color: var(--muted); }
+
+  /* ============ NAV ============ */
+  nav.top {
+    padding: 22px 22px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1080px;
+    margin: 0 auto;
+  }
+  nav.top .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-family: var(--serif);
+    font-size: 20px;
+    color: var(--ink);
+    text-decoration: none;
+  }
+  nav.top .brand .dot { width: 10px; height: 10px; background: var(--gold); border-radius: 50%; display: inline-block; }
+  nav.top .assurance {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--muted-2);
+    text-transform: uppercase;
+  }
+  @media (max-width: 560px) { nav.top .assurance { display: none; } }
+
+  /* ============ HERO ============ */
+  section.hero {
+    padding: 40px 0 60px;
+    text-align: left;
+  }
+  section.hero .eyebrow { color: var(--green); }
+  section.hero h1 { margin-bottom: 20px; }
+  section.hero p.lead {
+    font-size: 19px;
+    line-height: 1.65;
+    color: var(--muted);
+    max-width: 640px;
+    margin: 0 0 30px;
+  }
+  @media (min-width: 720px) { section.hero p.lead { font-size: 21px; } }
+
+  a.cta, button.cta {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 12px;
+    background: var(--ink);
+    color: #fff;
+    padding: 18px 30px;
+    border-radius: 8px;
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 15px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    text-decoration: none;
+    border: 0;
+    cursor: pointer;
+    transition: transform .1s ease, box-shadow .15s ease;
+    box-shadow: 0 1px 0 rgba(0,0,0,.08);
+  }
+  a.cta:hover, button.cta:hover { transform: translateY(-1px); box-shadow: 0 8px 24px -12px rgba(0,0,0,.35); }
+  a.cta .price { color: var(--gold); font-family: var(--mono); font-size: 13px; letter-spacing: 0.1em; }
+  a.cta .arrow { font-family: var(--sans); font-weight: 400; }
+
+  .cta-row { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+  .cta-row .note { font-size: 13px; color: var(--muted-2); font-family: var(--mono); letter-spacing: 0.06em; }
+
+  /* ============ VSL ============ */
+  .vsl-wrap {
+    margin: 44px 0 0;
+    max-width: 780px;
+  }
+  .vsl {
+    position: relative;
+    padding-bottom: 56.25%;
+    background: var(--ink);
+    border-radius: 10px;
+    overflow: hidden;
+    color: #f5f5f0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .vsl-placeholder {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 24px;
+    color: #f5f5f0;
+    background: linear-gradient(135deg, #1a1a1a 0%, #0f0f0f 100%);
+  }
+  .vsl-placeholder .play {
+    width: 72px;
+    height: 72px;
+    border-radius: 50%;
+    background: var(--gold);
+    color: var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 26px;
+    margin-bottom: 18px;
+    box-shadow: 0 8px 40px -12px rgba(196,166,71,0.6);
+  }
+  .vsl-placeholder .cap {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #d1d5db;
+    margin-bottom: 8px;
+  }
+  .vsl-placeholder .who {
+    font-family: var(--serif);
+    font-size: 20px;
+    color: #fff;
+    max-width: 380px;
+    line-height: 1.35;
+  }
+  .vsl-caption {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted-2);
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin: 12px 0 0;
+    text-align: center;
+  }
+
+  /* ============ SECTIONS ============ */
+  section.text {
+    padding: 60px 0;
+    border-top: 1px solid var(--line);
+  }
+  section.text h2 { max-width: 640px; margin-bottom: 26px; }
+  section.text p { max-width: 640px; color: var(--ink); }
+  section.text p.muted { color: var(--muted); }
+
+  /* Differentiator */
+  section.differentiator { background: var(--ink); color: #f5f5f0; border-top: 0; }
+  section.differentiator h2 { color: #fff; }
+  section.differentiator .eyebrow { color: var(--gold); }
+  section.differentiator p { color: #e5e7eb; }
+  section.differentiator .bench {
+    margin: 40px 0 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0;
+    border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .bench-row {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 24px;
+    padding: 22px 0;
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+  }
+  @media (max-width: 640px) {
+    .bench-row { grid-template-columns: 1fr; gap: 6px; padding: 20px 0; }
+  }
+  .bench-row .disc {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--gold);
+    text-transform: uppercase;
+    padding-top: 4px;
+  }
+  .bench-row .job { color: #e5e7eb; font-size: 17px; line-height: 1.6; }
+
+  /* Pre-call callout */
+  section.precall .callout {
+    margin-top: 28px;
+    padding: 26px 28px;
+    background: var(--green-tint);
+    border-left: 4px solid var(--green);
+    border-radius: 6px;
+    max-width: 640px;
+  }
+  section.precall .callout p { color: var(--ink); margin: 0 0 10px; font-size: 16px; }
+  section.precall .callout p:last-child { margin-bottom: 0; }
+  section.precall .callout .label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.18em;
+    color: var(--green);
+    text-transform: uppercase;
+    font-weight: 500;
+  }
+
+  /* What you get — 7 cards */
+  section.stack { background: #fff; border-top: 1px solid var(--line); }
+  section.stack .cards {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin-top: 36px;
+    max-width: 720px;
+  }
+  .stack-card {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 20px;
+    padding: 22px 24px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+  }
+  .stack-card .n {
+    font-family: var(--serif);
+    font-size: 26px;
+    color: var(--gold-dark);
+    line-height: 1;
+    padding-top: 2px;
+  }
+  .stack-card h3 { font-size: 17px; margin-bottom: 6px; }
+  .stack-card p { margin: 0; font-size: 15px; color: var(--muted); line-height: 1.6; max-width: none; }
+
+  /* Reframe / price argument */
+  section.reframe { background: var(--green); color: #fff; border-top: 0; }
+  section.reframe h2 { color: #fff; }
+  section.reframe .eyebrow { color: rgba(255,255,255,0.7); }
+  section.reframe p { color: #eaf1ec; max-width: 640px; }
+  section.reframe .price-line {
+    font-family: var(--serif);
+    font-size: 26px;
+    color: #fff;
+    margin: 30px 0 8px;
+  }
+  section.reframe .price-sub {
+    font-family: var(--mono);
+    font-size: 12px;
+    letter-spacing: 0.18em;
+    color: rgba(255,255,255,0.75);
+    text-transform: uppercase;
+  }
+
+  /* Human first, then machine */
+  section.human .box {
+    margin-top: 24px;
+    padding: 28px 30px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    max-width: 680px;
+  }
+  section.human .box h3 { margin-bottom: 14px; font-family: var(--serif); font-size: 24px; }
+  section.human .box p { color: var(--muted); font-size: 16px; margin: 0 0 12px; }
+  section.human .box p:last-child { margin-bottom: 0; }
+  section.human .cta-block { margin-top: 30px; }
+
+  /* Who this is for */
+  section.audience .cols {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 20px;
+    margin-top: 30px;
+    max-width: 780px;
+  }
+  @media (min-width: 720px) { section.audience .cols { grid-template-columns: 1fr 1fr; gap: 24px; } }
+  .audience-card {
+    padding: 24px 26px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  .audience-card h3 { margin-bottom: 12px; font-size: 15px; }
+  .audience-card ul { list-style: none; padding: 0; margin: 0; }
+  .audience-card li { padding: 8px 0; border-bottom: 1px dashed var(--line); font-size: 15px; color: var(--muted); line-height: 1.55; }
+  .audience-card li:last-child { border-bottom: 0; }
+  .audience-card.yes h3 { color: var(--green); }
+  .audience-card.no h3 { color: var(--muted-2); }
+  .audience-card.no li { color: var(--muted-2); }
+
+  /* What happens after */
+  section.timeline .steps {
+    margin-top: 34px;
+    max-width: 720px;
+  }
+  .step {
+    display: grid;
+    grid-template-columns: 44px 1fr;
+    gap: 20px;
+    padding: 20px 0;
+    border-bottom: 1px solid var(--line);
+  }
+  .step:last-child { border-bottom: 0; }
+  .step .num {
+    width: 34px; height: 34px;
+    background: var(--ink);
+    color: var(--gold);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--sans); font-weight: 700; font-size: 14px;
+    margin-top: 2px;
+  }
+  .step h3 { margin-bottom: 4px; font-size: 16px; }
+  .step p { margin: 0; color: var(--muted); font-size: 15px; }
+
+  /* Team */
+  section.team { background: #fff; border-top: 1px solid var(--line); }
+  section.team .team-note {
+    max-width: 640px;
+    font-size: 14px;
+    color: var(--muted-2);
+    padding: 14px 16px;
+    background: var(--bg);
+    border-left: 3px solid var(--gold);
+    border-radius: 4px;
+    margin-top: 30px;
+    font-style: italic;
+    line-height: 1.6;
+  }
+  .team-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 26px;
+    margin-top: 30px;
+    max-width: 780px;
+  }
+  @media (min-width: 720px) { .team-grid { grid-template-columns: 1fr 1fr; } }
+  .team-card {
+    display: grid;
+    grid-template-columns: 88px 1fr;
+    gap: 18px;
+    padding: 22px 24px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    align-items: flex-start;
+  }
+  .team-photo {
+    width: 88px; height: 88px;
+    background: var(--line);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif); font-size: 28px; color: var(--muted-2);
+    overflow: hidden;
+  }
+  .team-photo img { width: 100%; height: 100%; object-fit: cover; }
+  .team-card h3 { font-family: var(--serif); font-size: 20px; margin-bottom: 2px; }
+  .team-card .role {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    color: var(--gold-dark);
+    text-transform: uppercase;
+    margin-bottom: 10px;
+  }
+  .team-card p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.6; }
+
+  /* Objections */
+  section.objections { background: var(--bg); }
+  .qa {
+    max-width: 720px;
+    margin-top: 30px;
+    border-top: 1px solid var(--line);
+  }
+  details.q {
+    border-bottom: 1px solid var(--line);
+    padding: 18px 0;
+  }
+  details.q summary {
+    cursor: pointer;
+    list-style: none;
+    display: flex; justify-content: space-between; align-items: baseline; gap: 20px;
+    font-family: var(--serif);
+    font-size: 19px;
+    color: var(--ink);
+    line-height: 1.35;
+  }
+  details.q summary::-webkit-details-marker { display: none; }
+  details.q summary::after {
+    content: "+";
+    font-family: var(--sans);
+    font-weight: 400;
+    color: var(--gold-dark);
+    font-size: 24px;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  details.q[open] summary::after { content: "−"; }
+  details.q .a {
+    margin-top: 14px;
+    color: var(--muted);
+    font-size: 16px;
+    line-height: 1.7;
+  }
+
+  /* Close */
+  section.close {
+    background: var(--ink);
+    color: #f5f5f0;
+    padding: 80px 0;
+    text-align: left;
+    border-top: 0;
+  }
+  section.close h2 { color: #fff; margin-bottom: 26px; }
+  section.close p { color: #d1d5db; font-size: 18px; max-width: 640px; }
+  section.close .eyebrow { color: var(--gold); }
+  section.close .cta-row { margin-top: 34px; }
+  section.close .note { color: var(--muted-2); }
+
+  /* Footer */
+  footer {
+    padding: 40px 22px;
+    text-align: center;
+    background: var(--bg);
+    border-top: 1px solid var(--line);
+    font-size: 13px;
+    color: var(--muted-2);
+    line-height: 1.7;
+  }
+  footer .disclosure {
+    max-width: 720px;
+    margin: 0 auto 12px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--muted-2);
+    line-height: 1.7;
+  }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<nav class="top">
+  <a class="brand" href="https://cfobydesign.com">
+    <span class="dot"></span>
+    <span>CFO by Design</span>
+  </a>
+  <span class="assurance">STRATEGY MATTERS &middot; YOUR BUSINESS MATTERS</span>
+</nav>
+
+<!-- ============ 1. HERO ============ -->
+<section class="hero">
+  <div class="wrap">
+    <div class="eyebrow">The Business Health Analysis &middot; $297</div>
+    <h1>Every other firm gives you one person. We put our whole bench on it.</h1>
+    <p class="lead">A call with us before we start, a full financial diagnostic read by our accounting, strategy, marketing and funding people, 50 minutes together, and a written 90-day plan you can act on Monday.</p>
+
+    <div class="cta-row">
+      <a class="cta" href="https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0">
+        <span>Get my Business Health Analysis</span>
+        <span class="price">· $297</span>
+        <span class="arrow">→</span>
+      </a>
+      <span class="note">One time. Nothing recurring.</span>
+    </div>
+
+    <div class="vsl-wrap">
+      <div class="vsl" id="vsl">
+        <!-- Replace this placeholder with the VSL <iframe> or <video> once the shoot is in. Keep the 16:9 aspect ratio; autoplay muted with visible play button. -->
+        <div class="vsl-placeholder" role="button" tabindex="0" aria-label="Play video: Miguel on the Business Health Analysis">
+          <div class="play" aria-hidden="true">▶</div>
+          <div class="cap">2:45 · Miguel Hernandez, Founder</div>
+          <div class="who">Why five reads beats one, and what you leave the call with.</div>
+        </div>
+      </div>
+      <p class="vsl-caption">Video &middot; watch or skip &mdash; the page tells the same story below.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2. THE PROBLEM ============ -->
+<section class="text">
+  <div class="wrap">
+    <div class="eyebrow">The gap</div>
+    <h2>You are not missing information. You are missing somebody whose job is next quarter.</h2>
+    <p>Your accountant files last year. Your bookkeeper records last month. Both are doing their jobs correctly. Neither is paid to tell you your break-even is wrong, that you are pricing two jobs at a loss, or that the two problems worrying you most are the same problem wearing different clothes.</p>
+    <p class="muted">That gap is where the money goes. Not in one dramatic event. In ordinary decisions made against a bank balance that looked fine at the time.</p>
+  </div>
+</section>
+
+<!-- ============ 3. DIFFERENTIATOR ============ -->
+<section class="text differentiator">
+  <div class="wrap">
+    <div class="eyebrow">Why this one is different</div>
+    <h2>One set of eyes is the problem, not the solution.</h2>
+    <p>Every fractional CFO firm works the same way. They match you with a CFO. One person, one background, one lens. And they are usually very good.</p>
+    <p>But businesses do not get stuck for one reason. The margin problem is a pricing problem. The pricing problem is a positioning problem. The cash problem is a collections problem that a finance person will fix and a marketing person would have prevented.</p>
+    <p>So when your analysis comes in, it does not go to one desk. It goes to five.</p>
+
+    <div class="bench">
+      <div class="bench-row">
+        <div class="disc">Accounting &amp; Tax</div>
+        <div class="job">What is structurally wrong, and what is it blocking.</div>
+      </div>
+      <div class="bench-row">
+        <div class="disc">Strategy</div>
+        <div class="job">Where the margin is actually leaking, and what you should stop doing.</div>
+      </div>
+      <div class="bench-row">
+        <div class="disc">Marketing &amp; Growth</div>
+        <div class="job">Whether your revenue problem is a revenue problem at all.</div>
+      </div>
+      <div class="bench-row">
+        <div class="disc">Funding &amp; Capital</div>
+        <div class="job">What happens if you walk into a lender tomorrow, and what to fix first.</div>
+      </div>
+      <div class="bench-row">
+        <div class="disc">Miguel</div>
+        <div class="job">25 years of this, plus the relationships that turn a finding into an introduction.</div>
+      </div>
+    </div>
+
+    <p style="margin-top:32px;">You do not get five opinions. You get one integrated read, and Miguel brings it to the call.</p>
+  </div>
+</section>
+
+<!-- ============ 4. PRE-CALL ============ -->
+<section class="text precall">
+  <div class="wrap">
+    <div class="eyebrow">Before we analyze anything, we talk to you</div>
+    <h2>Fifteen minutes, on the phone, before the work starts.</h2>
+    <p>Your numbers will not tell us that you are buying out a partner in March. Or that one customer is 40% of revenue and has gone quiet. Or that you already know what the problem is and just need somebody to confirm you are not crazy.</p>
+    <p>You tell us that. Then the analysis gets built around your actual situation instead of a generic one, and the 50 minutes go to decisions instead of background.</p>
+
+    <div class="callout">
+      <div class="label">The reframe</div>
+      <p style="margin-top:10px;">Most firms would call this a discovery call and charge you for the hour after it. We call it doing the homework.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 5. WHAT YOU GET (7 cards) ============ -->
+<section class="text stack">
+  <div class="wrap">
+    <div class="eyebrow">What you get</div>
+    <h2>Seven concrete deliverables. No filler.</h2>
+
+    <div class="cards">
+      <div class="stack-card">
+        <div class="n">1</div>
+        <div>
+          <h3>A 15-minute pre-call</h3>
+          <p>Before anything is analyzed. So the work is aimed at your situation, not a category.</p>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="n">2</div>
+        <div>
+          <h3>Your full Business Health Analysis</h3>
+          <p>Every category scored and benchmarked, with the interplay called out: which two gaps are making each other worse.</p>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="n">3</div>
+        <div>
+          <h3>Five specialists reading it</h3>
+          <p>Accounting and tax, strategy, marketing and growth, funding, and Miguel. Not a committee &mdash; one integrated read.</p>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="n">4</div>
+        <div>
+          <h3>Your break-even and your true cost of delivery, in writing</h3>
+          <p>The two numbers most owners cannot answer about their own business.</p>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="n">5</div>
+        <div>
+          <h3>A funding-readiness read</h3>
+          <p>Where you stand if you walked into a lender tomorrow, and what they would look at first. No application, no credit pull, no pitch.</p>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="n">6</div>
+        <div>
+          <h3>An opportunity scan</h3>
+          <p>Cost lines most owners never renegotiate, run against a network Miguel has spent 25 years building.</p>
+        </div>
+      </div>
+      <div class="stack-card">
+        <div class="n">7</div>
+        <div>
+          <h3>50 minutes, and a written 90-day plan</h3>
+          <p>Three moves, in order, with dates on them. One page.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 6. REFRAME / PRICE ARGUMENT ============ -->
+<section class="text reframe">
+  <div class="wrap">
+    <div class="eyebrow">Why we do it backwards</div>
+    <h2>Most firms give you a free consultation. We think that is the wrong order.</h2>
+    <p>A fractional CFO engagement in this market starts at four figures a month, and it starts with a free consultation you have to earn your way through. You spend that hour explaining your business to somebody deciding whether to take you on.</p>
+    <p>We talk to you first, then five people read your numbers, and then we sit down. By the time we are on a call, the work is done.</p>
+    <div class="price-line">$297. One time. That is the whole thing.</div>
+    <div class="price-sub">No retainer &middot; No upsell on the call &middot; No credit check</div>
+  </div>
+</section>
+
+<!-- ============ 7. HUMAN FIRST, THEN MACHINE ============ -->
+<section class="text human">
+  <div class="wrap">
+    <div class="eyebrow">Where the software fits</div>
+    <h2>A machine scores it. People decide what it means.</h2>
+    <p class="muted">Solomon, our assessment engine, does in minutes what used to take an analyst a week. That is the only reason five specialists can look at your business for $297 instead of $2,970.</p>
+
+    <div class="box">
+      <h3>But the software does not talk to you, and it does not decide anything. We do.</h3>
+      <p>You will speak to a person before the analysis runs. Five people will read it. And a human being will sit across from you and tell you what to do about it.</p>
+      <p>The engine's job is math. The judgment is ours.</p>
+    </div>
+
+    <div class="cta-block cta-row">
+      <a class="cta" href="https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0">
+        <span>Start my analysis</span>
+        <span class="price">· $297</span>
+        <span class="arrow">→</span>
+      </a>
+      <span class="note">One time. You keep the plan whether you work with us after or not.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 8. WHO THIS IS FOR ============ -->
+<section class="text audience">
+  <div class="wrap">
+    <div class="eyebrow">Straight talk</div>
+    <h2>Who this is for &mdash; and who it is not.</h2>
+
+    <div class="cols">
+      <div class="audience-card yes">
+        <h3>This is for you if</h3>
+        <ul>
+          <li>You are doing roughly $1M to $10M.</li>
+          <li>You have a bookkeeper or a CPA and still feel like you are guessing.</li>
+          <li>You are about to make a decision &mdash; on pricing, a hire, equipment or funding &mdash; and you want the numbers in front of you first.</li>
+        </ul>
+      </div>
+      <div class="audience-card no">
+        <h3>This is not for you if</h3>
+        <ul>
+          <li>You are pre-revenue.</li>
+          <li>You want somebody to do your bookkeeping.</li>
+          <li>You need funding today and nothing else. For that one, just talk to us &mdash; this is not what you need.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 9. WHAT HAPPENS AFTER YOU CLICK ============ -->
+<section class="text timeline">
+  <div class="wrap">
+    <div class="eyebrow">What happens after you click</div>
+    <h2>Five steps. No surprises.</h2>
+
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <div>
+          <h3>Right now</h3>
+          <p>A short set of questions about how the business actually runs. About 12 minutes. If you did the free assessment, your answers carry over and you will not re-enter anything.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <div>
+          <h3>Then we call you</h3>
+          <p>Fifteen minutes. What the numbers cannot tell us.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <div>
+          <h3>Our team reads it</h3>
+          <p>Accounting, strategy, marketing, funding, and Miguel.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">4</div>
+        <div>
+          <h3>You pick a time</h3>
+          <p>50 minutes, on your schedule, with everything already done.</p>
+        </div>
+      </div>
+      <div class="step">
+        <div class="num">5</div>
+        <div>
+          <h3>After the call</h3>
+          <p>Your written 90-day plan within 24 hours. Three moves, in order, with dates.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 10. TEAM ============ -->
+<!--
+  TODO(before ship): swap the placeholder photo initials and bio brackets for
+  Miguel's real bio detail and each bench member's real name, discipline and
+  one-line background. If any member is a contractor or partner rather than
+  staff, say so plainly on their card. Elizabeth's guidance: real people, real
+  names, real photos — stock photos or unnamed "our experts" will undo the
+  page's central claim.
+-->
+<section class="text team">
+  <div class="wrap-wide">
+    <div class="eyebrow">The people who will actually look at your business</div>
+    <h2>The bench.</h2>
+
+    <div class="team-grid">
+      <div class="team-card">
+        <div class="team-photo" aria-hidden="true">MH</div>
+        <div>
+          <h3>Miguel Hernandez</h3>
+          <div class="role">Founder</div>
+          <p>25 years on the finance side of small business. [TWO OR THREE SPECIFIC, REAL CREDENTIALS.] Built CFO by Design because he kept meeting good operators flying blind on their numbers, and the existing options were either too expensive or too slow to help them.</p>
+        </div>
+      </div>
+
+      <div class="team-card">
+        <div class="team-photo" aria-hidden="true">A&amp;T</div>
+        <div>
+          <h3>[NAME]</h3>
+          <div class="role">Accounting &amp; Tax</div>
+          <p>[ONE LINE ON WHAT THEY ACTUALLY DO AND HOW LONG THEY HAVE DONE IT.]</p>
+        </div>
+      </div>
+
+      <div class="team-card">
+        <div class="team-photo" aria-hidden="true">ST</div>
+        <div>
+          <h3>[NAME]</h3>
+          <div class="role">Strategy</div>
+          <p>[ONE LINE ON WHAT THEY ACTUALLY DO AND HOW LONG THEY HAVE DONE IT.]</p>
+        </div>
+      </div>
+
+      <div class="team-card">
+        <div class="team-photo" aria-hidden="true">M&amp;G</div>
+        <div>
+          <h3>[NAME]</h3>
+          <div class="role">Marketing &amp; Growth</div>
+          <p>[ONE LINE ON WHAT THEY ACTUALLY DO AND HOW LONG THEY HAVE DONE IT.]</p>
+        </div>
+      </div>
+
+      <div class="team-card">
+        <div class="team-photo" aria-hidden="true">F&amp;C</div>
+        <div>
+          <h3>[NAME]</h3>
+          <div class="role">Funding &amp; Capital</div>
+          <p>[ONE LINE ON WHAT THEY ACTUALLY DO AND HOW LONG THEY HAVE DONE IT.]</p>
+        </div>
+      </div>
+    </div>
+
+    <p class="team-note">Section not final &mdash; real photos, names and bios go in before the page goes live. If any of the bench are contractors or partners rather than staff, that will be said plainly on the card.</p>
+  </div>
+</section>
+
+<!--
+  ============ 11. PROOF ============
+  Left out on purpose. Elizabeth: "Until it exists, leave this out rather than
+  filling it. An empty proof section beats an invented one at a price where
+  the buyer is already skeptical." Insert testimonial video / two-to-three
+  written testimonials WITH real names, businesses and signed permission
+  paperwork once the testimonial shoot from section 8 of the copy doc is done.
+-->
+
+<!-- ============ 12. OBJECTIONS ============ -->
+<section class="text objections">
+  <div class="wrap">
+    <div class="eyebrow">Questions we get</div>
+    <h2>Straight answers.</h2>
+
+    <div class="qa">
+      <details class="q">
+        <summary>Is this just a sales call for something bigger?</summary>
+        <div class="a">No. There is no pitch on the call. If you want to work with us after, say so. If not, you keep your analysis and your plan and we are square.</div>
+      </details>
+      <details class="q">
+        <summary>I already have a CPA.</summary>
+        <div class="a">Good, keep them. They handle compliance and last year. This is next quarter. Most of our clients have both.</div>
+      </details>
+      <details class="q">
+        <summary>How is this different from the $47 diagnostic?</summary>
+        <div class="a">The $47 tells you what is wrong. This one has a team tell you what it costs, what to do, in what order, and puts a CFO in the room while you decide.</div>
+      </details>
+      <details class="q">
+        <summary>What if my books are a mess?</summary>
+        <div class="a">Almost everyone's are. We work with what you have, and cleaning it up is usually part of the plan. It is not a prerequisite.</div>
+      </details>
+      <details class="q">
+        <summary>Do I have to do the pre-call?</summary>
+        <div class="a">No. It makes the analysis better, but if you would rather just answer the questions and get to the session, that is fine.</div>
+      </details>
+      <!--
+        Guarantee question — commented out until Miguel writes the exact
+        sentence he means. Elizabeth's guidance: "One plain sentence if there
+        is a guarantee. Delete the line if there is not, rather than hedging."
+      -->
+      <!--
+      <details class="q">
+        <summary>What if it is not worth it?</summary>
+        <div class="a">[MIGUEL'S ONE-SENTENCE GUARANTEE, IN HIS OWN WORDS.]</div>
+      </details>
+      -->
+    </div>
+  </div>
+</section>
+
+<!-- ============ 13. CLOSE ============ -->
+<section class="close">
+  <div class="wrap">
+    <div class="eyebrow">The close</div>
+    <h2>The numbers are already true. You just have not seen them yet.</h2>
+    <p>Most owners we sit down with are not chasing a bigger number. They want to stop lying awake about payroll, get their weekends back, and go do the part of the business they actually liked in the first place. Getting the numbers straight is how you get there.</p>
+
+    <div class="cta-row">
+      <a class="cta" href="https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0" style="background:var(--gold);color:var(--ink);">
+        <span>Get my Business Health Analysis</span>
+        <span class="price" style="color:var(--ink);">· $297</span>
+        <span class="arrow">→</span>
+      </a>
+      <span class="note">One time. Questions first? Just email <a href="mailto:support@cfobydesign.com" style="color:var(--gold);">support@cfobydesign.com</a>.</span>
+    </div>
+  </div>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer>
+  <div class="disclosure">
+    CFO by Design &middot; Business Health Analysis, $297 one time. No recurring charges. Your analysis and 90-day plan are yours to keep whether or not you engage us further.
+  </div>
+  <div>
+    <a href="https://cfobydesign.com/privacy">Privacy</a>
+    &nbsp;&middot;&nbsp;
+    <a href="https://cfobydesign.com/tos">Terms</a>
+    &nbsp;&middot;&nbsp;
+    <a href="mailto:support@cfobydesign.com">Support</a>
+  </div>
+  <div style="margin-top:14px;font-size:11px;">
+    &copy; <span id="yr">2026</span> CFO by Design. All rights reserved.
+  </div>
+</footer>
+
+<script>
+  document.getElementById('yr').textContent = new Date().getFullYear();
+
+  // VSL placeholder click — no-op until the real video is dropped in.
+  // Wire this up when the shoot is delivered: replace the .vsl-placeholder
+  // markup with an <iframe> or <video autoplay muted playsinline>.
+  var vsl = document.getElementById('vsl');
+  if (vsl) {
+    vsl.addEventListener('click', function() {
+      // Replace with real player embed on ship. For now, scroll to the
+      // "What you get" stack so a click still moves them forward.
+      var stack = document.querySelector('section.stack');
+      if (stack) stack.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }
+</script>
+
+</body>
+</html>
