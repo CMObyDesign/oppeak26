@@ -913,10 +913,11 @@ async function handleUpload(request, env) {
 // Body: { contactId, tier }
 // Returns: { verified: boolean, contact: {contactId, name, email} | null }
 async function handleVerify(body, env) {
-  const contactId = body?.contactId;
+  let contactId = body?.contactId;
   const tier = body?.tier;
-  if (!contactId || !tier) {
-    return json({ verified: false, error: "Missing contactId or tier" }, 400);
+  const email = String(body?.email || "").trim().toLowerCase();
+  if (!tier || (!contactId && !email)) {
+    return json({ verified: false, error: "Missing tier and (contactId or email)" }, 400);
   }
   const requiredTag = TIER_REQUIRED_TAG[tier];
   if (!requiredTag) {
@@ -924,6 +925,14 @@ async function handleVerify(body, env) {
   }
   if (!env.GHL_API_KEY) {
     return json({ verified: false, error: "GHL not configured" }, 500);
+  }
+
+  // Email-based recovery: caller lost their ?contactId link — resolve it by email.
+  if (!contactId && email) {
+    contactId = await findGHLContactByEmail(email, env);
+    if (!contactId) {
+      return json({ verified: false, error: "No paid account found for that email" }, 404);
+    }
   }
 
   const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}`, {

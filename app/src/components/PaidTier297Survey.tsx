@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +9,7 @@ import {
   PaidTier297Question,
 } from "@/data/paidTier297Questions";
 import { uploadFile } from "@/lib/assessment";
+import { SaveForLater } from "@/components/SaveForLater";
 
 interface Props {
   contact: { name: string; email: string; contactId?: string };
@@ -24,6 +25,28 @@ export const PaidTier297Survey = ({ contact, onComplete }: Props) => {
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
+  // Per-browser resume: a paid customer who drops mid-survey picks back up
+  // (answers + uploaded-file references + where they were).
+  const PROGRESS_KEY = `swot_paid297_progress_${contact.contactId || "anon"}`;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PROGRESS_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (s && typeof s === "object") {
+        if (s.answers && typeof s.answers === "object") setAnswers(s.answers);
+        if (typeof s.sectionIdx === "number") setSectionIdx(s.sectionIdx);
+        if (Array.isArray(s.uploadedFiles)) setUploadedFiles(s.uploadedFiles);
+      }
+    } catch { /* private mode or bad JSON — start fresh */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [PROGRESS_KEY]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(PROGRESS_KEY, JSON.stringify({ answers, sectionIdx, uploadedFiles }));
+    } catch { /* localStorage disabled — skip */ }
+  }, [PROGRESS_KEY, answers, sectionIdx, uploadedFiles]);
+
   const sections = getPaid297Sections();
   const currentSection = sections[sectionIdx];
   const isLast = sectionIdx === sections.length - 1;
@@ -34,6 +57,7 @@ export const PaidTier297Survey = ({ contact, onComplete }: Props) => {
 
   const handleNext = () => {
     if (isLast) {
+      try { localStorage.removeItem(PROGRESS_KEY); } catch { /* ignore */ }
       onComplete({
         ...answers,
         supporting_documents: uploadedFiles.map(f => f.url),
@@ -203,6 +227,8 @@ export const PaidTier297Survey = ({ contact, onComplete }: Props) => {
           {isLast ? "Generate My Deep Dive →" : "Continue →"}
         </Button>
       </div>
+
+      <SaveForLater emailHint />
     </div>
   );
 };

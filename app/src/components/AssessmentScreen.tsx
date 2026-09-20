@@ -5,10 +5,13 @@ import { getReadableAnswer } from "@/lib/assessment";
 import { GHL_SURVEY_SUBMIT_URL } from "@/lib/ghl-config";
 import { QuestionCard } from "./QuestionCard";
 import { ProgressBar } from "./ProgressBar";
+import { SaveForLater } from "./SaveForLater";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
+
+const FREE_PROGRESS_KEY = "swot_free_assessment_progress";
 
 interface AssessmentScreenProps {
   onComplete: (answers: Record<number, any>, leadData?: { name: string; email: string; businessName?: string; contactId?: string }) => void;
@@ -25,6 +28,8 @@ export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasCapturedLead, setHasCapturedLead] = useState(false);
   const [contactId, setContactId] = useState<string | undefined>(undefined);
+  const [showResumePrompt, setShowResumePrompt] = useState(false);
+  const [pendingDraft, setPendingDraft] = useState<Record<string, any> | null>(null);
 
   // Flatten questions and inject section titles
   const questions = FREE_ASSESSMENT_SECTIONS.flatMap(section => 
@@ -139,9 +144,63 @@ export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
     } catch (error) {
       console.error("Error submitting final to HighLevel:", error);
     } finally {
+      // Completed — clear the saved draft so a fresh visit starts clean.
+      try { localStorage.removeItem(FREE_PROGRESS_KEY); } catch { /* ignore */ }
       onComplete(finalAnswers, { name, email, businessName, contactId });
     }
   };
+
+  // On mount, look for a saved draft — but DON'T silently restore it. On a
+  // shared browser, silent restore would hand the next visitor the previous
+  // person's name/email/contactId (and could submit their answers under the
+  // prior lead's identity, corrupting that CRM record). Instead offer an
+  // explicit Resume / Start-fresh choice, and expire stale drafts.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(FREE_PROGRESS_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      const TTL_MS = 6 * 60 * 60 * 1000; // 6 hours
+      if (!s || typeof s !== "object" || typeof s.ts !== "number" || Date.now() - s.ts > TTL_MS) {
+        localStorage.removeItem(FREE_PROGRESS_KEY);
+        return;
+      }
+      setPendingDraft(s);
+      setShowResumePrompt(true);
+    } catch { localStorage.removeItem(FREE_PROGRESS_KEY); /* bad JSON — start fresh */ }
+  }, []);
+
+  const resumeDraft = () => {
+    const s = pendingDraft;
+    if (s) {
+      if (s.answers && typeof s.answers === "object") setAnswers(s.answers);
+      if (typeof s.currentIdx === "number") setCurrentIdx(s.currentIdx);
+      if (s.name) setName(s.name);
+      if (s.businessName) setBusinessName(s.businessName);
+      if (s.email) setEmail(s.email);
+      if (s.hasCapturedLead) setHasCapturedLead(true);
+      if (s.contactId) setContactId(s.contactId);
+    }
+    setShowResumePrompt(false);
+    setPendingDraft(null);
+  };
+
+  const startFresh = () => {
+    try { localStorage.removeItem(FREE_PROGRESS_KEY); } catch { /* ignore */ }
+    setShowResumePrompt(false);
+    setPendingDraft(null);
+  };
+
+  // Persist progress with a timestamp (for expiry). Paused while the resume
+  // prompt is open so we don't clobber the draft we're offering to restore.
+  useEffect(() => {
+    if (showResumePrompt) return;
+    try {
+      localStorage.setItem(FREE_PROGRESS_KEY, JSON.stringify({
+        currentIdx, answers, name, businessName, email, hasCapturedLead, contactId, ts: Date.now(),
+      }));
+    } catch { /* localStorage disabled — skip, non-fatal */ }
+  }, [showResumePrompt, currentIdx, answers, name, businessName, email, hasCapturedLead, contactId]);
 
   // Exit prevention logic
   useEffect(() => {
@@ -155,6 +214,18 @@ export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
 
   return (
     <div className="min-h-screen w-full flex flex-col items-center justify-center p-4 pt-48 md:pt-64">
+      {showResumePrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 p-4">
+          <div className="w-full max-w-md bg-card border border-border rounded-2xl p-6 text-center shadow-xl">
+            <h3 className="font-display text-xl font-bold text-foreground mb-2">Welcome back</h3>
+            <p className="text-sm text-muted-foreground mb-5">We saved your progress on this device. Resume where you left off, or start a new assessment.</p>
+            <div className="flex gap-3 justify-center">
+              <button onClick={resumeDraft} className="h-11 px-5 rounded-lg bg-primary text-primary-foreground font-bold">Resume</button>
+              <button onClick={startFresh} className="h-11 px-5 rounded-lg bg-secondary/40 border border-border text-foreground font-medium">Start fresh</button>
+            </div>
+          </div>
+        </div>
+      )}
       <ProgressBar current={showLeadCapture ? 4 : currentIdx + 1} total={questions.length} />
       
       <div className="w-full max-w-[640px] space-y-8">
@@ -251,6 +322,8 @@ export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
             </motion.div>
           )}
         </AnimatePresence>
+
+        <SaveForLater />
       </div>
     </div>
   );

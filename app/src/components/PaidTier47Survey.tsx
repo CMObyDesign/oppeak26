@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,7 @@ import {
   getPaid47Sections,
   PaidTier47Question,
 } from "@/data/paidTier47Questions";
+import { SaveForLater } from "@/components/SaveForLater";
 
 interface Props {
   contact: { name: string; email: string; contactId?: string };
@@ -20,6 +21,26 @@ interface Props {
 export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props) => {
   const [sectionIdx, setSectionIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
+
+  // Per-browser resume: a paid customer who drops mid-survey picks back up.
+  const PROGRESS_KEY = `swot_paid47_progress_${contact.contactId || "anon"}`;
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(PROGRESS_KEY);
+      if (!raw) return;
+      const s = JSON.parse(raw);
+      if (s && typeof s === "object") {
+        if (s.answers && typeof s.answers === "object") setAnswers(s.answers);
+        if (typeof s.sectionIdx === "number") setSectionIdx(s.sectionIdx);
+      }
+    } catch { /* private mode or bad JSON — start fresh */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [PROGRESS_KEY]);
+  useEffect(() => {
+    try {
+      localStorage.setItem(PROGRESS_KEY, JSON.stringify({ answers, sectionIdx }));
+    } catch { /* localStorage disabled — skip */ }
+  }, [PROGRESS_KEY, answers, sectionIdx]);
 
   const questionSections = getPaid47Sections();
   // Business info is the first section
@@ -36,8 +57,10 @@ export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props
     setAnswers(prev => ({ ...prev, [id]: value }));
 
   const handleNext = () => {
-    if (isLast) onComplete(answers);
-    else {
+    if (isLast) {
+      try { localStorage.removeItem(PROGRESS_KEY); } catch { /* ignore */ }
+      onComplete(answers);
+    } else {
       setSectionIdx(i => i + 1);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -191,6 +214,8 @@ export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props
           {isLast ? "Generate My Diagnostic →" : "Continue →"}
         </Button>
       </div>
+
+      <SaveForLater emailHint />
     </div>
   );
 };
