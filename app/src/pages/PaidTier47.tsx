@@ -34,6 +34,26 @@ const PaidTier47 = () => {
   const [reportError, setReportError] = useState<string | null>(null);
   const [timerDone, setTimerDone] = useState(false);
 
+  // Email-based recovery for a paid customer who lost their ?contactId link.
+  const [resumeEmail, setResumeEmail] = useState("");
+  const [resumeErr, setResumeErr] = useState<string | null>(null);
+  const [resuming, setResuming] = useState(false);
+
+  const handleResumeByEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const em = resumeEmail.trim();
+    if (!em.includes("@")) { setResumeErr("Enter the email you used at checkout."); return; }
+    setResuming(true); setResumeErr(null);
+    const r = await verifyPayment(undefined, "paid_47", em);
+    setResuming(false);
+    if (r.verified && r.contact) {
+      setContact({ name: r.contact.name || "", email: r.contact.email || em, contactId: r.contact.contactId });
+      setScreen("survey");
+    } else {
+      setResumeErr(r.error || "We couldn't find a paid account for that email.");
+    }
+  };
+
   // Pre-flight: verify payment on mount.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -152,6 +172,22 @@ const PaidTier47 = () => {
           {screen === "not-paid" && (
             <motion.div key="not-paid" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.5 }}>
               <PaymentRequiredScreen tier="paid_47" paymentUrl={PAYMENT_LINK_47} />
+              <form onSubmit={handleResumeByEmail} className="max-w-md mx-auto mt-8 mb-16 text-center px-4">
+                <p className="text-sm text-muted-foreground mb-3">Already purchased? Enter the email you used at checkout to pick up where you left off.</p>
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="email"
+                    value={resumeEmail}
+                    onChange={(e) => setResumeEmail(e.target.value)}
+                    placeholder="you@company.com"
+                    className="flex-1 h-12 rounded-lg bg-secondary/40 border border-border px-4 text-foreground"
+                  />
+                  <button type="submit" disabled={resuming} className="h-12 px-6 rounded-lg bg-primary text-primary-foreground font-bold disabled:opacity-60">
+                    {resuming ? "Checking…" : "Resume"}
+                  </button>
+                </div>
+                {resumeErr && <p className="text-sm text-destructive mt-2">{resumeErr}</p>}
+              </form>
             </motion.div>
           )}
           {screen === "survey" && (

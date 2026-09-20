@@ -135,19 +135,20 @@ export async function runAssessment(params: {
 
 /** Verify a contact has paid for the given tier (by GHL tag check via worker). */
 export async function verifyPayment(
-  contactId: string,
+  contactId: string | undefined,
   tier: AssessmentTier,
+  email?: string,
 ): Promise<{
   verified: boolean;
   contact: { contactId: string; name: string; email: string } | null;
   error?: string;
 }> {
-  if (!contactId) return { verified: false, contact: null, error: "Missing contactId" };
+  if (!contactId && !email) return { verified: false, contact: null, error: "Missing contactId or email" };
   try {
     const res = await fetch(`${WORKER_URL}/verify`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ contactId, tier }),
+      body: JSON.stringify({ contactId, tier, email }),
     });
     const data = await res.json();
     return {
