@@ -848,11 +848,17 @@ async function fireTrackingEvent(payload, env) {
 }
 
 // ---------- Idempotency guard ----------
-// Best-effort dedup so a double-submit or a webhook retry doesn't run Solomon
-// twice (which would double-write the report, re-fire the tracking event, and
-// re-trigger the delivery email). Keyed on contact+tier with a short TTL, so a
-// deliberate re-run after the window still works. Backed by R2 (SOLOMON_LIBRARY);
-// if R2 is unavailable it FAILS OPEN — never blocks a legitimate generation.
+// Best-effort dedup so a webhook retry doesn't run Solomon twice (which would
+// double-write the report, re-fire the tracking event, and re-trigger the
+// delivery email). Keyed on contact+tier with a short TTL, so a deliberate
+// re-run after the window still works. Backed by R2 (SOLOMON_LIBRARY); if R2 is
+// unavailable it FAILS OPEN — never blocks a legitimate generation.
+//
+// Scope: used only on the /from-ghl-survey webhook path, where duplicates come
+// from GHL's SEQUENTIAL retries (it waits for a timeout before retrying), so the
+// read-then-write window is not a concern in practice. It is intentionally NOT
+// atomic across truly-simultaneous requests — that would require a Durable
+// Object, which is out of scope for the sequential-retry threat this guards.
 const IDEMPOTENCY_TTL_MS = 3 * 60 * 1000; // 3 minutes
 async function reserveIdempotency(key, env) {
   if (!env.SOLOMON_LIBRARY || !key) return { duplicate: false, path: null };
@@ -3181,14 +3187,11 @@ export default {
     const answers = normalizeAnswers(body.answers);
     if (!answers.length) return json({ success: false, error: "No answers provided" }, 400);
 
-    // Idempotency: dedup a double-submit / retry for the same contact (or email)
-    // + tier within a short window, so we don't double-generate + double-email.
-    const idemId = String(contact.contactId || contact.email || "").toLowerCase();
-    const idem = await reserveIdempotency(idemId ? `${idemId}_${tier}` : "", env);
-    if (idem.duplicate) {
-      return json({ success: true, deduped: true, tier });
-    }
-
+    // NOTE: no idempotency guard on this public React path. The app prevents
+    // double-submit at the UI (the survey unmounts the instant it's submitted),
+    // and a report-less "deduped" response here would crash ResultsScreen, which
+    // treats any success payload as a full report. Dedup lives on the
+    // /from-ghl-survey webhook path, where retries are the real risk.
     let agent;
     try {
       const raw = await callClaude(
@@ -3197,7 +3200,6 @@ export default {
       );
       agent = parseAgentJson(raw);
     } catch (err) {
-      await releaseIdempotency(idem.path, env); // failed — let a retry through
       console.error("Assessment error:", err.message);
       return json({ success: false, error: err.message }, 500);
     }
