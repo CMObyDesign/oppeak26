@@ -5,7 +5,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Business Health Analysis — CFO by Design</title>
-<meta name="description" content="Every other fractional CFO firm gives you one person. We put our whole bench on it. A pre-call, five people read your analysis, 50 minutes with Miguel, and a written 90-day plan. $297, one time.">
+<meta name="description" content="Every other fractional CFO firm gives you one person. We put our whole bench on it. A pre-call, seven people read your analysis, 50 minutes with Miguel, and a written 90-day plan. $297, one time.">
 <meta name="robots" content="noindex,nofollow">
 <meta property="og:title" content="Business Health Analysis — CFO by Design">
 <meta property="og:description" content="Every other firm gives you one person. We put our whole bench on it. $297, one time.">
@@ -399,7 +399,22 @@
     margin-top: 30px;
     max-width: 780px;
   }
-  @media (min-width: 720px) { .team-grid { grid-template-columns: 1fr 1fr; } }
+  @media (min-width: 720px) {
+    .team-grid { grid-template-columns: 1fr 1fr; }
+    .team-grid .team-card--lead {
+      grid-column: 1 / -1;
+      padding: 28px 32px;
+      background: linear-gradient(180deg, #ffffff 0%, var(--bg) 100%);
+      border-color: var(--line-strong);
+      grid-template-columns: 120px 1fr;
+      gap: 26px;
+    }
+    .team-grid .team-card--lead .team-photo {
+      width: 120px; height: 120px; font-size: 36px;
+    }
+    .team-grid .team-card--lead h3 { font-size: 24px; }
+    .team-grid .team-card--lead p { font-size: 15px; }
+  }
   .team-card {
     display: grid;
     grid-template-columns: 88px 1fr;
@@ -562,7 +577,7 @@
     <h2>One set of eyes is the problem, not the solution.</h2>
     <p>Every fractional CFO firm works the same way. They match you with a CFO. One person, one background, one lens. And they are usually very good.</p>
     <p>But businesses do not get stuck for one reason. The margin problem is a pricing problem. The pricing problem is a positioning problem. The cash problem is a collections problem that a finance person will fix and a marketing person would have prevented.</p>
-    <p>So when your analysis comes in, it does not go to one desk. Five sets of hands touch every one, each with a specific job.</p>
+    <p>So when your analysis comes in, it does not go to one desk. Seven sets of hands touch every one, each with a specific job.</p>
 
     <div class="bench">
       <div class="bench-row">
@@ -580,6 +595,14 @@
       <div class="bench-row">
         <div class="disc">Client Success &amp; Documentation</div>
         <div class="job">Reviews the write-up for clarity, catches anything a business owner would trip over, and is your point of contact through the process.</div>
+      </div>
+      <div class="bench-row">
+        <div class="disc">Operations</div>
+        <div class="job">Owns the schedule and the handoffs between team members. Makes sure your pre-call and 50-minute session actually happen when they should.</div>
+      </div>
+      <div class="bench-row">
+        <div class="disc">Account Management</div>
+        <div class="job">Owns your account end to end. Keeps the process moving between people and follows through on what gets committed to on the call.</div>
       </div>
       <div class="bench-row">
         <div class="disc">Miguel &mdash; Strategy, Funding &amp; the Founder's Read</div>
@@ -630,8 +653,8 @@
       <div class="stack-card">
         <div class="n">3</div>
         <div>
-          <h3>Five people touching every analysis</h3>
-          <p>Accounting and tax, marketing and growth, business analysis for comprehensiveness, client-side documentation review, and Miguel &mdash; who reads the strategy and funding angles himself. Not a committee &mdash; one integrated read.</p>
+          <h3>Seven people touching every analysis</h3>
+          <p>Accounting and tax, marketing and growth, business analysis for comprehensiveness, documentation review, operations, account management, and Miguel &mdash; who reads the strategy and funding angles himself. Not a committee &mdash; one integrated read.</p>
         </div>
       </div>
       <div class="stack-card">
@@ -683,7 +706,7 @@
   <div class="wrap">
     <div class="eyebrow">Where the software fits</div>
     <h2>A machine scores it. People decide what it means.</h2>
-    <p class="muted">Solomon, our assessment engine, does in minutes what used to take an analyst a week. That is the only reason five people can look at your business for $297 instead of thousands.</p>
+    <p class="muted">Solomon, our assessment engine, does in minutes what used to take an analyst a week. That is the only reason seven people can look at your business for $297 instead of thousands.</p>
 
     <div class="box">
       <h3>But the software does not talk to you, and it does not decide anything. We do.</h3>
@@ -754,7 +777,7 @@
         <div class="num">3</div>
         <div>
           <h3>Our team reads it</h3>
-          <p>Accounting and tax, marketing and growth, business analysis, client-side documentation review, and Miguel &mdash; strategy and funding on him.</p>
+          <p>Accounting and tax, marketing and growth, business analysis, documentation review, operations, account management, and Miguel &mdash; strategy and funding on him.</p>
         </div>
       </div>
       <div class="step">
@@ -777,13 +800,11 @@
 
 <!-- ============ 10. TEAM ============ -->
 <!--
-  TODO(before ship): swap the monogram avatar circles for real headshots,
-  and expand Stephanie's, Liz Poos's, Colton's and Ema's short lines to
-  fuller bios when Miguel signs off on the copy. Miguel's card uses his
-  own verbatim quote from cfobydesign.com/about (retrieved 2026-09-21).
-  Grace (Operations) and Carlos (Account Manager) are on the wider team
-  but are not part of the per-analysis review workflow; if that changes,
-  add them here with their real role in the process.
+  TODO(before ship): swap the monogram avatar circles for real headshots
+  and expand the one-line role descriptions to fuller bios once Miguel
+  signs off. Miguel's card uses his own verbatim quote from
+  cfobydesign.com/about (retrieved 2026-09-21). Grace's and Carlos's
+  one-liners were drafted from role title alone — confirm with them.
 -->
 <section class="text team">
   <div class="wrap-wide">
@@ -791,7 +812,7 @@
     <h2>The team.</h2>
 
     <div class="team-grid">
-      <div class="team-card">
+      <div class="team-card team-card--lead">
         <div class="team-photo" aria-hidden="true">MH</div>
         <div>
           <h3>Miguel Hernandez</h3>
@@ -833,6 +854,24 @@
           <h3>Ema</h3>
           <div class="role">Client Success &amp; Documentation</div>
           <p>Reviews the write-up for clarity, catches anything a business owner would trip over, and is your point of contact through the process.</p>
+        </div>
+      </div>
+
+      <div class="team-card">
+        <div class="team-photo" aria-hidden="true">G</div>
+        <div>
+          <h3>Grace</h3>
+          <div class="role">Operations</div>
+          <p>Runs the operations behind every analysis: the schedule, the handoffs between team members, and getting your pre-call and 50-minute session on the calendar and confirmed.</p>
+        </div>
+      </div>
+
+      <div class="team-card">
+        <div class="team-photo" aria-hidden="true">CA</div>
+        <div>
+          <h3>Carlos</h3>
+          <div class="role">Account Management</div>
+          <p>Owns your account end to end: keeps the process moving between people, follows through on what gets committed to during the call, and makes sure nothing falls between the handoffs.</p>
         </div>
       </div>
     </div>
