@@ -446,17 +446,17 @@ ${couponScript}
     const deepDiveSalesHref = (env && env.DEEP_DIVE_SALES_URL) || upgrade297Href;
     cta = `
       <div class="cta-panel">
-        <span class="upgrade-chip">↑ UPGRADE · DEEP DIVE ENGAGEMENT</span>
+        <span class="upgrade-chip">↑ UPGRADE · BUSINESS HEALTH ANALYSIS</span>
         <p class="eyebrow gold">FROM DIAGNOSIS TO EXECUTION</p>
         <h2>You have the diagnosis.<br><em>Now let's build the intervention.</em></h2>
-        <p class="sub">Two ways forward — pick whichever fits how you work. The Deep Dive gives you a written 90-day Business Playbook + Marketing Audit and a 50-minute strategy session with a real CFO. Book the strategy call first if you'd rather talk it through before committing.</p>
+        <p class="sub">Two ways forward. Pick whichever fits how you work. The Business Health Analysis gives you a full-team read of your numbers, a 50-minute session with a real CFO, and a written 90-day plan you can act on Monday. Book the strategy call first if you'd rather talk it through before committing.</p>
 
         <div style="display:flex; flex-wrap:wrap; gap:14px; margin:24px 0 12px; justify-content:center;">
-          <a class="btn btn-primary" target="_top" href="${deepDiveSalesHref}" style="flex:1 1 220px;">Keep the momentum — Deep Dive <span class="arrow">→</span></a>
+          <a class="btn btn-primary" target="_top" href="${deepDiveSalesHref}" style="flex:1 1 220px;">Keep the momentum <span class="arrow">→</span></a>
           <a class="btn btn-secondary" target="_top" href="${bookingLink47}" style="flex:1 1 220px;">Book my 30-min strategy call</a>
         </div>
 
-        <p class="micro" style="margin-top:8px;">◆ Deep Dive: <span style="text-decoration:line-through;opacity:0.6;">$297</span> $150 · Action-Taker Discount, limited-time</p>
+        <p class="micro" style="margin-top:8px;">◆ $297, one time · full-team read + 50-min session + written 90-day plan</p>
         <p class="micro" style="margin-top:16px;color:#6b7280;font-style:italic;">Not sure which? Book the call — it's included in what you already paid.</p>
       </div>`;
   } else if (tier === "paid_297") {
