@@ -3387,31 +3387,19 @@ export default {
       if (path === "/asksolomon") {
         return new Response(CONSOLE_PAGE, { status: 200, headers: htmlHeaders() });
       }
-      // GET /audit?url=<domain>&pw=<CONSOLE_PASSWORD> — internal marketing audit test.
-      // Password lives in the query string here (not a header) so the endpoint is usable
-      // from a plain browser tab. On success returns a styled HTML page in the same
-      // visual language as /report; on failure returns a small HTML error card, not JSON.
+      // GET /audit?url=<domain> — public marketing audit endpoint.
+      // URL-in, audit-out. No auth: worst abuse is Anthropic token cost. If that
+      // becomes a problem, add a per-IP rate limit rather than restoring the
+      // password gate (which was awkward from a browser tab).
       if (path === "/audit") {
         const target = url.searchParams.get("url");
-        const pw = url.searchParams.get("pw") || request.headers.get("x-console-password");
-        const okPw = env.CONSOLE_PASSWORD && pw === env.CONSOLE_PASSWORD;
-        if (!okPw) {
-          return new Response(
-            `<!DOCTYPE html><meta charset=utf-8><title>Audit</title>
-             <body style="font-family:Georgia,serif;max-width:520px;margin:80px auto;padding:20px;color:#1a1a1a;">
-             <h1 style="font-size:20px;">Marketing audit &mdash; sign in</h1>
-             <p>Add <code>?pw=&lt;CONSOLE_PASSWORD&gt;&amp;url=&lt;domain&gt;</code> to the URL.</p>
-             </body>`,
-            { status: 401, headers: htmlHeaders() }
-          );
-        }
         if (!target) {
           return new Response(
             `<!DOCTYPE html><meta charset=utf-8><title>Audit</title>
              <body style="font-family:Georgia,serif;max-width:520px;margin:80px auto;padding:20px;">
              <h1 style="font-size:20px;">Marketing audit</h1>
              <p>Missing <code>url</code> parameter. Try
-             <code>/audit?pw=…&amp;url=example.com</code>.</p></body>`,
+             <code>/audit?url=example.com</code>.</p></body>`,
             { status: 400, headers: htmlHeaders() }
           );
         }
@@ -3526,12 +3514,9 @@ export default {
       return handleConsoleRun(request, env, ctx, url);
     }
 
-    // POST /audit — JSON marketing audit. Same auth as /asksolomon (x-console-password).
+    // POST /audit — JSON marketing audit. No auth (matches GET /audit).
     // Body: { url: "example.com" }. Response: { success, agent, signals }.
     if (path === "/audit") {
-      if (!checkConsolePassword(request, env)) {
-        return json({ success: false, error: "Unauthorized" }, 401);
-      }
       let body;
       try { body = await request.json(); }
       catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
