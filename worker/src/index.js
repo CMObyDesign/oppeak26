@@ -158,6 +158,87 @@ HANDLING INCOMPLETE OR NON-RESPONSIVE ANSWERS — call this out honestly, don't 
 - The strategistBrief field must always mention which fields were incomplete so the
   consultant knows what to probe on the call.`;
 
+// Marketing / digital-presence audit rubric. Different from the CFO ASSESSMENT_RUBRIC:
+// this one runs from a URL alone (plus whatever public signals the worker can scrape
+// from the site itself) and reports on positioning, trust, conversion path, and
+// technical/SEO fundamentals visible in the page — not financial diagnosis.
+const MARKETING_AUDIT_RUBRIC = `You are a senior marketing strategist at CFO By Design running a rapid digital audit.
+Input is a URL and a compact JSON block of PUBLIC SIGNALS the worker scraped from the
+site's homepage, robots.txt, and sitemap probe. That is ALL you know about the business.
+Do not invent numbers, revenue, headcount, or facts not in the signals block.
+
+WHAT A GOOD AUDIT DOES (in the space of a first page load a buyer would see):
+
+1. POSITIONING & MESSAGING CLARITY. In the first screen — title tag, H1, meta description,
+   OG title/description — can a new visitor say in one sentence what this business does, who
+   it serves, and why they should care? Vague headlines ("Excellence in service"), missing H1,
+   or a title tag that just says the business name are gaps. Reference the exact strings.
+
+2. TRUST & CREDIBILITY. Reviews or star ratings on-page or in structured data, licenses /
+   affiliations, guarantees, "since <year>" tenure, real testimonials with names, address
+   and phone visible. LocalBusiness / Review / Organization JSON-LD schema present or not.
+   Missing trust cues on a service business is a gap.
+
+3. CONVERSION PATH. Are there specific CTAs a visitor can act on — call, book, quote form,
+   chat — and are they above the fold? Generic "Contact us" without a phone or booking link
+   is weak. Buried CTAs, forms with no incentive, no way to reach a human — call these out.
+
+4. TECHNICAL / SEO FUNDAMENTALS. Title tag length, meta description present and useful,
+   viewport meta, canonical, structured data types, robots.txt reachable, sitemap.xml
+   reachable, HTTPS, redirect chain sanity, image count vs. absence of alt attributes if we
+   surfaced any. Do NOT lecture on core-web-vitals — we cannot measure them from a scrape.
+
+5. LOCAL / DISCOVERY SIGNALS. Google Business Profile link, Yelp link, Google Maps link,
+   review widgets, address blocks with schema markup. For a local service business, absence
+   of these is a real gap.
+
+ANTI-GENERIC MANDATE (single most important quality rule):
+
+- Every gap and opportunity MUST quote or paraphrase a specific string, tag, count, or URL
+  from the SIGNALS block. If you cannot point at the exact signal driving a finding, don't
+  write it. Missing signals are themselves findings — say what is missing and why it matters.
+- BANNED phrases (never write these — generic filler): "improve your online presence",
+  "leverage SEO", "engage with your audience", "boost brand awareness", "modernize your
+  website", "optimize for conversions", "take your business to the next level", "unlock
+  growth", "drive results", "best practices". If a sentence would still read true after you
+  swap out the domain, rewrite it with specifics from the signals.
+- The opener and headline must reference at least one concrete specific from the signals
+  (the actual title tag string, the H1 text, a schema type present/absent, the review count
+  you found in JSON-LD, the exact CTA label).
+
+PATH SELECTION — choose exactly one:
+- "invisible" : no discoverability signals at all — no title tag or a placeholder title, no
+                meta description, no structured data, no GBP/Yelp/Maps links, no robots or
+                sitemap. Foundational fixes before anything else.
+- "unclear"   : discoverability exists but messaging fails — vague headlines, missing H1,
+                no clear "who is this for / what do you get." The site does not sell.
+- "leaking"   : messaging is passable and the site is technically fine, but the conversion
+                path leaks — buried CTAs, missing trust cues, no schema, no visible reviews.
+- "polished"  : positioning is clear, trust cues present, schema in place, CTAs above the
+                fold. Findings are refinement, not rescue.
+
+OUTPUT SHAPE — return ONLY valid JSON, no markdown fences, no prose before or after:
+{
+  "path": "invisible | unclear | leaking | polished",
+  "badge": "SHORT UPPERCASE LABEL",
+  "headline": "One sentence that names a specific signal from the scrape.",
+  "opener": "2–3 sentences. Reference at least one exact string from the signals block.",
+  "context": "Optional. One sentence when signals are thin (site blocked scraping, JS-only, tiny HTML).",
+  "gaps": [
+    { "title": "Short title, references a signal", "priority": "CRITICAL | HIGH | MEDIUM", "impact": "1–2 sentences on what this costs the business." }
+  ],
+  "opportunities": [
+    { "title": "Short title", "desc": "1–2 sentences on the move.", "impact": "SHORT UPPERCASE OUTCOME LABEL" }
+  ],
+  "signalsAudited": ["short list of what was actually pulled — title tag, meta description, JSON-LD types, robots, sitemap, etc."],
+  "nextStepHeadline": "One sentence.",
+  "nextStepBody": "1–2 sentences on what to do first."
+}
+
+Emit 3 gaps and 2 opportunities. If signals are so thin (fetch failed, HTML is a JS shell
+with no server-rendered content) that fewer honest findings are possible, emit fewer and
+say so in \`context\`. Do NOT fill space with generic advice.`;
+
 const TIER_GUIDE = {
   free: "FREE tier: concise and punchy. Surface the gaps and create urgency to upgrade, without solving everything. 3 gaps, 2 opportunities. DO NOT use digital presence / Google Business Profile / reviews / SEO as a gap or opportunity in the FREE report — that finding is reserved for the paid diagnostic. Focus the free tier on financial visibility, cash flow, decision-making, revenue concentration, and pipeline math.",
   paid_47: "$47 FULL DIAGNOSTIC: specific and prescriptive. Name exact gaps and what they cost. 3 gaps, 2 opportunities.",
@@ -243,6 +324,301 @@ function escapeHtml(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => (
     { "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[c]
   ));
+}
+
+// ---------------------------------------------------------------------------
+// Marketing / digital-presence audit — URL-only.
+// ---------------------------------------------------------------------------
+
+function normalizeAuditUrl(input) {
+  if (!input) return null;
+  let s = String(input).trim();
+  if (!s) return null;
+  if (!/^https?:\/\//i.test(s)) s = "https://" + s;
+  try {
+    const u = new URL(s);
+    return u.toString();
+  } catch { return null; }
+}
+
+// Small regex helpers — we DON'T want to pull in a DOM parser in a Worker.
+// These are best-effort extractors from raw HTML. Missing / weird markup returns null.
+function extractTag(html, name) {
+  const re = new RegExp(`<${name}[^>]*>([\\s\\S]*?)<\\/${name}>`, "i");
+  const m = html.match(re);
+  return m ? m[1].replace(/<[^>]+>/g, "").trim().slice(0, 300) : null;
+}
+function extractMeta(html, name) {
+  // handles <meta name=... content=...> and <meta property=... content=...>
+  const re = new RegExp(
+    `<meta[^>]+(?:name|property)=[\"']${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\"'][^>]*content=[\"']([^\"']*)[\"']`,
+    "i"
+  );
+  const m = html.match(re);
+  if (m) return m[1].trim().slice(0, 500);
+  // try reverse order (content first, then name/property)
+  const re2 = new RegExp(
+    `<meta[^>]+content=[\"']([^\"']*)[\"'][^>]*(?:name|property)=[\"']${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\"']`,
+    "i"
+  );
+  const m2 = html.match(re2);
+  return m2 ? m2[1].trim().slice(0, 500) : null;
+}
+function extractAllTags(html, name, limit = 6) {
+  const out = [];
+  const re = new RegExp(`<${name}[^>]*>([\\s\\S]*?)<\\/${name}>`, "gi");
+  let m;
+  while ((m = re.exec(html)) && out.length < limit) {
+    const text = m[1].replace(/<[^>]+>/g, "").trim();
+    if (text) out.push(text.slice(0, 200));
+  }
+  return out;
+}
+function extractJsonLdTypes(html) {
+  const out = new Set();
+  const re = /<script[^>]+type=[\"']application\/ld\+json[\"'][^>]*>([\s\S]*?)<\/script>/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    try {
+      const parsed = JSON.parse(m[1]);
+      const walk = (node) => {
+        if (!node) return;
+        if (Array.isArray(node)) return node.forEach(walk);
+        if (typeof node === "object") {
+          if (node["@type"]) {
+            const t = node["@type"];
+            if (Array.isArray(t)) t.forEach((x) => out.add(String(x)));
+            else out.add(String(t));
+          }
+          if (node["@graph"]) walk(node["@graph"]);
+        }
+      };
+      walk(parsed);
+    } catch { /* malformed JSON-LD — skip */ }
+  }
+  return [...out];
+}
+function detectExternalLinks(html) {
+  const links = new Set();
+  const re = /href=[\"']([^\"']+)[\"']/gi;
+  let m;
+  while ((m = re.exec(html))) {
+    const href = m[1];
+    if (/^(mailto:|tel:)/i.test(href)) { links.add(href.split("?")[0].slice(0, 80)); continue; }
+    if (/^https?:\/\//i.test(href)) {
+      const host = (href.match(/^https?:\/\/([^\/]+)/i) || [])[1] || "";
+      if (/(facebook|instagram|linkedin|twitter|x\.com|tiktok|youtube|yelp|google\.com\/maps|goo\.gl\/maps|maps\.app\.goo\.gl|g\.page|business\.google|calendly|acuityscheduling|leadconnectorhq|cfobydesign)/i.test(host)) {
+        links.add(host.replace(/^www\./, ""));
+      }
+    }
+  }
+  return [...links].slice(0, 12);
+}
+
+async function fetchSiteSignals(rawUrl) {
+  const url = normalizeAuditUrl(rawUrl);
+  if (!url) return { ok: false, error: "invalid_url" };
+  const origin = new URL(url).origin;
+  const signals = { url, origin, fetchedAt: new Date().toISOString() };
+  // 1. homepage
+  try {
+    const res = await fetch(url, {
+      redirect: "follow",
+      headers: { "User-Agent": "Mozilla/5.0 (compatible; SolomonAudit/1.0; +https://cfobydesign.com)" },
+      cf: { cacheTtl: 60 },
+    });
+    signals.status = res.status;
+    signals.finalUrl = res.url;
+    signals.redirected = res.redirected;
+    const html = (await res.text()).slice(0, 350_000); // cap
+    signals.htmlBytes = html.length;
+    signals.title = extractTag(html, "title");
+    signals.metaDescription = extractMeta(html, "description");
+    signals.metaViewport = extractMeta(html, "viewport");
+    signals.metaRobots = extractMeta(html, "robots");
+    signals.canonical = (html.match(/<link[^>]+rel=[\"']canonical[\"'][^>]+href=[\"']([^\"']+)[\"']/i) || [])[1] || null;
+    signals.ogTitle = extractMeta(html, "og:title");
+    signals.ogDescription = extractMeta(html, "og:description");
+    signals.ogImage = extractMeta(html, "og:image");
+    signals.h1 = extractAllTags(html, "h1", 3);
+    signals.h2Sample = extractAllTags(html, "h2", 5);
+    signals.jsonLdTypes = extractJsonLdTypes(html);
+    signals.externalLinks = detectExternalLinks(html);
+    signals.imgCount = (html.match(/<img[\s>]/gi) || []).length;
+    signals.imgMissingAlt = (html.match(/<img(?![^>]*\balt=)[^>]*>/gi) || []).length;
+    signals.formCount = (html.match(/<form[\s>]/gi) || []).length;
+    signals.phoneVisible = /\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/.test(html);
+    signals.emailVisible = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(html.replace(/<script[\s\S]*?<\/script>/gi, ""));
+    signals.scriptCount = (html.match(/<script[\s>]/gi) || []).length;
+    signals.htmlIsJsShell = signals.htmlBytes > 0 && !signals.h1.length && signals.scriptCount > 8 && html.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<[^>]+>/g, "").trim().length < 200;
+  } catch (e) {
+    signals.fetchError = String(e && e.message || e).slice(0, 200);
+  }
+  // 2. robots.txt
+  try {
+    const r = await fetch(origin + "/robots.txt", { redirect: "follow" });
+    signals.robotsStatus = r.status;
+    if (r.ok) {
+      const body = (await r.text()).slice(0, 4000);
+      signals.robotsHasSitemap = /^\s*sitemap:/im.test(body);
+      signals.robotsExcerpt = body.split("\n").slice(0, 10).join("\n").slice(0, 500);
+    }
+  } catch { signals.robotsStatus = 0; }
+  // 3. sitemap.xml probe
+  try {
+    const s = await fetch(origin + "/sitemap.xml", { redirect: "follow", method: "GET" });
+    signals.sitemapStatus = s.status;
+    if (s.ok) {
+      const body = (await s.text()).slice(0, 4000);
+      signals.sitemapUrlCount = (body.match(/<loc>/gi) || []).length;
+    }
+  } catch { signals.sitemapStatus = 0; }
+  signals.ok = true;
+  return signals;
+}
+
+async function runMarketingAudit(rawUrl, env) {
+  const signals = await fetchSiteSignals(rawUrl);
+  if (signals.error === "invalid_url") {
+    throw new Error("Invalid URL. Include a hostname, e.g. supremewindowstyler.com");
+  }
+  const prompt = `AUDIT TARGET: ${signals.url}
+
+PUBLIC SIGNALS (scraped just now — this is the entire input):
+${JSON.stringify(signals, null, 2)}
+
+TASK: Write the marketing audit using the methodology in your system instructions.
+Every gap and opportunity must cite an exact signal above.
+Return ONLY the JSON object described in the system instructions.`;
+  const raw = await callClaudeWithSystem(prompt, MARKETING_AUDIT_RUBRIC, env);
+  // Strip accidental code fences.
+  const cleaned = raw.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
+  let agent;
+  try { agent = JSON.parse(cleaned); }
+  catch (e) {
+    throw new Error(`Audit model returned non-JSON: ${cleaned.slice(0, 300)}`);
+  }
+  return { agent, signals };
+}
+
+// Generic system-prompt Claude call. callClaude() is pinned to ASSESSMENT_RUBRIC — this
+// one takes any rubric so /audit can reuse the same client without touching the CFO path.
+async function callClaudeWithSystem(prompt, systemText, env) {
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": env.ANTHROPIC_API_KEY,
+      "anthropic-version": CONFIG.ANTHROPIC_VERSION,
+    },
+    body: JSON.stringify({
+      model: CONFIG.CLAUDE_MODEL,
+      max_tokens: 2500,
+      system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`Claude API ${response.status}: ${detail.slice(0, 300)}`);
+  }
+  const data = await response.json();
+  return data.content[0].text;
+}
+
+function buildAuditPage(agent, signals) {
+  const e = escapeHtml;
+  const priColor = (p) =>
+    p === "CRITICAL" ? "#b91c1c" :
+    p === "HIGH" ? "#d97706" :
+    "#92400e";
+  const gaps = (agent.gaps || []).map((g) => `
+    <div class="finding" style="border-left:4px solid ${priColor(g.priority)};">
+      <div class="finding-title">${e(g.title)}<span class="pri" style="color:${priColor(g.priority)};">${e(g.priority)}</span></div>
+      <p>${e(g.impact)}</p>
+    </div>`).join("");
+  const opps = (agent.opportunities || []).map((o) => `
+    <div class="finding" style="border-left:4px solid #c4a647;">
+      <div class="finding-title">${e(o.title)}</div>
+      <p>${e(o.desc)}</p>
+      <div class="opp-impact">${e(o.impact)}</div>
+    </div>`).join("");
+  const signalsList = (agent.signalsAudited || []).map((s) => `<li>${e(s)}</li>`).join("");
+  const rawSignals = JSON.stringify(signals, null, 2);
+  const host = (() => { try { return new URL(signals.url).host; } catch { return signals.url; } })();
+  const context = agent.context
+    ? `<p class="context">${e(agent.context)}</p>` : "";
+  return `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Marketing audit — ${e(host)}</title>
+<style>
+  :root { color-scheme: light; }
+  body { margin:0; font-family:Georgia,serif; background:#faf7f0; color:#1a1a1a; }
+  .wrap { max-width:820px; margin:0 auto; padding:32px 20px 96px; }
+  .eyebrow { font-family:Arial,sans-serif; font-size:11px; letter-spacing:2px; color:#92400e; text-transform:uppercase; font-weight:700; margin-bottom:8px; }
+  .badge { display:inline-block; padding:6px 14px; background:#fef3c7; color:#92400e; font-weight:700; font-size:11px; letter-spacing:2px; border-radius:999px; font-family:Arial,sans-serif; }
+  h1 { font-size:26px; line-height:1.3; margin:20px 0 16px; }
+  .opener { font-size:17px; color:#374151; line-height:1.65; margin:0; }
+  .context { font-style:italic; color:#6b7280; font-size:15px; line-height:1.6; margin:12px 0 0; }
+  .card { background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:24px; margin-top:24px; }
+  h2 { font-family:Arial,sans-serif; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:#92400e; border-bottom:1px solid #e5e7eb; padding-bottom:8px; margin:0 0 16px; }
+  .finding { padding:14px 16px; background:#fdf8f0; border-radius:4px; margin-bottom:10px; }
+  .finding-title { font-weight:700; font-size:16px; }
+  .finding .pri { font-family:Arial,sans-serif; font-size:10px; font-weight:700; letter-spacing:1.5px; margin-left:10px; }
+  .finding p { color:#374151; font-size:14px; margin:6px 0 0; line-height:1.55; }
+  .opp-impact { font-family:Arial,sans-serif; color:#92400e; font-weight:700; font-size:11px; margin-top:8px; letter-spacing:1.5px; text-transform:uppercase; }
+  .next h3 { font-size:20px; margin:0 0 8px; }
+  .next p { color:#374151; font-size:16px; line-height:1.6; font-style:italic; margin:0; }
+  .signals { font-family:Arial,sans-serif; font-size:12px; color:#4b5563; }
+  .signals ul { padding-left:20px; margin:0 0 12px; }
+  details { margin-top:12px; }
+  summary { cursor:pointer; font-family:Arial,sans-serif; font-size:11px; letter-spacing:1.5px; color:#6b7280; text-transform:uppercase; }
+  pre { background:#111827; color:#e5e7eb; padding:14px; overflow:auto; border-radius:6px; font-size:11px; line-height:1.4; }
+  .site-link { color:#92400e; word-break:break-all; }
+  .footer { margin-top:32px; font-family:Arial,sans-serif; font-size:11px; color:#9ca3af; letter-spacing:1px; text-transform:uppercase; }
+</style>
+</head><body>
+<div class="wrap">
+  <div class="eyebrow">Marketing audit &middot; ${e(new Date().toISOString().slice(0,10))}</div>
+  <div class="badge">${e(agent.badge || "AUDIT")}</div>
+  <h1>${e(agent.headline || "")}</h1>
+  <p class="opener">${e(agent.opener || "")}</p>
+  ${context}
+  <p style="margin-top:14px; font-family:Arial,sans-serif; font-size:12px; color:#6b7280;">
+    Target: <a class="site-link" href="${e(signals.url)}" target="_blank" rel="noopener">${e(signals.url)}</a>
+    &middot; HTTP ${e(signals.status || "n/a")}${signals.redirected ? " (redirected)" : ""}
+  </p>
+
+  <div class="card">
+    <h2>Gaps</h2>
+    ${gaps || '<p style="color:#6b7280;font-style:italic;">No gaps returned.</p>'}
+  </div>
+
+  <div class="card">
+    <h2>Opportunities</h2>
+    ${opps || '<p style="color:#6b7280;font-style:italic;">No opportunities returned.</p>'}
+  </div>
+
+  <div class="card next">
+    <h2>Next Step</h2>
+    <h3>${e(agent.nextStepHeadline || "")}</h3>
+    <p>${e(agent.nextStepBody || "")}</p>
+  </div>
+
+  <div class="card signals">
+    <h2>What Solomon actually looked at</h2>
+    <ul>${signalsList}</ul>
+    <details>
+      <summary>Raw signals JSON</summary>
+      <pre>${e(rawSignals)}</pre>
+    </details>
+  </div>
+
+  <div class="footer">CFO by Design &middot; Solomon marketing audit &middot; internal test surface</div>
+</div>
+</body></html>`;
 }
 
 // Inline-styled HTML report body. Inline styles are essential for email clients
@@ -3011,6 +3387,48 @@ export default {
       if (path === "/asksolomon") {
         return new Response(CONSOLE_PAGE, { status: 200, headers: htmlHeaders() });
       }
+      // GET /audit?url=<domain>&pw=<CONSOLE_PASSWORD> — internal marketing audit test.
+      // Password lives in the query string here (not a header) so the endpoint is usable
+      // from a plain browser tab. On success returns a styled HTML page in the same
+      // visual language as /report; on failure returns a small HTML error card, not JSON.
+      if (path === "/audit") {
+        const target = url.searchParams.get("url");
+        const pw = url.searchParams.get("pw") || request.headers.get("x-console-password");
+        const okPw = env.CONSOLE_PASSWORD && pw === env.CONSOLE_PASSWORD;
+        if (!okPw) {
+          return new Response(
+            `<!DOCTYPE html><meta charset=utf-8><title>Audit</title>
+             <body style="font-family:Georgia,serif;max-width:520px;margin:80px auto;padding:20px;color:#1a1a1a;">
+             <h1 style="font-size:20px;">Marketing audit &mdash; sign in</h1>
+             <p>Add <code>?pw=&lt;CONSOLE_PASSWORD&gt;&amp;url=&lt;domain&gt;</code> to the URL.</p>
+             </body>`,
+            { status: 401, headers: htmlHeaders() }
+          );
+        }
+        if (!target) {
+          return new Response(
+            `<!DOCTYPE html><meta charset=utf-8><title>Audit</title>
+             <body style="font-family:Georgia,serif;max-width:520px;margin:80px auto;padding:20px;">
+             <h1 style="font-size:20px;">Marketing audit</h1>
+             <p>Missing <code>url</code> parameter. Try
+             <code>/audit?pw=…&amp;url=example.com</code>.</p></body>`,
+            { status: 400, headers: htmlHeaders() }
+          );
+        }
+        try {
+          const { agent, signals } = await runMarketingAudit(target, env);
+          return new Response(buildAuditPage(agent, signals), { status: 200, headers: htmlHeaders() });
+        } catch (err) {
+          return new Response(
+            `<!DOCTYPE html><meta charset=utf-8><title>Audit failed</title>
+             <body style="font-family:Georgia,serif;max-width:640px;margin:80px auto;padding:20px;color:#1a1a1a;">
+             <h1 style="font-size:20px;color:#b91c1c;">Audit failed</h1>
+             <pre style="background:#fdf8f0;padding:14px;border-radius:6px;white-space:pre-wrap;font-size:12px;">${escapeHtml(err && err.message || String(err))}</pre>
+             </body>`,
+            { status: 500, headers: htmlHeaders() }
+          );
+        }
+      }
       if (path === "/asksolomon/rubric") {
         if (!checkConsolePassword(request, env)) {
           return json({ success: false, error: "Unauthorized" }, 401);
@@ -3106,6 +3524,25 @@ export default {
     // (so the production email workflow fires and the tester receives a real email).
     if (path === "/asksolomon/run") {
       return handleConsoleRun(request, env, ctx, url);
+    }
+
+    // POST /audit — JSON marketing audit. Same auth as /asksolomon (x-console-password).
+    // Body: { url: "example.com" }. Response: { success, agent, signals }.
+    if (path === "/audit") {
+      if (!checkConsolePassword(request, env)) {
+        return json({ success: false, error: "Unauthorized" }, 401);
+      }
+      let body;
+      try { body = await request.json(); }
+      catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+      const target = body.url;
+      if (!target) return json({ success: false, error: "url required" }, 400);
+      try {
+        const { agent, signals } = await runMarketingAudit(target, env);
+        return json({ success: true, agent, signals });
+      } catch (err) {
+        return json({ success: false, error: err && err.message || String(err) }, 500);
+      }
     }
 
     // POST /asksolomon/send-result — send a PREVIOUSLY GENERATED output to an email.
