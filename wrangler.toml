@@ -11,6 +11,13 @@ BOOKING_LINK_47 = "https://my.cfobydesign.com/widget/booking/D3yNZNFtqIYsChkOgQc
 # CTA). Separate from BOOKING_LINK_47 because the audit funnel warms leads via
 # a different consult calendar. Falls back to BOOKING_LINK_47 if unset.
 AUDIT_BOOKING_URL = "https://my.cfobydesign.com/widget/bookings/cfobd-consult"
+
+# Social preview (Open Graph / Twitter) image for the marketing audit URL.
+# When someone pastes /marketing?url=<domain> into iMessage, Slack, Facebook,
+# etc., the platform fetches this image and renders it in the link preview.
+# Ideal spec: 1200×630 PNG (retina 2400×1260 ok), hosted on a public CDN.
+# CURRENT VALUE IS A PLACEHOLDER — swap to the real HL media URL once uploaded.
+AUDIT_OG_IMAGE_URL = "https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png"
 BOOKING_LINK_297 = "https://my.cfobydesign.com/widget/booking/VGdN6KoFBtbdnSvHKHTh"
 PAYMENT_LINK_47 = "https://my.cfobydesign.com/payment-link/6a0db7aa1a6dcdeebb53b641"
 PAYMENT_LINK_297 = "https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0"

@@ -853,14 +853,38 @@ const LOGO_SRC = "https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6
 // Immediate HTML sent to the client before the audit runs. Includes topbar, hero,
 // and an animated loading card at #audit-mount that gets swapped in-place when
 // the audit finishes.
-function buildAuditShellStart(host, targetUrl, mode) {
+function buildAuditShellStart(host, targetUrl, mode, env = {}) {
   const e = escapeHtml;
   const isInternal = mode === "internal";
+  const title = isInternal
+    ? `Marketing audit — ${host} · CFO by Design`
+    : `View Your Digital Presence Diagnostic — ${host}`;
+  const description = isInternal
+    ? `Internal marketing audit for ${host}.`
+    : `View your digital presence diagnostic in about 60 seconds — a marketing audit powered by CFO by Design.`;
+  // Open Graph / Twitter card image. Placeholder-swappable via env var so the
+  // real hosted PNG can drop in without a code change. Internal audits skip
+  // the social image (never text-shared to leads).
+  const ogImage = !isInternal ? ((env && env.AUDIT_OG_IMAGE_URL) || LOGO_SRC) : "";
+  const ogTags = isInternal ? "" : `
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="CFO by Design">
+<meta property="og:title" content="${e(title)}">
+<meta property="og:description" content="${e(description)}">
+<meta property="og:image" content="${e(ogImage)}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Marketing Audit — powered by CFO by Design">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${e(title)}">
+<meta name="twitter:description" content="${e(description)}">
+<meta name="twitter:image" content="${e(ogImage)}">`;
   return `<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${isInternal ? "Marketing audit" : "Your marketing audit"} — ${e(host)} · CFO by Design</title>
+<title>${e(title)}</title>
+<meta name="description" content="${e(description)}">${ogTags}
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
 <style>${AUDIT_PAGE_CSS}</style>
 </head>
@@ -928,7 +952,7 @@ function buildAuditPage(agent, signals, mode = "public", env = {}) {
   const host = (() => { try { return new URL(signals.url).host; } catch { return signals.url; } })();
   const cardBody = buildAuditCardBody(agent, signals, mode, env);
   // Replace the loading card at #audit-mount with the real card body.
-  const shell = buildAuditShellStart(host, signals.url, mode);
+  const shell = buildAuditShellStart(host, signals.url, mode, env);
   const withCard = shell.replace(
     /<div id="audit-mount">[\s\S]*?<\/div>\s*<\/div>\s*$/m,
     cardBody
@@ -3922,7 +3946,7 @@ export default {
         const writer = writable.getWriter();
         // Send shell + loading mount synchronously so the first bytes hit the
         // wire before we start the audit.
-        writer.write(encoder.encode(buildAuditShellStart(host, normalizedTarget, mode)));
+        writer.write(encoder.encode(buildAuditShellStart(host, normalizedTarget, mode, env)));
         // Run the audit asynchronously; when it returns, swap the mount and close.
         (async () => {
           try {
