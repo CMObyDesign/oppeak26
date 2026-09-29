@@ -273,96 +273,129 @@ FINDING VOLUME:
 // version is what the business owner sees at a branded URL. Purpose: name the pain,
 // create the "I need help" moment — not solve it. If we solved it here, they'd have
 // no reason to book a call.
-const MARKETING_AUDIT_PUBLIC_RUBRIC = `You are a senior marketing strategist at CFO By Design writing a plain-English digital audit for a business owner.
-Input is a URL and a JSON block of public signals the worker scraped from the site.
-The reader is the business owner — not a marketer, not a developer, not a technical
-buyer. They know their business; they do not know what a canonical tag is. Write for
-them.
+const MARKETING_AUDIT_PUBLIC_RUBRIC = `You are Solomon, CFO by Design's diagnostic AI, writing a digital-presence audit
+for a business owner. Input is a URL and a JSON block of public signals scraped
+from the site plus its wider footprint (trust platforms, listings, GBP embed,
+review signals, nav pages).
 
-PURPOSE (this is not the CFO diagnostic and not a to-do list):
+WHO SOLOMON IS (this shows up in your voice — never break character):
 
-- Diagnose. Name the problem you found and describe it in language the owner can
-  repeat to a friend at dinner. Reference what you actually saw on the site — the
-  headline, the phone number, the missing reviews — never "meta descriptions,"
-  "canonical tags," "JSON-LD," "schema.org," "OG tags," "H1," "sitemap.xml."
-- Cost. For every problem, name what it is costing the business in customer terms:
-  lost calls, invisible in local search, buyers picking a competitor because the site
-  looked less trustworthy, share links that render as a blank card.
-- Create the moment. End with a book-a-call invitation, not a checklist. Do NOT
-  tell the owner how to fix any problem. Do NOT give them the specific tag / code /
-  paragraph to add. If they could fix it themselves from reading this, we have done
-  our marketing wrong.
+- Solomon is the diagnostic engine trained on the way CFO by Design's founder
+  actually reads a business. Sharp, warm, direct, quietly witty. Confident
+  because he has done this audit thousands of times. Never condescending.
+  Never salesy. Never "amazing / powerful / revolutionary."
+- Solomon is human-first by design. He is fast because he is a machine — that
+  is genuinely useful — but the real work happens on a call with a real person.
+  Say that out loud when it fits, without being self-deprecating about the AI
+  part.
+- Solomon writes in FIRST PERSON SINGULAR: "I ran the audit," "I noticed,"
+  "I looked at your Google listing." Not "we." The CFO by Design team enters
+  the picture on the call.
+- Solomon is proud of his methodology without name-dropping. He never mentions
+  Miguel by name. He CAN say things like "the way we diagnose here" or "the
+  same lens we use with our fractional CFO clients."
 
-BANNED words and phrases (never write these — they either give away the fix or read
-as jargon):
+PURPOSE (this is diagnostic, not a to-do list, not the CFO financial audit):
+
+- Diagnose. Name what you actually saw across the business's digital presence
+  — the homepage, the Google listing signals, review platforms present or
+  absent, the way the site shares on social — in language the owner can
+  repeat to a friend at dinner.
+- Cost. For every problem, name what it is costing them in customer terms:
+  lost calls, invisible in local search, buyers picking a competitor because
+  the other listing has stars and yours doesn't, share links that render as
+  a blank card.
+- Compete. Where it fits honestly, describe how a typical competitor in
+  their space shows up — "buyers comparing three quotes are seeing star
+  ratings on the other listings and blank space on yours" — without inventing
+  a specific competitor's name, number, or rating. You do NOT have competitor
+  data in the signals block, so speak to industry patterns, not fabricated
+  specifics.
+- Sketch the plan at altitude. Give a 3-phase game plan in high-level terms
+  — direction only, no specific tactics or implementations. The plan is the
+  hook; the specific playbook is what the call unlocks.
+- Create the moment. End with a book-a-call invitation.
+
+BANNED (do not write these — they either give away the fix or read as jargon):
 
 - Technical terms: "JSON-LD", "schema", "schema markup", "canonical", "OG tag",
   "Open Graph", "meta description", "meta title", "H1", "H2", "sitemap", "robots.txt",
   "structured data", "aggregate rating", "alt attribute", "alt tag", "rich snippet",
   "SEO", "crawler", "GBP", "Google Business Profile" (say "your Google listing"),
   "LocalBusiness schema", "AggregateRating", "viewport", "SERP".
-- Fix language: "add", "install", "set up", "wire up", "implement", "insert", "paste",
-  "code", "developer can", "should include", "must include", any phrase that reads as
-  a specific instruction to add or change a technical thing.
-- Generic filler: "leverage", "unlock growth", "engage your audience", "modernize
-  your website", "optimize for conversions", "best practices", "drive results",
-  "next level".
+- Fix language in problems / gamePlan: "add", "install", "set up", "wire up",
+  "implement", "insert", "paste", "code", "developer can", "should include",
+  "must include" — any specific instruction to add or change a technical thing.
+- Filler: "leverage", "unlock growth", "engage your audience", "modernize your
+  website", "optimize for conversions", "best practices", "drive results",
+  "take it to the next level", "amazing", "powerful", "revolutionary".
+- Fabricated competitive specifics: never name a specific competitor, star
+  count, or review count you did not receive in the signals block. Industry
+  patterns ("most local roofers now have Google reviews visible") are fine.
 
-SAY IT LIKE:
+SAY IT LIKE (voice examples):
 
-- Bad (internal): "Zero JSON-LD structured data — 5-star claim has no proof"
-- Good (public): "Your homepage says '5 Star Service' — but there's nothing on the
-  page that shows Google or a first-time visitor a real star rating from a real
-  customer. Google doesn't know you're worth stars; a visitor comparing three quotes
-  can't tell either."
+- Bad: "Your website has zero JSON-LD structured data."
+  Good: "Your homepage tells visitors you deliver 5-Star Service — but there
+  is nothing on the site, or in your Google listing, that lets someone
+  actually see those stars from a real customer. A buyer comparing three
+  quotes has star ratings on the other two listings and blank space on yours.
+  That's a call you never got."
 
-- Bad (internal): "No canonical tag + no OG tags"
-- Good (public): "When someone shares your site on Facebook or texts a link to a
-  friend, the preview card that shows up doesn't say anything about who you are or
-  what you do. That's a missed handshake every time your link travels."
+- Bad: "Add OG tags to your site."
+  Good: "When someone shares your site on Facebook or texts the link to
+  their spouse, the preview that shows up is quiet — no photo, no headline,
+  no reason to click. Every share of your link travels without a handshake."
 
 OUTPUT SHAPE — return ONLY valid JSON, no markdown fences, no prose before or after:
 {
   "path": "invisible | unclear | leaking | polished",
-  "badge": "SHORT UPPERCASE PHRASE — one the OWNER would understand, e.g. 'INVISIBLE IN LOCAL SEARCH', 'TRUST GAP', 'SITE IS QUIET'",
+  "badge": "SHORT UPPERCASE PHRASE the OWNER would understand — e.g. 'INVISIBLE IN LOCAL SEARCH', 'TRUST GAP', 'QUIET WHEN IT SHOULD BE LOUD'",
+  "solomonIntro": "One short paragraph (2 sentences) in Solomon's first-person voice. Introduces Solomon: what he is (diagnostic AI), where he came from (trained on CFO by Design's methodology), and a nod to human-first ('the fast diagnostic runs on tech; the real work happens with a person'). Warm, direct, no jargon, no hype.",
   "headline": "One sentence naming the biggest business problem, in plain language.",
-  "opener": "2–3 sentences. Introduce yourself as Solomon (CFO by Design's diagnostic AI). Name what you looked at. Set up the findings without giving them away.",
+  "opener": "2–3 sentences in Solomon's first-person voice. Name what he looked at across the digital presence (not just the site). Set up the findings without giving them away.",
   "context": "Optional. One sentence when signals are thin — say so plainly.",
   "scorecard": [
-    { "dimension": "How clear your message is", "score": 6, "note": "One line in plain language — reference the actual headline or copy on the page." },
-    { "dimension": "How much your site earns trust", "score": 2, "note": "One line — reviews visible? testimonials with real names? guarantee? years in business?" },
+    { "dimension": "How clear your message is", "score": 6, "note": "One line — reference the actual headline or copy on the page." },
+    { "dimension": "How much your presence earns trust", "score": 2, "note": "One line — reviews visible? testimonials? guarantee? years in business? Google listing populated?" },
     { "dimension": "How easy it is to become a customer", "score": 5, "note": "One line — phone easy to spot? way to book? clear next step?" },
     { "dimension": "How findable you are online", "score": 4, "note": "One line — reads like 'Google can find you but doesn't understand you' style, no jargon." },
-    { "dimension": "How you show up on the map", "score": 3, "note": "One line — Google Maps / Yelp / local listings presence in owner terms." }
+    { "dimension": "How you show up on the map", "score": 3, "note": "One line — Google listing, review platforms, local listings presence in owner terms." }
   ],
   "problems": [
-    { "title": "Short plain-language problem statement — no jargon", "priority": "CRITICAL | HIGH | MEDIUM | LOW", "impact": "1–2 sentences on what it is COSTING the business in customer / phone-call / revenue terms. Never mention the fix." }
+    { "title": "Short plain-language problem statement — no jargon", "priority": "CRITICAL | HIGH | MEDIUM | LOW", "impact": "1–2 sentences on what it is COSTING the business in customer / phone-call / revenue terms. Where it fits honestly, reference how competitors in the space typically show up — never invent specific names or numbers. Never mention the fix." }
   ],
   "whatItLooksLike": [
-    { "title": "Short outcome — 'What happens when this is fixed'", "desc": "1–2 sentences painting the picture of the outcome. Do NOT name the tactic that gets there." }
+    { "title": "Short outcome — 'What happens when this is fixed'", "desc": "1–2 sentences painting the picture of the outcome for the business. Do NOT name the tactic that gets there." }
   ],
-  "nextStepHeadline": "One sentence framing the call — e.g. 'Ready to see how we'd fix these?'",
-  "nextStepBody": "1–2 sentences. Warm, not salesy. Invites the owner to book a 30-minute call with the CFO by Design team to walk through their audit and the fastest path to fixing it. Does NOT list the fixes."
+  "gamePlan": [
+    { "phase": "Phase 1 · Foundations", "timeline": "First 30 days", "focus": "1–2 sentences at ALTITUDE — the DIRECTION we would take. e.g. 'We shore up the trust story so a first-time visitor has a reason to believe you before they read a word.' No tactics, no fixes, no specific tools. High-level only." },
+    { "phase": "Phase 2 · Amplify",     "timeline": "Days 30–90",  "focus": "1–2 sentences at altitude — what compounds once foundations are in. e.g. 'We turn the audience already searching for your service in your area into inbound calls.'" },
+    { "phase": "Phase 3 · Compound",    "timeline": "Days 90+",    "focus": "1–2 sentences at altitude — the long game. e.g. 'We turn the calls into a system that stays healthy without you touching it every week.'" }
+  ],
+  "nextStepHeadline": "One sentence framing the call in Solomon's voice — e.g. 'Want to see the specific playbook?'",
+  "nextStepBody": "2 sentences from Solomon. Warm, direct. Invites the owner to book a 30-minute call with a real human on the CFO by Design team to walk through their specific playbook — the tactics, the sequence, the who-does-what. Include a human-first note: Solomon runs fast on tech, but the real work is a real person. Does NOT list any of the fixes here."
 }
 
 SCORECARD RULES:
 - Each score is 0–10, whole numbers only.
-- The five scores MUST match the reality of the signals block. If the internal
-  version would call something a 3, this version says 3 too — the JUSTIFICATION
-  language differs, the numbers do not.
-- Every \`note\` must reference something the owner would recognize on their own
-  site — the headline text, the phone number, a photo, a page that's missing.
+- Scores must match the reality of the signals. If the internal audit would
+  call something a 3, this version says 3 too — the language differs, the
+  numbers do not.
+- Every \`note\` must reference something the owner would recognize on their
+  own digital presence.
 
 FINDING VOLUME:
 - Emit 3–5 problems (fewer is fine — an owner tunes out at more than 5).
 - Emit 3 \`whatItLooksLike\` outcomes.
-- NO quickWins in this version. That is the fix. If you list the fix, we lose the call.
+- Emit exactly 3 \`gamePlan\` phases as shown.
+- NO quickWins. NO specific tactics. NO how-to. Those live on the call.
 
-TONE:
-- Warm, direct, no hype. First-person plural where natural ("we ran the audit,"
-  "we noticed"). Never condescending. Never sales-copy adjectives ("amazing,"
-  "powerful," "revolutionary").
-- Never invent numbers, revenue, headcount, or facts not in the signals block.`;
+TONE (final):
+- First person singular (Solomon). Warm. Direct. Quietly witty when the
+  observation earns it. Never invents numbers, revenue, headcount, or facts
+  not in the signals block. Never sales-copy adjectives. Never condescending.
+  Human-first is not a slogan — it is a fact stated once and moved past.`;
 
 const TIER_GUIDE = {
   free: "FREE tier: concise and punchy. Surface the gaps and create urgency to upgrade, without solving everything. 3 gaps, 2 opportunities. DO NOT use digital presence / Google Business Profile / reviews / SEO as a gap or opportunity in the FREE report — that finding is reserved for the paid diagnostic. Focus the free tier on financial visibility, cash flow, decision-making, revenue concentration, and pipeline math.",
@@ -731,60 +764,12 @@ async function callClaudeWithSystem(prompt, systemText, env) {
   return data.content[0].text;
 }
 
-// Dispatch renderer — routes to the public or internal variant.
-function buildAuditPage(agent, signals, mode = "public", env = {}) {
-  if (mode === "internal") return buildInternalAuditPage(agent, signals);
-  return buildPublicAuditPage(agent, signals, env);
-}
-
-// Client-facing marketing audit page. Owner-friendly, no jargon, ends with a
-// book-a-call CTA. Same dark-shell + cream-card visual language as /report.
-function buildPublicAuditPage(agent, signals, env = {}) {
-  const e = escapeHtml;
-  const logoSrc = "https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png";
-  const bookingLink47 = (env && env.BOOKING_LINK_47) || CONFIG.BOOKING_LINK_47;
-  const priColor = (p) =>
-    p === "CRITICAL" ? "#b91c1c" :
-    p === "HIGH" ? "#d97706" :
-    p === "MEDIUM" ? "#92400e" :
-    "#a16207";
-  const scoreColor = (n) =>
-    n >= 8 ? "#4ade80" :
-    n >= 5 ? "#d4b565" :
-    n >= 3 ? "#f59e0b" :
-    "#dc2626";
-
-  const scorecard = (agent.scorecard || []).map((s) => `
-    <div class="score-tile">
-      <div class="score-dim">${e(s.dimension || "")}</div>
-      <div class="score-num" style="color:${scoreColor(Number(s.score) || 0)};">${e(String(s.score ?? "—"))}<span class="score-of">/10</span></div>
-      <div class="score-note">${e(s.note || "")}</div>
-    </div>`).join("");
-  const problems = (agent.problems || []).map((p) => `
-    <div class="finding" style="border-left:4px solid ${priColor(p.priority)};">
-      <div class="finding-title">${e(p.title)}<span class="pri" style="color:${priColor(p.priority)};">${e(p.priority)}</span></div>
-      <p>${e(p.impact)}</p>
-    </div>`).join("");
-  const outcomes = (agent.whatItLooksLike || []).map((o) => `
-    <div class="finding" style="border-left:4px solid #c4a647;">
-      <div class="finding-title">${e(o.title)}</div>
-      <p>${e(o.desc)}</p>
-    </div>`).join("");
-  const host = (() => { try { return new URL(signals.url).host; } catch { return signals.url; } })();
-  const context = agent.context
-    ? `<p class="context">${e(agent.context)}</p>` : "";
-
-  return `<!DOCTYPE html>
-<html lang="en"><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Your marketing audit — ${e(host)} · CFO by Design</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
-<style>
+// Shared CSS used by both audit modes (public + internal) and the streaming shell.
+const AUDIT_PAGE_CSS = `
   :root {
-    --bg:#0a0e14; --line:#1e2632;
+    --bg:#0a0e14; --card:#12181f; --line:#1e2632;
     --ink:#f2ecdf; --ink-mute:#a8b0bd; --ink-dim:#6d7480;
-    --gold:#d4b565; --gold-bright:#f2c94c;
+    --gold:#d4b565; --gold-bright:#f2c94c; --green:#4ade80;
     --serif:'Playfair Display',Georgia,serif;
     --sans:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',Helvetica,Arial,sans-serif;
     --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
@@ -822,35 +807,188 @@ function buildPublicAuditPage(agent, signals, env = {}) {
   .finding-title { font-family:Georgia,serif; font-weight:700; font-size:16px; color:#1a1a1a; }
   .finding .pri { font-family:Arial,sans-serif; font-size:10px; font-weight:700; letter-spacing:1.5px; margin-left:10px; }
   .finding p { font-family:Georgia,serif; color:#374151; font-size:14px; margin:6px 0 0; line-height:1.55; }
+  .opp-impact { font-family:Arial,sans-serif; color:#92400e; font-weight:700; font-size:11px; margin-top:8px; letter-spacing:1.5px; text-transform:uppercase; }
+  .qw { padding:10px 14px; background:#fefdf7; border:1px solid #f3ebd4; border-radius:4px; margin-bottom:8px; }
+  .qw-title { font-family:Georgia,serif; font-weight:700; font-size:14px; color:#1a1a1a; }
+  .qw p { font-family:Georgia,serif; font-size:13px; color:#4b5563; margin:4px 0 0; line-height:1.5; }
+  .next h3 { font-family:Georgia,serif; font-size:20px; margin:0 0 8px; font-weight:700; color:#1a1a1a; }
+  .next p { font-family:Georgia,serif; color:#374151; font-size:16px; line-height:1.6; font-style:italic; margin:0; }
+  .solomon-intro { margin-top:20px; padding:16px 18px; background:#fdf8f0; border-left:3px solid #d4b565; border-radius:6px; }
+  .solomon-chip { display:inline-block; font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:#92400e; margin-bottom:8px; }
+  .solomon-intro p { font-family:Georgia,serif; font-size:14.5px; color:#374151; line-height:1.6; margin:0; font-style:italic; }
+  .phase-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+  .phase-card { padding:18px 16px; background:#fdf8f0; border-radius:6px; display:flex; flex-direction:column; gap:6px; }
+  .phase-num { display:inline-flex; align-items:center; justify-content:center; width:26px; height:26px; border-radius:999px; background:#d4b565; color:#0a0e14; font-family:var(--sans); font-weight:700; font-size:13px; }
+  .phase-label { font-family:Georgia,serif; font-weight:700; font-size:15px; color:#1a1a1a; margin-top:4px; }
+  .phase-time { font-family:var(--mono); font-size:10px; font-weight:700; letter-spacing:0.14em; text-transform:uppercase; color:#92400e; }
+  .phase-card p { font-family:Georgia,serif; font-size:13.5px; color:#374151; line-height:1.55; margin:6px 0 0; }
+  @media (max-width:720px) { .phase-grid { grid-template-columns:1fr; } }
   .cta-block { margin-top:36px; padding:28px 24px; background:linear-gradient(180deg,#fef3c7,#fdf8f0); border:1px solid #f3ebd4; border-radius:8px; text-align:center; }
   .cta-block h3 { font-family:Georgia,serif; font-size:22px; margin:0 0 8px; color:#1a1a1a; font-weight:700; }
   .cta-block p { font-family:Georgia,serif; font-size:15px; color:#374151; line-height:1.6; margin:0 0 20px; }
-  .cta-btn { display:inline-flex; align-items:center; gap:10px; padding:14px 28px; border-radius:6px; background:#0a0e14; color:#f2c94c; font-family:var(--sans); font-weight:600; font-size:15px; text-decoration:none; }
-  .cta-btn:hover { background:#12181f; }
+  /* .report-card a { color:#92400e } was winning on specificity — force gold */
+  .report-card a.cta-btn, .cta-btn { display:inline-flex; align-items:center; gap:10px; padding:14px 28px; border-radius:6px; background:#0a0e14; color:#f2c94c !important; font-family:var(--sans); font-weight:600; font-size:15px; text-decoration:none !important; }
+  .report-card a.cta-btn:hover, .cta-btn:hover { background:#12181f; color:#f2c94c !important; }
   .cta-btn .arrow { font-size:18px; }
+  .signals { font-family:Arial,sans-serif; font-size:12px; color:#4b5563; }
+  .signals ul { padding-left:20px; margin:0 0 12px; }
+  details { margin-top:12px; }
+  summary { cursor:pointer; font-family:Arial,sans-serif; font-size:11px; letter-spacing:1.5px; color:#6b7280; text-transform:uppercase; }
+  pre { background:#0a0e14; color:#e5e7eb; padding:14px; overflow:auto; border-radius:6px; font-size:11px; line-height:1.4; }
   .footer { text-align:center; padding:36px 24px 30px; margin-top:48px; border-top:1px solid rgba(255,255,255,0.05); font-family:var(--mono); font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--ink-dim); }
   .footer img { display:block; height:32px; width:auto; margin:0 auto 14px; opacity:0.7; }
-</style>
+
+  /* Loading state */
+  .loading-card { background:#fafaf7; color:#1a1a1a; max-width:920px; margin:24px auto 0; padding:60px 40px; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,0.35); border:1px solid rgba(212,181,101,0.15); text-align:center; }
+  .loading-card .spinner { width:52px; height:52px; margin:0 auto 24px; border:3px solid #e5e7eb; border-top-color:#d4b565; border-radius:50%; animation:spin 1s linear infinite; }
+  .loading-card h2 { font-family:Georgia,serif; font-size:22px; margin:0 0 8px; color:#1a1a1a; font-weight:700; }
+  .loading-card p { font-family:Georgia,serif; font-size:15px; color:#6b7280; margin:0 0 6px; }
+  .loading-card .loading-steps { margin-top:24px; font-family:var(--mono); font-size:11px; letter-spacing:0.15em; color:#9ca3af; text-transform:uppercase; }
+  .loading-card .loading-steps span { display:inline-block; padding:4px 10px; margin:0 3px; background:#fdf8f0; border-radius:4px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+`;
+
+const LOGO_SRC = "https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png";
+
+// Immediate HTML sent to the client before the audit runs. Includes topbar, hero,
+// and an animated loading card at #audit-mount that gets swapped in-place when
+// the audit finishes.
+function buildAuditShellStart(host, targetUrl, mode) {
+  const e = escapeHtml;
+  const isInternal = mode === "internal";
+  return `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${isInternal ? "Marketing audit" : "Your marketing audit"} — ${e(host)} · CFO by Design</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
+<style>${AUDIT_PAGE_CSS}</style>
 </head>
 <body>
   <header class="topbar">
     <div class="wrap">
-      <span class="logo"><img src="${logoSrc}" alt="CFO by Design"></span>
-      <span class="tier-chip">Marketing Audit</span>
+      <span class="logo"><img src="${LOGO_SRC}" alt="CFO by Design"></span>
+      <span class="tier-chip">Marketing Audit${isInternal ? " · Internal" : ""}</span>
     </div>
   </header>
   <section class="hello">
     <div class="wrap">
       <p class="eyebrow">◆ Solomon Marketing Audit &middot; ${e(new Date().toISOString().slice(0,10))}</p>
-      <h1>${e(host)}, we <em>looked at your site</em>.</h1>
-      <p class="target">${e(signals.url)} · HTTP ${e(signals.status || "n/a")}</p>
+      <h1>${e(host)}, we're <em>looking at your site</em>.</h1>
+      <p class="target">${e(targetUrl)}</p>
     </div>
   </section>
-  <div class="report-card">
+  <div id="audit-mount">
+    <div class="loading-card">
+      <div class="spinner" aria-hidden="true"></div>
+      <h2>Give me a minute. I'm reading your digital presence.</h2>
+      <p>I'm Solomon &mdash; CFO by Design's diagnostic AI. This takes about 30&ndash;60 seconds. Stay on the page.</p>
+      <div class="loading-steps">
+        <span>Scanning your site</span>
+        <span>Reading your signals</span>
+        <span>Checking your listings</span>
+        <span>Diagnosing</span>
+      </div>
+    </div>
+  </div>
+`;
+}
+
+function buildAuditShellEnd() {
+  return `
+  <footer class="footer">
+    <img src="${LOGO_SRC}" alt="CFO by Design">
+    <div>CFO by Design &middot; Solomon marketing audit</div>
+  </footer>
+</body>
+</html>`;
+}
+
+// Error card used when the audit fails after the shell has been sent.
+function buildAuditErrorCard(err) {
+  const msg = escapeHtml((err && err.message) || String(err || "Unknown error"));
+  return `<div class="report-card">
+    <div class="badge" style="background:#fee2e2;color:#b91c1c;">Audit failed</div>
+    <h1 class="card-headline">We couldn't finish your audit.</h1>
+    <p class="card-opener">Something went wrong on our side while reading your site. It happens — please try again in a minute, and if it persists, let us know.</p>
+    <details style="margin-top:16px;"><summary>Technical detail</summary><pre style="background:#f9f9f9;color:#374151;padding:12px;border-radius:6px;margin-top:8px;">${msg}</pre></details>
+  </div>`;
+}
+
+// Dispatch: renders just the .report-card body for the given mode.
+function buildAuditCardBody(agent, signals, mode = "public", env = {}) {
+  if (mode === "internal") return buildInternalCardBody(agent, signals);
+  return buildPublicCardBody(agent, signals, env);
+}
+
+// Legacy full-page renderer, kept so any non-streaming path still works. The
+// streaming route builds the shell + card body itself; this helper is only used
+// by callers that need the whole HTML in one string.
+function buildAuditPage(agent, signals, mode = "public", env = {}) {
+  const host = (() => { try { return new URL(signals.url).host; } catch { return signals.url; } })();
+  const cardBody = buildAuditCardBody(agent, signals, mode, env);
+  // Replace the loading card at #audit-mount with the real card body.
+  const shell = buildAuditShellStart(host, signals.url, mode);
+  const withCard = shell.replace(
+    /<div id="audit-mount">[\s\S]*?<\/div>\s*<\/div>\s*$/m,
+    cardBody
+  );
+  return withCard + buildAuditShellEnd();
+}
+
+// Client-facing card body (goes inside #audit-mount).
+function buildPublicCardBody(agent, signals, env = {}) {
+  const e = escapeHtml;
+  const bookingLink47 = (env && env.BOOKING_LINK_47) || CONFIG.BOOKING_LINK_47;
+  const priColor = (p) =>
+    p === "CRITICAL" ? "#b91c1c" :
+    p === "HIGH" ? "#d97706" :
+    p === "MEDIUM" ? "#92400e" :
+    "#a16207";
+  const scoreColor = (n) =>
+    n >= 8 ? "#4ade80" :
+    n >= 5 ? "#d4b565" :
+    n >= 3 ? "#f59e0b" :
+    "#dc2626";
+
+  const scorecard = (agent.scorecard || []).map((s) => `
+    <div class="score-tile">
+      <div class="score-dim">${e(s.dimension || "")}</div>
+      <div class="score-num" style="color:${scoreColor(Number(s.score) || 0)};">${e(String(s.score ?? "—"))}<span class="score-of">/10</span></div>
+      <div class="score-note">${e(s.note || "")}</div>
+    </div>`).join("");
+  const problems = (agent.problems || []).map((p) => `
+    <div class="finding" style="border-left:4px solid ${priColor(p.priority)};">
+      <div class="finding-title">${e(p.title)}<span class="pri" style="color:${priColor(p.priority)};">${e(p.priority)}</span></div>
+      <p>${e(p.impact)}</p>
+    </div>`).join("");
+  const outcomes = (agent.whatItLooksLike || []).map((o) => `
+    <div class="finding" style="border-left:4px solid #c4a647;">
+      <div class="finding-title">${e(o.title)}</div>
+      <p>${e(o.desc)}</p>
+    </div>`).join("");
+  const gamePlan = (agent.gamePlan || []).map((p, i) => `
+    <div class="phase-card">
+      <div class="phase-num">${i + 1}</div>
+      <div class="phase-label">${e(p.phase || "")}</div>
+      <div class="phase-time">${e(p.timeline || "")}</div>
+      <p>${e(p.focus || "")}</p>
+    </div>`).join("");
+  const context = agent.context
+    ? `<p class="context">${e(agent.context)}</p>` : "";
+  const solomonIntro = agent.solomonIntro
+    ? `<div class="solomon-intro">
+         <span class="solomon-chip">◆ Solomon &middot; diagnostic AI &middot; trained on the CFO by Design methodology</span>
+         <p>${e(agent.solomonIntro)}</p>
+       </div>`
+    : "";
+
+  return `<div class="report-card">
     <div class="badge">${e(agent.badge || "AUDIT")}</div>
     <h1 class="card-headline">${e(agent.headline || "")}</h1>
     <p class="card-opener">${e(agent.opener || "")}</p>
     ${context}
+    ${solomonIntro}
 
     <h2 class="section-h">Where you stand</h2>
     <div class="scorecard">${scorecard || '<p style="color:#6b7280;font-style:italic;">No scorecard.</p>'}</div>
@@ -858,28 +996,24 @@ function buildPublicAuditPage(agent, signals, env = {}) {
     <h2 class="section-h">What's costing you customers</h2>
     ${problems || '<p style="color:#6b7280;font-style:italic;">No problems returned.</p>'}
 
-    <h2 class="section-h">What it looks like when it's fixed</h2>
+    <h2 class="section-h">What it looks like when this is fixed</h2>
     ${outcomes || '<p style="color:#6b7280;font-style:italic;">No outcomes returned.</p>'}
 
+    <h2 class="section-h">The game plan &middot; at a glance</h2>
+    <p style="font-family:Georgia,serif;font-size:14px;color:#6b7280;margin:0 0 14px;font-style:italic;">The direction, not the tactics. The specific playbook — what, when, who — is what our 30-minute call unlocks.</p>
+    <div class="phase-grid">${gamePlan || '<p style="color:#6b7280;font-style:italic;">No plan returned.</p>'}</div>
+
     <div class="cta-block">
-      <h3>${e(agent.nextStepHeadline || "Ready to see the fix?")}</h3>
+      <h3>${e(agent.nextStepHeadline || "Ready for the specific playbook?")}</h3>
       <p>${e(agent.nextStepBody || "")}</p>
-      <a class="cta-btn" href="${e(bookingLink47)}" target="_blank" rel="noopener">Book a 30-minute call <span class="arrow">→</span></a>
+      <a class="cta-btn" href="${e(bookingLink47)}" target="_blank" rel="noopener">Book a 30-minute call with a human <span class="arrow">→</span></a>
     </div>
-  </div>
-  <footer class="footer">
-    <img src="${logoSrc}" alt="CFO by Design">
-    <div>CFO by Design &middot; Solomon marketing audit</div>
-  </footer>
-</body>
-</html>`;
+  </div>`;
 }
 
-// Internal / team-facing audit. Full detail with quick wins, signal list, raw JSON.
-// This is what the strategist works from — do not send it to the client.
-function buildInternalAuditPage(agent, signals) {
+// Internal / team-facing card body. Full detail with quick wins, signal list, raw JSON.
+function buildInternalCardBody(agent, signals) {
   const e = escapeHtml;
-  const logoSrc = "https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png";
   const priColor = (p) =>
     p === "CRITICAL" ? "#b91c1c" :
     p === "HIGH" ? "#d97706" :
@@ -916,114 +1050,10 @@ function buildInternalAuditPage(agent, signals) {
     </div>`).join("");
   const signalsList = (agent.signalsAudited || []).map((s) => `<li>${e(s)}</li>`).join("");
   const rawSignals = JSON.stringify(signals, null, 2);
-  const host = (() => { try { return new URL(signals.url).host; } catch { return signals.url; } })();
   const context = agent.context
     ? `<p class="context">${e(agent.context)}</p>` : "";
 
-  return `<!DOCTYPE html>
-<html lang="en"><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Marketing audit — ${e(host)} — CFO by Design</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg:#0a0e14; --card:#12181f; --line:#1e2632;
-    --ink:#f2ecdf; --ink-mute:#a8b0bd; --ink-dim:#6d7480;
-    --gold:#d4b565; --gold-bright:#f2c94c; --green:#4ade80;
-    --serif:'Playfair Display',Georgia,serif;
-    --sans:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',Helvetica,Arial,sans-serif;
-    --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
-    color-scheme: dark;
-  }
-  *,*::before,*::after { box-sizing:border-box; }
-  html,body { margin:0; padding:0; }
-  body { background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:16px; line-height:1.6; -webkit-font-smoothing:antialiased; }
-  .wrap { max-width:920px; margin:0 auto; padding:0 24px; }
-
-  .topbar { padding:24px 0; border-bottom:1px solid rgba(255,255,255,0.05); }
-  .topbar .wrap { display:flex; align-items:center; justify-content:space-between; gap:20px; }
-  .logo img { height:52px; width:auto; display:block; }
-  .tier-chip { font-family:var(--mono); font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--gold); }
-
-  .hello { padding:40px 0 24px; text-align:center; }
-  .hello .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.22em; text-transform:uppercase; color:var(--gold); margin:0 0 12px; }
-  .hello h1 { font-family:var(--serif); font-weight:600; font-size:clamp(28px,4vw,42px); line-height:1.15; margin:0; }
-  .hello h1 em { font-style:italic; color:var(--gold); font-weight:500; }
-  .hello .target { margin:14px 0 0; font-family:var(--mono); font-size:12px; color:var(--ink-dim); letter-spacing:0.05em; }
-  .hello .target a { color:var(--gold); text-decoration:none; }
-
-  .report-card {
-    background:#fafaf7; color:#1a1a1a;
-    max-width:920px; margin:24px auto 0;
-    padding:44px 40px; border-radius:12px;
-    box-shadow:0 20px 60px rgba(0,0,0,0.35);
-    border:1px solid rgba(212,181,101,0.15);
-  }
-  .report-card a { color:#92400e; }
-
-  .badge { display:inline-block; padding:6px 14px; background:#fef3c7; color:#92400e; font-weight:700; font-size:11px; letter-spacing:2px; border-radius:999px; font-family:Arial,sans-serif; }
-  .card-headline { font-family:Georgia,serif; font-size:26px; line-height:1.3; margin:20px 0 16px; color:#1a1a1a; font-weight:700; }
-  .card-opener { font-family:Georgia,serif; font-size:17px; color:#374151; line-height:1.65; margin:0; }
-  .context { font-family:Georgia,serif; font-style:italic; color:#6b7280; font-size:15px; line-height:1.6; margin:12px 0 0; }
-
-  h2.section-h { font-family:Arial,sans-serif; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:#92400e; border-bottom:1px solid #e5e7eb; padding-bottom:8px; margin:32px 0 16px; }
-
-  .scorecard {
-    display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; margin-top:8px;
-  }
-  .score-tile {
-    padding:14px 12px; background:#fdf8f0; border-radius:6px;
-    display:flex; flex-direction:column; gap:6px; min-height:130px;
-  }
-  .score-dim { font-family:Arial,sans-serif; font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:#6b7280; line-height:1.3; }
-  .score-num { font-family:Georgia,serif; font-size:34px; font-weight:700; line-height:1; }
-  .score-num .score-of { font-size:14px; font-weight:400; color:#9ca3af; margin-left:2px; }
-  .score-note { font-family:Georgia,serif; font-size:12px; color:#374151; line-height:1.4; margin-top:auto; }
-  @media (max-width:720px) {
-    .scorecard { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  }
-
-  .finding { padding:14px 16px; background:#fdf8f0; border-radius:4px; margin-bottom:10px; }
-  .finding-title { font-family:Georgia,serif; font-weight:700; font-size:16px; color:#1a1a1a; }
-  .finding .pri { font-family:Arial,sans-serif; font-size:10px; font-weight:700; letter-spacing:1.5px; margin-left:10px; }
-  .finding p { font-family:Georgia,serif; color:#374151; font-size:14px; margin:6px 0 0; line-height:1.55; }
-  .opp-impact { font-family:Arial,sans-serif; color:#92400e; font-weight:700; font-size:11px; margin-top:8px; letter-spacing:1.5px; text-transform:uppercase; }
-
-  .qw { padding:10px 14px; background:#fefdf7; border:1px solid #f3ebd4; border-radius:4px; margin-bottom:8px; }
-  .qw-title { font-family:Georgia,serif; font-weight:700; font-size:14px; color:#1a1a1a; }
-  .qw p { font-family:Georgia,serif; font-size:13px; color:#4b5563; margin:4px 0 0; line-height:1.5; }
-
-  .next h3 { font-family:Georgia,serif; font-size:20px; margin:0 0 8px; font-weight:700; color:#1a1a1a; }
-  .next p { font-family:Georgia,serif; color:#374151; font-size:16px; line-height:1.6; font-style:italic; margin:0; }
-
-  .signals { font-family:Arial,sans-serif; font-size:12px; color:#4b5563; }
-  .signals ul { padding-left:20px; margin:0 0 12px; }
-  details { margin-top:12px; }
-  summary { cursor:pointer; font-family:Arial,sans-serif; font-size:11px; letter-spacing:1.5px; color:#6b7280; text-transform:uppercase; }
-  pre { background:#0a0e14; color:#e5e7eb; padding:14px; overflow:auto; border-radius:6px; font-size:11px; line-height:1.4; }
-
-  .footer { text-align:center; padding:36px 24px 30px; margin-top:48px; border-top:1px solid rgba(255,255,255,0.05); font-family:var(--mono); font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--ink-dim); }
-  .footer img { display:block; height:32px; width:auto; margin:0 auto 14px; opacity:0.7; }
-</style>
-</head>
-<body>
-  <header class="topbar">
-    <div class="wrap">
-      <span class="logo"><img src="${logoSrc}" alt="CFO by Design"></span>
-      <span class="tier-chip">Marketing Audit</span>
-    </div>
-  </header>
-
-  <section class="hello">
-    <div class="wrap">
-      <p class="eyebrow">◆ Solomon Marketing Audit &middot; ${e(new Date().toISOString().slice(0,10))}</p>
-      <h1>${e(host)}, your <em>digital audit</em> is back.</h1>
-      <p class="target">Target: <a href="${e(signals.url)}" target="_blank" rel="noopener">${e(signals.url)}</a>${signals.redirected ? " · redirected to " + e(signals.finalUrl || "") : ""} · HTTP ${e(signals.status || "n/a")}</p>
-    </div>
-  </section>
-
-  <div class="report-card">
+  return `<div class="report-card">
     <div class="badge">${e(agent.badge || "AUDIT")}</div>
     <h1 class="card-headline">${e(agent.headline || "")}</h1>
     <p class="card-opener">${e(agent.opener || "")}</p>
@@ -1054,15 +1084,9 @@ function buildInternalAuditPage(agent, signals) {
         <pre>${e(rawSignals)}</pre>
       </details>
     </div>
-  </div>
-
-  <footer class="footer">
-    <img src="${logoSrc}" alt="CFO by Design">
-    <div>CFO by Design &middot; Solomon marketing audit</div>
-  </footer>
-</body>
-</html>`;
+  </div>`;
 }
+
 
 // Inline-styled HTML report body. Inline styles are essential for email clients
 // (Gmail / Outlook / Apple Mail) which strip <style> blocks.
@@ -3849,19 +3873,35 @@ export default {
             { status: 400, headers: htmlHeaders() }
           );
         }
-        try {
-          const { agent, signals } = await runMarketingAudit(target, env, mode);
-          return new Response(buildAuditPage(agent, signals, mode, env), { status: 200, headers: htmlHeaders() });
-        } catch (err) {
-          return new Response(
-            `<!DOCTYPE html><meta charset=utf-8><title>Audit failed</title>
-             <body style="font-family:Georgia,serif;max-width:640px;margin:80px auto;padding:20px;color:#1a1a1a;">
-             <h1 style="font-size:20px;color:#b91c1c;">Audit failed</h1>
-             <pre style="background:#fdf8f0;padding:14px;border-radius:6px;white-space:pre-wrap;font-size:12px;">${escapeHtml(err && err.message || String(err))}</pre>
-             </body>`,
-            { status: 500, headers: htmlHeaders() }
-          );
-        }
+        // Streaming response: send the shell + loading state immediately so the
+        // browser paints something in <1s, then keep the stream open while the
+        // audit runs and swap the loading card for the real card body in-place.
+        const normalizedTarget = normalizeAuditUrl(target) || target;
+        const host = (() => { try { return new URL(normalizedTarget).host; } catch { return target; } })();
+        const encoder = new TextEncoder();
+        const { readable, writable } = new TransformStream();
+        const writer = writable.getWriter();
+        // Send shell + loading mount synchronously so the first bytes hit the
+        // wire before we start the audit.
+        writer.write(encoder.encode(buildAuditShellStart(host, normalizedTarget, mode)));
+        // Run the audit asynchronously; when it returns, swap the mount and close.
+        (async () => {
+          try {
+            const { agent, signals } = await runMarketingAudit(target, env, mode);
+            const cardHtml = buildAuditCardBody(agent, signals, mode, env);
+            const swap = `<script>(function(){var m=document.getElementById('audit-mount');if(m){m.outerHTML=${JSON.stringify(cardHtml)};}})();</script>`;
+            await writer.write(encoder.encode(swap));
+            await writer.write(encoder.encode(buildAuditShellEnd()));
+          } catch (err) {
+            const errCard = buildAuditErrorCard(err);
+            const swap = `<script>(function(){var m=document.getElementById('audit-mount');if(m){m.outerHTML=${JSON.stringify(errCard)};}})();</script>`;
+            try { await writer.write(encoder.encode(swap)); } catch {}
+            try { await writer.write(encoder.encode(buildAuditShellEnd())); } catch {}
+          } finally {
+            try { await writer.close(); } catch {}
+          }
+        })();
+        return new Response(readable, { status: 200, headers: htmlHeaders() });
       }
       if (path === "/asksolomon/rubric") {
         if (!checkConsolePassword(request, env)) {
