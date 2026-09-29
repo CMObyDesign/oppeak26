@@ -162,7 +162,17 @@ HANDLING INCOMPLETE OR NON-RESPONSIVE ANSWERS — call this out honestly, don't 
 // this one runs from a URL alone (plus whatever public signals the worker can scrape
 // from the site itself) and reports on positioning, trust, conversion path, and
 // technical/SEO fundamentals visible in the page — not financial diagnosis.
-const MARKETING_AUDIT_RUBRIC = `You are a senior marketing strategist at CFO By Design running a rapid digital audit.
+// Two rubrics for /marketing:
+//   * MARKETING_AUDIT_INTERNAL_RUBRIC — full-detail audit for the CFO by Design team,
+//     with a Digital Presence Scorecard, prioritized gaps, opportunities, quick wins
+//     (specific tactical fixes), and a "what Solomon looked at" block. This is what
+//     the strategist works from before a call. Do not send this to the client.
+//   * MARKETING_AUDIT_PUBLIC_RUBRIC — client-facing version. Names the problems and
+//     what they are costing the business, in plain language a business owner reads,
+//     WITHOUT prescribing the fix. Its purpose is to create the "I need to talk to
+//     these people" moment — not to be the deliverable itself. Ends with a "book a
+//     call" CTA, not a to-do list.
+const MARKETING_AUDIT_INTERNAL_RUBRIC = `You are a senior marketing strategist at CFO By Design running a rapid digital audit.
 Input is a URL and a compact JSON block of PUBLIC SIGNALS the worker scraped from the
 site's homepage, robots.txt, and sitemap probe. That is ALL you know about the business.
 Do not invent numbers, revenue, headcount, or facts not in the signals block.
@@ -224,20 +234,135 @@ OUTPUT SHAPE — return ONLY valid JSON, no markdown fences, no prose before or 
   "headline": "One sentence that names a specific signal from the scrape.",
   "opener": "2–3 sentences. Reference at least one exact string from the signals block.",
   "context": "Optional. One sentence when signals are thin (site blocked scraping, JS-only, tiny HTML).",
+  "scorecard": [
+    { "dimension": "Positioning & Messaging", "score": 6, "note": "One line naming what the score is based on — the actual title tag / H1 / meta strings." },
+    { "dimension": "Trust & Credibility",     "score": 2, "note": "One line — reviews on-page? Review schema? Testimonials with names? License/affiliation? \\"since YYYY\\"?" },
+    { "dimension": "Conversion Path",         "score": 5, "note": "One line — phone visible? Booking link? Forms? CTA labels?" },
+    { "dimension": "Technical / SEO",         "score": 4, "note": "One line — title length, meta description, canonical, viewport, robots, sitemap, schema types found." },
+    { "dimension": "Local Discovery",         "score": 3, "note": "One line — GBP link / Google Maps embed / Yelp / BBB / review widgets / LocalBusiness schema." }
+  ],
   "gaps": [
-    { "title": "Short title, references a signal", "priority": "CRITICAL | HIGH | MEDIUM", "impact": "1–2 sentences on what this costs the business." }
+    { "title": "Short title, references a signal", "priority": "CRITICAL | HIGH | MEDIUM | LOW", "impact": "1–2 sentences on what this costs the business." }
   ],
   "opportunities": [
     { "title": "Short title", "desc": "1–2 sentences on the move.", "impact": "SHORT UPPERCASE OUTCOME LABEL" }
   ],
-  "signalsAudited": ["short list of what was actually pulled — title tag, meta description, JSON-LD types, robots, sitemap, etc."],
+  "quickWins": [
+    { "title": "Short title", "desc": "1 sentence. Small tactical fix a marketer can ship this week. MUST cite an exact signal." }
+  ],
+  "signalsAudited": ["short list of what was actually pulled — title tag, meta description, JSON-LD types, robots, sitemap, nav pages, trust badges, GBP embed, etc."],
   "nextStepHeadline": "One sentence.",
   "nextStepBody": "1–2 sentences on what to do first."
 }
 
-Emit 3 gaps and 2 opportunities. If signals are so thin (fetch failed, HTML is a JS shell
-with no server-rendered content) that fewer honest findings are possible, emit fewer and
-say so in \`context\`. Do NOT fill space with generic advice.`;
+SCORECARD RULES:
+- Each score is 0–10, whole numbers only.
+- 0 = the dimension is absent (no title tag; no phone; no schema at all; no GBP presence).
+- 5 = present but weak (has a title tag but it's just the business name; has a phone but buried; has some schema but not LocalBusiness/Review).
+- 10 = present, complete, competitive (specific title/meta with location + service; visible phone/CTA above the fold; LocalBusiness + Review schema; GBP embed present; robots + sitemap).
+- The five scores MUST match the reality of the signals block. If Positioning is a 7 in your note, the score field must be 7.
+- The \`note\` must cite an exact string, tag, or count from the signals — no generic filler.
+
+FINDING VOLUME:
+- Emit 4–6 gaps and 3–4 opportunities and 3 quickWins.
+- If signals are so thin (fetch failed, HTML is a JS shell with no server-rendered content) that fewer honest findings are possible, emit fewer and say so in \`context\`. Do NOT fill space with generic advice.
+- Sort gaps by priority (CRITICAL first, then HIGH, MEDIUM, LOW).
+- \`quickWins\` are DIFFERENT from opportunities: quick wins are small tactical fixes (add an alt tag, add OG tags, add a canonical) shippable this week. Opportunities are larger positioning / trust plays.`;
+
+// Client-facing marketing audit. Same signals block goes in, different output. This
+// version is what the business owner sees at a branded URL. Purpose: name the pain,
+// create the "I need help" moment — not solve it. If we solved it here, they'd have
+// no reason to book a call.
+const MARKETING_AUDIT_PUBLIC_RUBRIC = `You are a senior marketing strategist at CFO By Design writing a plain-English digital audit for a business owner.
+Input is a URL and a JSON block of public signals the worker scraped from the site.
+The reader is the business owner — not a marketer, not a developer, not a technical
+buyer. They know their business; they do not know what a canonical tag is. Write for
+them.
+
+PURPOSE (this is not the CFO diagnostic and not a to-do list):
+
+- Diagnose. Name the problem you found and describe it in language the owner can
+  repeat to a friend at dinner. Reference what you actually saw on the site — the
+  headline, the phone number, the missing reviews — never "meta descriptions,"
+  "canonical tags," "JSON-LD," "schema.org," "OG tags," "H1," "sitemap.xml."
+- Cost. For every problem, name what it is costing the business in customer terms:
+  lost calls, invisible in local search, buyers picking a competitor because the site
+  looked less trustworthy, share links that render as a blank card.
+- Create the moment. End with a book-a-call invitation, not a checklist. Do NOT
+  tell the owner how to fix any problem. Do NOT give them the specific tag / code /
+  paragraph to add. If they could fix it themselves from reading this, we have done
+  our marketing wrong.
+
+BANNED words and phrases (never write these — they either give away the fix or read
+as jargon):
+
+- Technical terms: "JSON-LD", "schema", "schema markup", "canonical", "OG tag",
+  "Open Graph", "meta description", "meta title", "H1", "H2", "sitemap", "robots.txt",
+  "structured data", "aggregate rating", "alt attribute", "alt tag", "rich snippet",
+  "SEO", "crawler", "GBP", "Google Business Profile" (say "your Google listing"),
+  "LocalBusiness schema", "AggregateRating", "viewport", "SERP".
+- Fix language: "add", "install", "set up", "wire up", "implement", "insert", "paste",
+  "code", "developer can", "should include", "must include", any phrase that reads as
+  a specific instruction to add or change a technical thing.
+- Generic filler: "leverage", "unlock growth", "engage your audience", "modernize
+  your website", "optimize for conversions", "best practices", "drive results",
+  "next level".
+
+SAY IT LIKE:
+
+- Bad (internal): "Zero JSON-LD structured data — 5-star claim has no proof"
+- Good (public): "Your homepage says '5 Star Service' — but there's nothing on the
+  page that shows Google or a first-time visitor a real star rating from a real
+  customer. Google doesn't know you're worth stars; a visitor comparing three quotes
+  can't tell either."
+
+- Bad (internal): "No canonical tag + no OG tags"
+- Good (public): "When someone shares your site on Facebook or texts a link to a
+  friend, the preview card that shows up doesn't say anything about who you are or
+  what you do. That's a missed handshake every time your link travels."
+
+OUTPUT SHAPE — return ONLY valid JSON, no markdown fences, no prose before or after:
+{
+  "path": "invisible | unclear | leaking | polished",
+  "badge": "SHORT UPPERCASE PHRASE — one the OWNER would understand, e.g. 'INVISIBLE IN LOCAL SEARCH', 'TRUST GAP', 'SITE IS QUIET'",
+  "headline": "One sentence naming the biggest business problem, in plain language.",
+  "opener": "2–3 sentences. Introduce yourself as Solomon (CFO by Design's diagnostic AI). Name what you looked at. Set up the findings without giving them away.",
+  "context": "Optional. One sentence when signals are thin — say so plainly.",
+  "scorecard": [
+    { "dimension": "How clear your message is", "score": 6, "note": "One line in plain language — reference the actual headline or copy on the page." },
+    { "dimension": "How much your site earns trust", "score": 2, "note": "One line — reviews visible? testimonials with real names? guarantee? years in business?" },
+    { "dimension": "How easy it is to become a customer", "score": 5, "note": "One line — phone easy to spot? way to book? clear next step?" },
+    { "dimension": "How findable you are online", "score": 4, "note": "One line — reads like 'Google can find you but doesn't understand you' style, no jargon." },
+    { "dimension": "How you show up on the map", "score": 3, "note": "One line — Google Maps / Yelp / local listings presence in owner terms." }
+  ],
+  "problems": [
+    { "title": "Short plain-language problem statement — no jargon", "priority": "CRITICAL | HIGH | MEDIUM | LOW", "impact": "1–2 sentences on what it is COSTING the business in customer / phone-call / revenue terms. Never mention the fix." }
+  ],
+  "whatItLooksLike": [
+    { "title": "Short outcome — 'What happens when this is fixed'", "desc": "1–2 sentences painting the picture of the outcome. Do NOT name the tactic that gets there." }
+  ],
+  "nextStepHeadline": "One sentence framing the call — e.g. 'Ready to see how we'd fix these?'",
+  "nextStepBody": "1–2 sentences. Warm, not salesy. Invites the owner to book a 30-minute call with the CFO by Design team to walk through their audit and the fastest path to fixing it. Does NOT list the fixes."
+}
+
+SCORECARD RULES:
+- Each score is 0–10, whole numbers only.
+- The five scores MUST match the reality of the signals block. If the internal
+  version would call something a 3, this version says 3 too — the JUSTIFICATION
+  language differs, the numbers do not.
+- Every \`note\` must reference something the owner would recognize on their own
+  site — the headline text, the phone number, a photo, a page that's missing.
+
+FINDING VOLUME:
+- Emit 3–5 problems (fewer is fine — an owner tunes out at more than 5).
+- Emit 3 \`whatItLooksLike\` outcomes.
+- NO quickWins in this version. That is the fix. If you list the fix, we lose the call.
+
+TONE:
+- Warm, direct, no hype. First-person plural where natural ("we ran the audit,"
+  "we noticed"). Never condescending. Never sales-copy adjectives ("amazing,"
+  "powerful," "revolutionary").
+- Never invent numbers, revenue, headcount, or facts not in the signals block.`;
 
 const TIER_GUIDE = {
   free: "FREE tier: concise and punchy. Surface the gaps and create urgency to upgrade, without solving everything. 3 gaps, 2 opportunities. DO NOT use digital presence / Google Business Profile / reviews / SEO as a gap or opportunity in the FREE report — that finding is reserved for the paid diagnostic. Focus the free tier on financial visibility, cash flow, decision-making, revenue concentration, and pipeline math.",
@@ -415,6 +540,77 @@ function detectExternalLinks(html) {
   return [...links].slice(0, 12);
 }
 
+// Detect key nav pages by scanning anchor hrefs on the homepage. Returns booleans for
+// each of the standard pages a decent site has. Cheap — no additional fetches.
+function detectNavPages(html) {
+  const hrefs = (html.match(/href=[\"']([^\"']+)[\"']/gi) || [])
+    .map((s) => (s.match(/href=[\"']([^\"']+)[\"']/i) || [])[1] || "")
+    .filter(Boolean)
+    .map((h) => h.toLowerCase());
+  const has = (patterns) => patterns.some((p) => hrefs.some((h) => h.includes(p)));
+  return {
+    services: has(["/services", "/what-we-do", "/what-we-offer", "/solutions"]),
+    contact: has(["/contact"]),
+    about: has(["/about"]),
+    pricing: has(["/pricing", "/plans"]),
+    reviews: has(["/reviews", "/testimonials"]),
+    gallery: has(["/gallery", "/portfolio", "/projects", "/before-after"]),
+    blog: has(["/blog", "/news", "/insights", "/articles"]),
+    faq: has(["/faq", "/faqs"]),
+    locations: has(["/locations", "/service-area", "/service-areas", "/areas-we-serve"]),
+    booking: has(["calendly", "acuityscheduling", "leadconnectorhq", "booking", "book-now", "schedule"]),
+  };
+}
+
+// Trust/badge/review-platform signals on-page. Boolean map.
+function detectTrustSignals(html) {
+  const low = html.toLowerCase();
+  return {
+    bbb: /better business bureau|bbb\.org|bbb accredited/.test(low),
+    trustpilot: /trustpilot/.test(low),
+    google_guaranteed: /google guaranteed/.test(low),
+    angi: /\bangi\b|angies list|angieslist|angie's list/.test(low),
+    homeadvisor: /homeadvisor|home advisor/.test(low),
+    thumbtack: /thumbtack/.test(low),
+    houzz: /houzz/.test(low),
+    nextdoor: /nextdoor/.test(low),
+    yelp: /yelp/.test(low),
+    google_reviews: /google reviews|google-reviews|reviews_widget|reviews-widget/.test(low),
+    gbp_embed: /(maps\.google\.com\/(?:maps\/)?embed|www\.google\.com\/maps\/embed|g\.page|goo\.gl\/maps|maps\.app\.goo\.gl)/i.test(html),
+    since_year: (html.match(/\b(?:since|established|est\.?|serving [\w\s]+ since)\s*(19|20)\d{2}\b/i) || [])[0] || null,
+    license_mention: /\blicensed\b|\blicense\s?#|\bcertified\b|\baccredited\b|\bregistered\b/.test(low),
+    guarantee_mention: /\bguarantee(?:d)?\b|\bwarranty\b|\bmoney[-\s]?back\b|\brisk[-\s]?free\b/.test(low),
+    testimonial_word: /\btestimonial|\bclient stor|\bcase stud|\bwhat our|\bour clients say/i.test(html),
+    star_rating: /★+|⭐+|5[-\s]?star|five[-\s]?star|4\.\d\s?stars?|5\.0\s?stars?/i.test(html),
+  };
+}
+
+// Extract signals that need lightly-parsed content — address blocks, hours, favicon, etc.
+function detectSiteDetails(html) {
+  const strippedScripts = html.replace(/<script[\s\S]*?<\/script>/gi, "");
+  const strippedStyles = strippedScripts.replace(/<style[\s\S]*?<\/style>/gi, "");
+  const text = strippedStyles.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  // Very rough US street address heuristic — a street number + street + city-state-zip nearby.
+  const addressMatch = text.match(/\b\d{1,6}\s+[A-Z][A-Za-z0-9.,'\-\s]{3,60}\s+[A-Z]{2}\s+\d{5}(?:-\d{4})?\b/);
+  return {
+    faviconPresent: /<link[^>]+rel=[\"'](?:shortcut )?icon[\"']/i.test(html),
+    hoursMention: /\bhours?\b|\bmon(?:day)?\s*[-–]\s*fri|open\s+\d|open now|closed/i.test(text.slice(0, 8000)),
+    addressGuess: addressMatch ? addressMatch[0].slice(0, 120) : null,
+    mixedContentRefs: (html.match(/\bhttp:\/\/[^"'\s>]+/gi) || []).filter((u) => !/\.(png|jpg|jpeg|gif|svg|webp|ico)\b/i.test(u)).length,
+    phoneMatches: (html.match(/\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g) || []).slice(0, 5),
+    emailMatches: (strippedScripts.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi) || []).slice(0, 5),
+    ctaLabels: [
+      ...new Set(
+        (html.match(/<a[^>]*(?:class=[\"'][^\"']*(?:btn|button|cta)[^\"']*[\"'])[^>]*>([\s\S]{1,80}?)<\/a>/gi) || [])
+          .map((s) => (s.match(/>([\s\S]{1,80}?)<\/a>/i) || [])[1] || "")
+          .map((t) => t.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim())
+          .filter((t) => t && t.length < 40)
+      ),
+    ].slice(0, 8),
+    textLength: text.length,
+  };
+}
+
 async function fetchSiteSignals(rawUrl) {
   const url = normalizeAuditUrl(rawUrl);
   if (!url) return { ok: false, error: "invalid_url" };
@@ -430,10 +626,13 @@ async function fetchSiteSignals(rawUrl) {
     signals.status = res.status;
     signals.finalUrl = res.url;
     signals.redirected = res.redirected;
+    signals.finalIsHttps = signals.finalUrl && signals.finalUrl.startsWith("https://");
     const html = (await res.text()).slice(0, 350_000); // cap
     signals.htmlBytes = html.length;
     signals.title = extractTag(html, "title");
+    signals.titleLength = signals.title ? signals.title.length : 0;
     signals.metaDescription = extractMeta(html, "description");
+    signals.metaDescriptionLength = signals.metaDescription ? signals.metaDescription.length : 0;
     signals.metaViewport = extractMeta(html, "viewport");
     signals.metaRobots = extractMeta(html, "robots");
     signals.canonical = (html.match(/<link[^>]+rel=[\"']canonical[\"'][^>]+href=[\"']([^\"']+)[\"']/i) || [])[1] || null;
@@ -442,6 +641,7 @@ async function fetchSiteSignals(rawUrl) {
     signals.ogImage = extractMeta(html, "og:image");
     signals.h1 = extractAllTags(html, "h1", 3);
     signals.h2Sample = extractAllTags(html, "h2", 5);
+    signals.h3Sample = extractAllTags(html, "h3", 5);
     signals.jsonLdTypes = extractJsonLdTypes(html);
     signals.externalLinks = detectExternalLinks(html);
     signals.imgCount = (html.match(/<img[\s>]/gi) || []).length;
@@ -451,6 +651,9 @@ async function fetchSiteSignals(rawUrl) {
     signals.emailVisible = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i.test(html.replace(/<script[\s\S]*?<\/script>/gi, ""));
     signals.scriptCount = (html.match(/<script[\s>]/gi) || []).length;
     signals.htmlIsJsShell = signals.htmlBytes > 0 && !signals.h1.length && signals.scriptCount > 8 && html.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<[^>]+>/g, "").trim().length < 200;
+    signals.navPages = detectNavPages(html);
+    signals.trustSignals = detectTrustSignals(html);
+    Object.assign(signals, detectSiteDetails(html));
   } catch (e) {
     signals.fetchError = String(e && e.message || e).slice(0, 200);
   }
@@ -477,20 +680,22 @@ async function fetchSiteSignals(rawUrl) {
   return signals;
 }
 
-async function runMarketingAudit(rawUrl, env) {
+// mode: "public" (default, client-facing) or "internal" (team-facing detail).
+async function runMarketingAudit(rawUrl, env, mode = "public") {
   const signals = await fetchSiteSignals(rawUrl);
   if (signals.error === "invalid_url") {
     throw new Error("Invalid URL. Include a hostname, e.g. supremewindowstyler.com");
   }
+  const rubric = mode === "internal" ? MARKETING_AUDIT_INTERNAL_RUBRIC : MARKETING_AUDIT_PUBLIC_RUBRIC;
   const prompt = `AUDIT TARGET: ${signals.url}
 
 PUBLIC SIGNALS (scraped just now — this is the entire input):
 ${JSON.stringify(signals, null, 2)}
 
 TASK: Write the marketing audit using the methodology in your system instructions.
-Every gap and opportunity must cite an exact signal above.
+Every finding must cite an exact signal above.
 Return ONLY the JSON object described in the system instructions.`;
-  const raw = await callClaudeWithSystem(prompt, MARKETING_AUDIT_RUBRIC, env);
+  const raw = await callClaudeWithSystem(prompt, rubric, env);
   // Strip accidental code fences.
   const cleaned = raw.replace(/^\s*```(?:json)?\s*/i, "").replace(/\s*```\s*$/i, "").trim();
   let agent;
@@ -498,7 +703,7 @@ Return ONLY the JSON object described in the system instructions.`;
   catch (e) {
     throw new Error(`Audit model returned non-JSON: ${cleaned.slice(0, 300)}`);
   }
-  return { agent, signals };
+  return { agent, signals, mode };
 }
 
 // Generic system-prompt Claude call. callClaude() is pinned to ASSESSMENT_RUBRIC — this
@@ -513,7 +718,7 @@ async function callClaudeWithSystem(prompt, systemText, env) {
     },
     body: JSON.stringify({
       model: CONFIG.CLAUDE_MODEL,
-      max_tokens: 2500,
+      max_tokens: 4000,
       system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: prompt }],
     }),
@@ -526,13 +731,173 @@ async function callClaudeWithSystem(prompt, systemText, env) {
   return data.content[0].text;
 }
 
-function buildAuditPage(agent, signals) {
+// Dispatch renderer — routes to the public or internal variant.
+function buildAuditPage(agent, signals, mode = "public", env = {}) {
+  if (mode === "internal") return buildInternalAuditPage(agent, signals);
+  return buildPublicAuditPage(agent, signals, env);
+}
+
+// Client-facing marketing audit page. Owner-friendly, no jargon, ends with a
+// book-a-call CTA. Same dark-shell + cream-card visual language as /report.
+function buildPublicAuditPage(agent, signals, env = {}) {
+  const e = escapeHtml;
+  const logoSrc = "https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png";
+  const bookingLink47 = (env && env.BOOKING_LINK_47) || CONFIG.BOOKING_LINK_47;
+  const priColor = (p) =>
+    p === "CRITICAL" ? "#b91c1c" :
+    p === "HIGH" ? "#d97706" :
+    p === "MEDIUM" ? "#92400e" :
+    "#a16207";
+  const scoreColor = (n) =>
+    n >= 8 ? "#4ade80" :
+    n >= 5 ? "#d4b565" :
+    n >= 3 ? "#f59e0b" :
+    "#dc2626";
+
+  const scorecard = (agent.scorecard || []).map((s) => `
+    <div class="score-tile">
+      <div class="score-dim">${e(s.dimension || "")}</div>
+      <div class="score-num" style="color:${scoreColor(Number(s.score) || 0)};">${e(String(s.score ?? "—"))}<span class="score-of">/10</span></div>
+      <div class="score-note">${e(s.note || "")}</div>
+    </div>`).join("");
+  const problems = (agent.problems || []).map((p) => `
+    <div class="finding" style="border-left:4px solid ${priColor(p.priority)};">
+      <div class="finding-title">${e(p.title)}<span class="pri" style="color:${priColor(p.priority)};">${e(p.priority)}</span></div>
+      <p>${e(p.impact)}</p>
+    </div>`).join("");
+  const outcomes = (agent.whatItLooksLike || []).map((o) => `
+    <div class="finding" style="border-left:4px solid #c4a647;">
+      <div class="finding-title">${e(o.title)}</div>
+      <p>${e(o.desc)}</p>
+    </div>`).join("");
+  const host = (() => { try { return new URL(signals.url).host; } catch { return signals.url; } })();
+  const context = agent.context
+    ? `<p class="context">${e(agent.context)}</p>` : "";
+
+  return `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Your marketing audit — ${e(host)} · CFO by Design</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:#0a0e14; --line:#1e2632;
+    --ink:#f2ecdf; --ink-mute:#a8b0bd; --ink-dim:#6d7480;
+    --gold:#d4b565; --gold-bright:#f2c94c;
+    --serif:'Playfair Display',Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+    color-scheme: dark;
+  }
+  *,*::before,*::after { box-sizing:border-box; }
+  html,body { margin:0; padding:0; }
+  body { background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:16px; line-height:1.6; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:920px; margin:0 auto; padding:0 24px; }
+  .topbar { padding:24px 0; border-bottom:1px solid rgba(255,255,255,0.05); }
+  .topbar .wrap { display:flex; align-items:center; justify-content:space-between; gap:20px; }
+  .logo img { height:52px; width:auto; display:block; }
+  .tier-chip { font-family:var(--mono); font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--gold); }
+  .hello { padding:40px 0 24px; text-align:center; }
+  .hello .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.22em; text-transform:uppercase; color:var(--gold); margin:0 0 12px; }
+  .hello h1 { font-family:var(--serif); font-weight:600; font-size:clamp(28px,4vw,42px); line-height:1.15; margin:0; }
+  .hello h1 em { font-style:italic; color:var(--gold); font-weight:500; }
+  .hello .target { margin:14px 0 0; font-family:var(--mono); font-size:12px; color:var(--ink-dim); letter-spacing:0.05em; }
+  .hello .target a { color:var(--gold); text-decoration:none; }
+  .report-card { background:#fafaf7; color:#1a1a1a; max-width:920px; margin:24px auto 0; padding:44px 40px; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,0.35); border:1px solid rgba(212,181,101,0.15); }
+  .report-card a { color:#92400e; }
+  .badge { display:inline-block; padding:6px 14px; background:#fef3c7; color:#92400e; font-weight:700; font-size:11px; letter-spacing:2px; border-radius:999px; font-family:Arial,sans-serif; }
+  .card-headline { font-family:Georgia,serif; font-size:26px; line-height:1.3; margin:20px 0 16px; color:#1a1a1a; font-weight:700; }
+  .card-opener { font-family:Georgia,serif; font-size:17px; color:#374151; line-height:1.65; margin:0; }
+  .context { font-family:Georgia,serif; font-style:italic; color:#6b7280; font-size:15px; line-height:1.6; margin:12px 0 0; }
+  h2.section-h { font-family:Arial,sans-serif; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:#92400e; border-bottom:1px solid #e5e7eb; padding-bottom:8px; margin:32px 0 16px; }
+  .scorecard { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; margin-top:8px; }
+  .score-tile { padding:14px 12px; background:#fdf8f0; border-radius:6px; display:flex; flex-direction:column; gap:6px; min-height:130px; }
+  .score-dim { font-family:Arial,sans-serif; font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:#6b7280; line-height:1.3; }
+  .score-num { font-family:Georgia,serif; font-size:34px; font-weight:700; line-height:1; }
+  .score-num .score-of { font-size:14px; font-weight:400; color:#9ca3af; margin-left:2px; }
+  .score-note { font-family:Georgia,serif; font-size:12px; color:#374151; line-height:1.4; margin-top:auto; }
+  @media (max-width:720px) { .scorecard { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  .finding { padding:14px 16px; background:#fdf8f0; border-radius:4px; margin-bottom:10px; }
+  .finding-title { font-family:Georgia,serif; font-weight:700; font-size:16px; color:#1a1a1a; }
+  .finding .pri { font-family:Arial,sans-serif; font-size:10px; font-weight:700; letter-spacing:1.5px; margin-left:10px; }
+  .finding p { font-family:Georgia,serif; color:#374151; font-size:14px; margin:6px 0 0; line-height:1.55; }
+  .cta-block { margin-top:36px; padding:28px 24px; background:linear-gradient(180deg,#fef3c7,#fdf8f0); border:1px solid #f3ebd4; border-radius:8px; text-align:center; }
+  .cta-block h3 { font-family:Georgia,serif; font-size:22px; margin:0 0 8px; color:#1a1a1a; font-weight:700; }
+  .cta-block p { font-family:Georgia,serif; font-size:15px; color:#374151; line-height:1.6; margin:0 0 20px; }
+  .cta-btn { display:inline-flex; align-items:center; gap:10px; padding:14px 28px; border-radius:6px; background:#0a0e14; color:#f2c94c; font-family:var(--sans); font-weight:600; font-size:15px; text-decoration:none; }
+  .cta-btn:hover { background:#12181f; }
+  .cta-btn .arrow { font-size:18px; }
+  .footer { text-align:center; padding:36px 24px 30px; margin-top:48px; border-top:1px solid rgba(255,255,255,0.05); font-family:var(--mono); font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--ink-dim); }
+  .footer img { display:block; height:32px; width:auto; margin:0 auto 14px; opacity:0.7; }
+</style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <span class="logo"><img src="${logoSrc}" alt="CFO by Design"></span>
+      <span class="tier-chip">Marketing Audit</span>
+    </div>
+  </header>
+  <section class="hello">
+    <div class="wrap">
+      <p class="eyebrow">◆ Solomon Marketing Audit &middot; ${e(new Date().toISOString().slice(0,10))}</p>
+      <h1>${e(host)}, we <em>looked at your site</em>.</h1>
+      <p class="target">${e(signals.url)} · HTTP ${e(signals.status || "n/a")}</p>
+    </div>
+  </section>
+  <div class="report-card">
+    <div class="badge">${e(agent.badge || "AUDIT")}</div>
+    <h1 class="card-headline">${e(agent.headline || "")}</h1>
+    <p class="card-opener">${e(agent.opener || "")}</p>
+    ${context}
+
+    <h2 class="section-h">Where you stand</h2>
+    <div class="scorecard">${scorecard || '<p style="color:#6b7280;font-style:italic;">No scorecard.</p>'}</div>
+
+    <h2 class="section-h">What's costing you customers</h2>
+    ${problems || '<p style="color:#6b7280;font-style:italic;">No problems returned.</p>'}
+
+    <h2 class="section-h">What it looks like when it's fixed</h2>
+    ${outcomes || '<p style="color:#6b7280;font-style:italic;">No outcomes returned.</p>'}
+
+    <div class="cta-block">
+      <h3>${e(agent.nextStepHeadline || "Ready to see the fix?")}</h3>
+      <p>${e(agent.nextStepBody || "")}</p>
+      <a class="cta-btn" href="${e(bookingLink47)}" target="_blank" rel="noopener">Book a 30-minute call <span class="arrow">→</span></a>
+    </div>
+  </div>
+  <footer class="footer">
+    <img src="${logoSrc}" alt="CFO by Design">
+    <div>CFO by Design &middot; Solomon marketing audit</div>
+  </footer>
+</body>
+</html>`;
+}
+
+// Internal / team-facing audit. Full detail with quick wins, signal list, raw JSON.
+// This is what the strategist works from — do not send it to the client.
+function buildInternalAuditPage(agent, signals) {
   const e = escapeHtml;
   const logoSrc = "https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png";
   const priColor = (p) =>
     p === "CRITICAL" ? "#b91c1c" :
     p === "HIGH" ? "#d97706" :
-    "#92400e";
+    p === "MEDIUM" ? "#92400e" :
+    "#a16207";
+  const scoreColor = (n) =>
+    n >= 8 ? "#4ade80" :
+    n >= 5 ? "#d4b565" :
+    n >= 3 ? "#f59e0b" :
+    "#dc2626";
+
+  const scorecard = (agent.scorecard || []).map((s) => `
+    <div class="score-tile">
+      <div class="score-dim">${e(s.dimension || "")}</div>
+      <div class="score-num" style="color:${scoreColor(Number(s.score) || 0)};">${e(String(s.score ?? "—"))}<span class="score-of">/10</span></div>
+      <div class="score-note">${e(s.note || "")}</div>
+    </div>`).join("");
+
   const gaps = (agent.gaps || []).map((g) => `
     <div class="finding" style="border-left:4px solid ${priColor(g.priority)};">
       <div class="finding-title">${e(g.title)}<span class="pri" style="color:${priColor(g.priority)};">${e(g.priority)}</span></div>
@@ -544,89 +909,159 @@ function buildAuditPage(agent, signals) {
       <p>${e(o.desc)}</p>
       <div class="opp-impact">${e(o.impact)}</div>
     </div>`).join("");
+  const quickWins = (agent.quickWins || []).map((q) => `
+    <div class="qw">
+      <div class="qw-title">◆ ${e(q.title)}</div>
+      <p>${e(q.desc)}</p>
+    </div>`).join("");
   const signalsList = (agent.signalsAudited || []).map((s) => `<li>${e(s)}</li>`).join("");
   const rawSignals = JSON.stringify(signals, null, 2);
   const host = (() => { try { return new URL(signals.url).host; } catch { return signals.url; } })();
   const context = agent.context
     ? `<p class="context">${e(agent.context)}</p>` : "";
+
   return `<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Marketing audit — ${e(host)}</title>
+<title>Marketing audit — ${e(host)} — CFO by Design</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
 <style>
-  :root { color-scheme: light; }
-  body { margin:0; font-family:Georgia,serif; background:#faf7f0; color:#1a1a1a; }
-  .wrap { max-width:820px; margin:0 auto; padding:32px 20px 96px; }
-  .eyebrow { font-family:Arial,sans-serif; font-size:11px; letter-spacing:2px; color:#92400e; text-transform:uppercase; font-weight:700; margin-bottom:8px; }
+  :root {
+    --bg:#0a0e14; --card:#12181f; --line:#1e2632;
+    --ink:#f2ecdf; --ink-mute:#a8b0bd; --ink-dim:#6d7480;
+    --gold:#d4b565; --gold-bright:#f2c94c; --green:#4ade80;
+    --serif:'Playfair Display',Georgia,serif;
+    --sans:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',Helvetica,Arial,sans-serif;
+    --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+    color-scheme: dark;
+  }
+  *,*::before,*::after { box-sizing:border-box; }
+  html,body { margin:0; padding:0; }
+  body { background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:16px; line-height:1.6; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:920px; margin:0 auto; padding:0 24px; }
+
+  .topbar { padding:24px 0; border-bottom:1px solid rgba(255,255,255,0.05); }
+  .topbar .wrap { display:flex; align-items:center; justify-content:space-between; gap:20px; }
+  .logo img { height:52px; width:auto; display:block; }
+  .tier-chip { font-family:var(--mono); font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--gold); }
+
+  .hello { padding:40px 0 24px; text-align:center; }
+  .hello .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.22em; text-transform:uppercase; color:var(--gold); margin:0 0 12px; }
+  .hello h1 { font-family:var(--serif); font-weight:600; font-size:clamp(28px,4vw,42px); line-height:1.15; margin:0; }
+  .hello h1 em { font-style:italic; color:var(--gold); font-weight:500; }
+  .hello .target { margin:14px 0 0; font-family:var(--mono); font-size:12px; color:var(--ink-dim); letter-spacing:0.05em; }
+  .hello .target a { color:var(--gold); text-decoration:none; }
+
+  .report-card {
+    background:#fafaf7; color:#1a1a1a;
+    max-width:920px; margin:24px auto 0;
+    padding:44px 40px; border-radius:12px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.35);
+    border:1px solid rgba(212,181,101,0.15);
+  }
+  .report-card a { color:#92400e; }
+
   .badge { display:inline-block; padding:6px 14px; background:#fef3c7; color:#92400e; font-weight:700; font-size:11px; letter-spacing:2px; border-radius:999px; font-family:Arial,sans-serif; }
-  h1 { font-size:26px; line-height:1.3; margin:20px 0 16px; }
-  .opener { font-size:17px; color:#374151; line-height:1.65; margin:0; }
-  .context { font-style:italic; color:#6b7280; font-size:15px; line-height:1.6; margin:12px 0 0; }
-  .card { background:#fff; border:1px solid #e5e7eb; border-radius:8px; padding:24px; margin-top:24px; }
-  h2 { font-family:Arial,sans-serif; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:#92400e; border-bottom:1px solid #e5e7eb; padding-bottom:8px; margin:0 0 16px; }
+  .card-headline { font-family:Georgia,serif; font-size:26px; line-height:1.3; margin:20px 0 16px; color:#1a1a1a; font-weight:700; }
+  .card-opener { font-family:Georgia,serif; font-size:17px; color:#374151; line-height:1.65; margin:0; }
+  .context { font-family:Georgia,serif; font-style:italic; color:#6b7280; font-size:15px; line-height:1.6; margin:12px 0 0; }
+
+  h2.section-h { font-family:Arial,sans-serif; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:#92400e; border-bottom:1px solid #e5e7eb; padding-bottom:8px; margin:32px 0 16px; }
+
+  .scorecard {
+    display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; margin-top:8px;
+  }
+  .score-tile {
+    padding:14px 12px; background:#fdf8f0; border-radius:6px;
+    display:flex; flex-direction:column; gap:6px; min-height:130px;
+  }
+  .score-dim { font-family:Arial,sans-serif; font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:#6b7280; line-height:1.3; }
+  .score-num { font-family:Georgia,serif; font-size:34px; font-weight:700; line-height:1; }
+  .score-num .score-of { font-size:14px; font-weight:400; color:#9ca3af; margin-left:2px; }
+  .score-note { font-family:Georgia,serif; font-size:12px; color:#374151; line-height:1.4; margin-top:auto; }
+  @media (max-width:720px) {
+    .scorecard { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  }
+
   .finding { padding:14px 16px; background:#fdf8f0; border-radius:4px; margin-bottom:10px; }
-  .finding-title { font-weight:700; font-size:16px; }
+  .finding-title { font-family:Georgia,serif; font-weight:700; font-size:16px; color:#1a1a1a; }
   .finding .pri { font-family:Arial,sans-serif; font-size:10px; font-weight:700; letter-spacing:1.5px; margin-left:10px; }
-  .finding p { color:#374151; font-size:14px; margin:6px 0 0; line-height:1.55; }
+  .finding p { font-family:Georgia,serif; color:#374151; font-size:14px; margin:6px 0 0; line-height:1.55; }
   .opp-impact { font-family:Arial,sans-serif; color:#92400e; font-weight:700; font-size:11px; margin-top:8px; letter-spacing:1.5px; text-transform:uppercase; }
-  .next h3 { font-size:20px; margin:0 0 8px; }
-  .next p { color:#374151; font-size:16px; line-height:1.6; font-style:italic; margin:0; }
+
+  .qw { padding:10px 14px; background:#fefdf7; border:1px solid #f3ebd4; border-radius:4px; margin-bottom:8px; }
+  .qw-title { font-family:Georgia,serif; font-weight:700; font-size:14px; color:#1a1a1a; }
+  .qw p { font-family:Georgia,serif; font-size:13px; color:#4b5563; margin:4px 0 0; line-height:1.5; }
+
+  .next h3 { font-family:Georgia,serif; font-size:20px; margin:0 0 8px; font-weight:700; color:#1a1a1a; }
+  .next p { font-family:Georgia,serif; color:#374151; font-size:16px; line-height:1.6; font-style:italic; margin:0; }
+
   .signals { font-family:Arial,sans-serif; font-size:12px; color:#4b5563; }
   .signals ul { padding-left:20px; margin:0 0 12px; }
   details { margin-top:12px; }
   summary { cursor:pointer; font-family:Arial,sans-serif; font-size:11px; letter-spacing:1.5px; color:#6b7280; text-transform:uppercase; }
-  pre { background:#111827; color:#e5e7eb; padding:14px; overflow:auto; border-radius:6px; font-size:11px; line-height:1.4; }
-  .site-link { color:#92400e; word-break:break-all; }
-  .footer { margin-top:32px; font-family:Arial,sans-serif; font-size:11px; color:#9ca3af; letter-spacing:1px; text-transform:uppercase; text-align:center; }
-  .brandbar { display:flex; align-items:center; justify-content:center; padding:24px 0 4px; border-bottom:1px solid #e5e7eb; margin-bottom:28px; }
-  .brandbar img { max-height:56px; width:auto; display:block; }
-  .footer-logo { display:block; max-height:36px; width:auto; margin:0 auto 12px; opacity:0.6; }
+  pre { background:#0a0e14; color:#e5e7eb; padding:14px; overflow:auto; border-radius:6px; font-size:11px; line-height:1.4; }
+
+  .footer { text-align:center; padding:36px 24px 30px; margin-top:48px; border-top:1px solid rgba(255,255,255,0.05); font-family:var(--mono); font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--ink-dim); }
+  .footer img { display:block; height:32px; width:auto; margin:0 auto 14px; opacity:0.7; }
 </style>
-</head><body>
-<div class="wrap">
-  <div class="brandbar"><img src="${e(logoSrc)}" alt="CFO by Design"></div>
-  <div class="eyebrow">Marketing audit &middot; ${e(new Date().toISOString().slice(0,10))}</div>
-  <div class="badge">${e(agent.badge || "AUDIT")}</div>
-  <h1>${e(agent.headline || "")}</h1>
-  <p class="opener">${e(agent.opener || "")}</p>
-  ${context}
-  <p style="margin-top:14px; font-family:Arial,sans-serif; font-size:12px; color:#6b7280;">
-    Target: <a class="site-link" href="${e(signals.url)}" target="_blank" rel="noopener">${e(signals.url)}</a>
-    &middot; HTTP ${e(signals.status || "n/a")}${signals.redirected ? " (redirected)" : ""}
-  </p>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <span class="logo"><img src="${logoSrc}" alt="CFO by Design"></span>
+      <span class="tier-chip">Marketing Audit</span>
+    </div>
+  </header>
 
-  <div class="card">
-    <h2>Gaps</h2>
+  <section class="hello">
+    <div class="wrap">
+      <p class="eyebrow">◆ Solomon Marketing Audit &middot; ${e(new Date().toISOString().slice(0,10))}</p>
+      <h1>${e(host)}, your <em>digital audit</em> is back.</h1>
+      <p class="target">Target: <a href="${e(signals.url)}" target="_blank" rel="noopener">${e(signals.url)}</a>${signals.redirected ? " · redirected to " + e(signals.finalUrl || "") : ""} · HTTP ${e(signals.status || "n/a")}</p>
+    </div>
+  </section>
+
+  <div class="report-card">
+    <div class="badge">${e(agent.badge || "AUDIT")}</div>
+    <h1 class="card-headline">${e(agent.headline || "")}</h1>
+    <p class="card-opener">${e(agent.opener || "")}</p>
+    ${context}
+
+    <h2 class="section-h">Digital Presence Scorecard</h2>
+    <div class="scorecard">${scorecard || '<p style="color:#6b7280;font-style:italic;">No scorecard returned.</p>'}</div>
+
+    <h2 class="section-h">Critical Gaps</h2>
     ${gaps || '<p style="color:#6b7280;font-style:italic;">No gaps returned.</p>'}
-  </div>
 
-  <div class="card">
-    <h2>Opportunities</h2>
+    <h2 class="section-h">Highest-Impact Opportunities</h2>
     ${opps || '<p style="color:#6b7280;font-style:italic;">No opportunities returned.</p>'}
+
+    ${quickWins ? `<h2 class="section-h">Quick Wins (Ship This Week)</h2>${quickWins}` : ""}
+
+    <h2 class="section-h">Next Step</h2>
+    <div class="next">
+      <h3>${e(agent.nextStepHeadline || "")}</h3>
+      <p>${e(agent.nextStepBody || "")}</p>
+    </div>
+
+    <h2 class="section-h signals">What Solomon actually looked at</h2>
+    <div class="signals">
+      <ul>${signalsList}</ul>
+      <details>
+        <summary>Raw signals JSON</summary>
+        <pre>${e(rawSignals)}</pre>
+      </details>
+    </div>
   </div>
 
-  <div class="card next">
-    <h2>Next Step</h2>
-    <h3>${e(agent.nextStepHeadline || "")}</h3>
-    <p>${e(agent.nextStepBody || "")}</p>
-  </div>
-
-  <div class="card signals">
-    <h2>What Solomon actually looked at</h2>
-    <ul>${signalsList}</ul>
-    <details>
-      <summary>Raw signals JSON</summary>
-      <pre>${e(rawSignals)}</pre>
-    </details>
-  </div>
-
-  <div style="margin-top:32px;">
-    <img class="footer-logo" src="${e(logoSrc)}" alt="CFO by Design">
-    <div class="footer">CFO by Design &middot; Solomon marketing audit</div>
-  </div>
-</div>
-</body></html>`;
+  <footer class="footer">
+    <img src="${logoSrc}" alt="CFO by Design">
+    <div>CFO by Design &middot; Solomon marketing audit</div>
+  </footer>
+</body>
+</html>`;
 }
 
 // Inline-styled HTML report body. Inline styles are essential for email clients
@@ -3395,13 +3830,15 @@ export default {
       if (path === "/asksolomon") {
         return new Response(CONSOLE_PAGE, { status: 200, headers: htmlHeaders() });
       }
-      // GET /audit?url=<domain> — public marketing audit endpoint.
+      // GET /audit?url=<domain> — marketing audit endpoint.
       // Also served at /marketing (branded path for asksolomon.cfobydesign.com/marketing).
-      // URL-in, audit-out. No auth: worst abuse is Anthropic token cost. If that
-      // becomes a problem, add a per-IP rate limit rather than restoring the
-      // password gate (which was awkward from a browser tab).
+      // ?mode=internal switches to the team-facing rubric (full detail, quick wins,
+      // signal list, raw JSON). Default mode is "public" (client-facing, no fixes,
+      // ends with a book-a-call CTA).
+      // URL-in, audit-out. No auth: worst abuse is Anthropic token cost.
       if (path === "/audit" || path === "/marketing") {
         const target = url.searchParams.get("url");
+        const mode = url.searchParams.get("mode") === "internal" ? "internal" : "public";
         if (!target) {
           return new Response(
             `<!DOCTYPE html><meta charset=utf-8><title>Marketing audit</title>
@@ -3413,8 +3850,8 @@ export default {
           );
         }
         try {
-          const { agent, signals } = await runMarketingAudit(target, env);
-          return new Response(buildAuditPage(agent, signals), { status: 200, headers: htmlHeaders() });
+          const { agent, signals } = await runMarketingAudit(target, env, mode);
+          return new Response(buildAuditPage(agent, signals, mode, env), { status: 200, headers: htmlHeaders() });
         } catch (err) {
           return new Response(
             `<!DOCTYPE html><meta charset=utf-8><title>Audit failed</title>
@@ -3531,10 +3968,11 @@ export default {
       try { body = await request.json(); }
       catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
       const target = body.url;
+      const mode = body.mode === "internal" ? "internal" : "public";
       if (!target) return json({ success: false, error: "url required" }, 400);
       try {
-        const { agent, signals } = await runMarketingAudit(target, env);
-        return json({ success: true, agent, signals });
+        const { agent, signals } = await runMarketingAudit(target, env, mode);
+        return json({ success: true, agent, signals, mode });
       } catch (err) {
         return json({ success: false, error: err && err.message || String(err) }, 500);
       }
