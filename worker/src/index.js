@@ -731,60 +731,12 @@ async function callClaudeWithSystem(prompt, systemText, env) {
   return data.content[0].text;
 }
 
-// Dispatch renderer — routes to the public or internal variant.
-function buildAuditPage(agent, signals, mode = "public", env = {}) {
-  if (mode === "internal") return buildInternalAuditPage(agent, signals);
-  return buildPublicAuditPage(agent, signals, env);
-}
-
-// Client-facing marketing audit page. Owner-friendly, no jargon, ends with a
-// book-a-call CTA. Same dark-shell + cream-card visual language as /report.
-function buildPublicAuditPage(agent, signals, env = {}) {
-  const e = escapeHtml;
-  const logoSrc = "https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png";
-  const bookingLink47 = (env && env.BOOKING_LINK_47) || CONFIG.BOOKING_LINK_47;
-  const priColor = (p) =>
-    p === "CRITICAL" ? "#b91c1c" :
-    p === "HIGH" ? "#d97706" :
-    p === "MEDIUM" ? "#92400e" :
-    "#a16207";
-  const scoreColor = (n) =>
-    n >= 8 ? "#4ade80" :
-    n >= 5 ? "#d4b565" :
-    n >= 3 ? "#f59e0b" :
-    "#dc2626";
-
-  const scorecard = (agent.scorecard || []).map((s) => `
-    <div class="score-tile">
-      <div class="score-dim">${e(s.dimension || "")}</div>
-      <div class="score-num" style="color:${scoreColor(Number(s.score) || 0)};">${e(String(s.score ?? "—"))}<span class="score-of">/10</span></div>
-      <div class="score-note">${e(s.note || "")}</div>
-    </div>`).join("");
-  const problems = (agent.problems || []).map((p) => `
-    <div class="finding" style="border-left:4px solid ${priColor(p.priority)};">
-      <div class="finding-title">${e(p.title)}<span class="pri" style="color:${priColor(p.priority)};">${e(p.priority)}</span></div>
-      <p>${e(p.impact)}</p>
-    </div>`).join("");
-  const outcomes = (agent.whatItLooksLike || []).map((o) => `
-    <div class="finding" style="border-left:4px solid #c4a647;">
-      <div class="finding-title">${e(o.title)}</div>
-      <p>${e(o.desc)}</p>
-    </div>`).join("");
-  const host = (() => { try { return new URL(signals.url).host; } catch { return signals.url; } })();
-  const context = agent.context
-    ? `<p class="context">${e(agent.context)}</p>` : "";
-
-  return `<!DOCTYPE html>
-<html lang="en"><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Your marketing audit — ${e(host)} · CFO by Design</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
-<style>
+// Shared CSS used by both audit modes (public + internal) and the streaming shell.
+const AUDIT_PAGE_CSS = `
   :root {
-    --bg:#0a0e14; --line:#1e2632;
+    --bg:#0a0e14; --card:#12181f; --line:#1e2632;
     --ink:#f2ecdf; --ink-mute:#a8b0bd; --ink-dim:#6d7480;
-    --gold:#d4b565; --gold-bright:#f2c94c;
+    --gold:#d4b565; --gold-bright:#f2c94c; --green:#4ade80;
     --serif:'Playfair Display',Georgia,serif;
     --sans:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',Helvetica,Arial,sans-serif;
     --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
@@ -822,31 +774,158 @@ function buildPublicAuditPage(agent, signals, env = {}) {
   .finding-title { font-family:Georgia,serif; font-weight:700; font-size:16px; color:#1a1a1a; }
   .finding .pri { font-family:Arial,sans-serif; font-size:10px; font-weight:700; letter-spacing:1.5px; margin-left:10px; }
   .finding p { font-family:Georgia,serif; color:#374151; font-size:14px; margin:6px 0 0; line-height:1.55; }
+  .opp-impact { font-family:Arial,sans-serif; color:#92400e; font-weight:700; font-size:11px; margin-top:8px; letter-spacing:1.5px; text-transform:uppercase; }
+  .qw { padding:10px 14px; background:#fefdf7; border:1px solid #f3ebd4; border-radius:4px; margin-bottom:8px; }
+  .qw-title { font-family:Georgia,serif; font-weight:700; font-size:14px; color:#1a1a1a; }
+  .qw p { font-family:Georgia,serif; font-size:13px; color:#4b5563; margin:4px 0 0; line-height:1.5; }
+  .next h3 { font-family:Georgia,serif; font-size:20px; margin:0 0 8px; font-weight:700; color:#1a1a1a; }
+  .next p { font-family:Georgia,serif; color:#374151; font-size:16px; line-height:1.6; font-style:italic; margin:0; }
   .cta-block { margin-top:36px; padding:28px 24px; background:linear-gradient(180deg,#fef3c7,#fdf8f0); border:1px solid #f3ebd4; border-radius:8px; text-align:center; }
   .cta-block h3 { font-family:Georgia,serif; font-size:22px; margin:0 0 8px; color:#1a1a1a; font-weight:700; }
   .cta-block p { font-family:Georgia,serif; font-size:15px; color:#374151; line-height:1.6; margin:0 0 20px; }
   .cta-btn { display:inline-flex; align-items:center; gap:10px; padding:14px 28px; border-radius:6px; background:#0a0e14; color:#f2c94c; font-family:var(--sans); font-weight:600; font-size:15px; text-decoration:none; }
   .cta-btn:hover { background:#12181f; }
   .cta-btn .arrow { font-size:18px; }
+  .signals { font-family:Arial,sans-serif; font-size:12px; color:#4b5563; }
+  .signals ul { padding-left:20px; margin:0 0 12px; }
+  details { margin-top:12px; }
+  summary { cursor:pointer; font-family:Arial,sans-serif; font-size:11px; letter-spacing:1.5px; color:#6b7280; text-transform:uppercase; }
+  pre { background:#0a0e14; color:#e5e7eb; padding:14px; overflow:auto; border-radius:6px; font-size:11px; line-height:1.4; }
   .footer { text-align:center; padding:36px 24px 30px; margin-top:48px; border-top:1px solid rgba(255,255,255,0.05); font-family:var(--mono); font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--ink-dim); }
   .footer img { display:block; height:32px; width:auto; margin:0 auto 14px; opacity:0.7; }
-</style>
+
+  /* Loading state */
+  .loading-card { background:#fafaf7; color:#1a1a1a; max-width:920px; margin:24px auto 0; padding:60px 40px; border-radius:12px; box-shadow:0 20px 60px rgba(0,0,0,0.35); border:1px solid rgba(212,181,101,0.15); text-align:center; }
+  .loading-card .spinner { width:52px; height:52px; margin:0 auto 24px; border:3px solid #e5e7eb; border-top-color:#d4b565; border-radius:50%; animation:spin 1s linear infinite; }
+  .loading-card h2 { font-family:Georgia,serif; font-size:22px; margin:0 0 8px; color:#1a1a1a; font-weight:700; }
+  .loading-card p { font-family:Georgia,serif; font-size:15px; color:#6b7280; margin:0 0 6px; }
+  .loading-card .loading-steps { margin-top:24px; font-family:var(--mono); font-size:11px; letter-spacing:0.15em; color:#9ca3af; text-transform:uppercase; }
+  .loading-card .loading-steps span { display:inline-block; padding:4px 10px; margin:0 3px; background:#fdf8f0; border-radius:4px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+`;
+
+const LOGO_SRC = "https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png";
+
+// Immediate HTML sent to the client before the audit runs. Includes topbar, hero,
+// and an animated loading card at #audit-mount that gets swapped in-place when
+// the audit finishes.
+function buildAuditShellStart(host, targetUrl, mode) {
+  const e = escapeHtml;
+  const isInternal = mode === "internal";
+  return `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${isInternal ? "Marketing audit" : "Your marketing audit"} — ${e(host)} · CFO by Design</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
+<style>${AUDIT_PAGE_CSS}</style>
 </head>
 <body>
   <header class="topbar">
     <div class="wrap">
-      <span class="logo"><img src="${logoSrc}" alt="CFO by Design"></span>
-      <span class="tier-chip">Marketing Audit</span>
+      <span class="logo"><img src="${LOGO_SRC}" alt="CFO by Design"></span>
+      <span class="tier-chip">Marketing Audit${isInternal ? " · Internal" : ""}</span>
     </div>
   </header>
   <section class="hello">
     <div class="wrap">
       <p class="eyebrow">◆ Solomon Marketing Audit &middot; ${e(new Date().toISOString().slice(0,10))}</p>
-      <h1>${e(host)}, we <em>looked at your site</em>.</h1>
-      <p class="target">${e(signals.url)} · HTTP ${e(signals.status || "n/a")}</p>
+      <h1>${e(host)}, we're <em>looking at your site</em>.</h1>
+      <p class="target">${e(targetUrl)}</p>
     </div>
   </section>
-  <div class="report-card">
+  <div id="audit-mount">
+    <div class="loading-card">
+      <div class="spinner" aria-hidden="true"></div>
+      <h2>Solomon is running your audit</h2>
+      <p>This takes about 30&ndash;60 seconds. Please stay on the page.</p>
+      <div class="loading-steps">
+        <span>Scanning your site</span>
+        <span>Reading your signals</span>
+        <span>Diagnosing</span>
+      </div>
+    </div>
+  </div>
+`;
+}
+
+function buildAuditShellEnd() {
+  return `
+  <footer class="footer">
+    <img src="${LOGO_SRC}" alt="CFO by Design">
+    <div>CFO by Design &middot; Solomon marketing audit</div>
+  </footer>
+</body>
+</html>`;
+}
+
+// Error card used when the audit fails after the shell has been sent.
+function buildAuditErrorCard(err) {
+  const msg = escapeHtml((err && err.message) || String(err || "Unknown error"));
+  return `<div class="report-card">
+    <div class="badge" style="background:#fee2e2;color:#b91c1c;">Audit failed</div>
+    <h1 class="card-headline">We couldn't finish your audit.</h1>
+    <p class="card-opener">Something went wrong on our side while reading your site. It happens — please try again in a minute, and if it persists, let us know.</p>
+    <details style="margin-top:16px;"><summary>Technical detail</summary><pre style="background:#f9f9f9;color:#374151;padding:12px;border-radius:6px;margin-top:8px;">${msg}</pre></details>
+  </div>`;
+}
+
+// Dispatch: renders just the .report-card body for the given mode.
+function buildAuditCardBody(agent, signals, mode = "public", env = {}) {
+  if (mode === "internal") return buildInternalCardBody(agent, signals);
+  return buildPublicCardBody(agent, signals, env);
+}
+
+// Legacy full-page renderer, kept so any non-streaming path still works. The
+// streaming route builds the shell + card body itself; this helper is only used
+// by callers that need the whole HTML in one string.
+function buildAuditPage(agent, signals, mode = "public", env = {}) {
+  const host = (() => { try { return new URL(signals.url).host; } catch { return signals.url; } })();
+  const cardBody = buildAuditCardBody(agent, signals, mode, env);
+  // Replace the loading card at #audit-mount with the real card body.
+  const shell = buildAuditShellStart(host, signals.url, mode);
+  const withCard = shell.replace(
+    /<div id="audit-mount">[\s\S]*?<\/div>\s*<\/div>\s*$/m,
+    cardBody
+  );
+  return withCard + buildAuditShellEnd();
+}
+
+// Client-facing card body (goes inside #audit-mount).
+function buildPublicCardBody(agent, signals, env = {}) {
+  const e = escapeHtml;
+  const bookingLink47 = (env && env.BOOKING_LINK_47) || CONFIG.BOOKING_LINK_47;
+  const priColor = (p) =>
+    p === "CRITICAL" ? "#b91c1c" :
+    p === "HIGH" ? "#d97706" :
+    p === "MEDIUM" ? "#92400e" :
+    "#a16207";
+  const scoreColor = (n) =>
+    n >= 8 ? "#4ade80" :
+    n >= 5 ? "#d4b565" :
+    n >= 3 ? "#f59e0b" :
+    "#dc2626";
+
+  const scorecard = (agent.scorecard || []).map((s) => `
+    <div class="score-tile">
+      <div class="score-dim">${e(s.dimension || "")}</div>
+      <div class="score-num" style="color:${scoreColor(Number(s.score) || 0)};">${e(String(s.score ?? "—"))}<span class="score-of">/10</span></div>
+      <div class="score-note">${e(s.note || "")}</div>
+    </div>`).join("");
+  const problems = (agent.problems || []).map((p) => `
+    <div class="finding" style="border-left:4px solid ${priColor(p.priority)};">
+      <div class="finding-title">${e(p.title)}<span class="pri" style="color:${priColor(p.priority)};">${e(p.priority)}</span></div>
+      <p>${e(p.impact)}</p>
+    </div>`).join("");
+  const outcomes = (agent.whatItLooksLike || []).map((o) => `
+    <div class="finding" style="border-left:4px solid #c4a647;">
+      <div class="finding-title">${e(o.title)}</div>
+      <p>${e(o.desc)}</p>
+    </div>`).join("");
+  const context = agent.context
+    ? `<p class="context">${e(agent.context)}</p>` : "";
+
+  return `<div class="report-card">
     <div class="badge">${e(agent.badge || "AUDIT")}</div>
     <h1 class="card-headline">${e(agent.headline || "")}</h1>
     <p class="card-opener">${e(agent.opener || "")}</p>
@@ -866,20 +945,12 @@ function buildPublicAuditPage(agent, signals, env = {}) {
       <p>${e(agent.nextStepBody || "")}</p>
       <a class="cta-btn" href="${e(bookingLink47)}" target="_blank" rel="noopener">Book a 30-minute call <span class="arrow">→</span></a>
     </div>
-  </div>
-  <footer class="footer">
-    <img src="${logoSrc}" alt="CFO by Design">
-    <div>CFO by Design &middot; Solomon marketing audit</div>
-  </footer>
-</body>
-</html>`;
+  </div>`;
 }
 
-// Internal / team-facing audit. Full detail with quick wins, signal list, raw JSON.
-// This is what the strategist works from — do not send it to the client.
-function buildInternalAuditPage(agent, signals) {
+// Internal / team-facing card body. Full detail with quick wins, signal list, raw JSON.
+function buildInternalCardBody(agent, signals) {
   const e = escapeHtml;
-  const logoSrc = "https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png";
   const priColor = (p) =>
     p === "CRITICAL" ? "#b91c1c" :
     p === "HIGH" ? "#d97706" :
@@ -916,114 +987,10 @@ function buildInternalAuditPage(agent, signals) {
     </div>`).join("");
   const signalsList = (agent.signalsAudited || []).map((s) => `<li>${e(s)}</li>`).join("");
   const rawSignals = JSON.stringify(signals, null, 2);
-  const host = (() => { try { return new URL(signals.url).host; } catch { return signals.url; } })();
   const context = agent.context
     ? `<p class="context">${e(agent.context)}</p>` : "";
 
-  return `<!DOCTYPE html>
-<html lang="en"><head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Marketing audit — ${e(host)} — CFO by Design</title>
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;1,500;1,600&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg:#0a0e14; --card:#12181f; --line:#1e2632;
-    --ink:#f2ecdf; --ink-mute:#a8b0bd; --ink-dim:#6d7480;
-    --gold:#d4b565; --gold-bright:#f2c94c; --green:#4ade80;
-    --serif:'Playfair Display',Georgia,serif;
-    --sans:-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',Helvetica,Arial,sans-serif;
-    --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
-    color-scheme: dark;
-  }
-  *,*::before,*::after { box-sizing:border-box; }
-  html,body { margin:0; padding:0; }
-  body { background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:16px; line-height:1.6; -webkit-font-smoothing:antialiased; }
-  .wrap { max-width:920px; margin:0 auto; padding:0 24px; }
-
-  .topbar { padding:24px 0; border-bottom:1px solid rgba(255,255,255,0.05); }
-  .topbar .wrap { display:flex; align-items:center; justify-content:space-between; gap:20px; }
-  .logo img { height:52px; width:auto; display:block; }
-  .tier-chip { font-family:var(--mono); font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--gold); }
-
-  .hello { padding:40px 0 24px; text-align:center; }
-  .hello .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.22em; text-transform:uppercase; color:var(--gold); margin:0 0 12px; }
-  .hello h1 { font-family:var(--serif); font-weight:600; font-size:clamp(28px,4vw,42px); line-height:1.15; margin:0; }
-  .hello h1 em { font-style:italic; color:var(--gold); font-weight:500; }
-  .hello .target { margin:14px 0 0; font-family:var(--mono); font-size:12px; color:var(--ink-dim); letter-spacing:0.05em; }
-  .hello .target a { color:var(--gold); text-decoration:none; }
-
-  .report-card {
-    background:#fafaf7; color:#1a1a1a;
-    max-width:920px; margin:24px auto 0;
-    padding:44px 40px; border-radius:12px;
-    box-shadow:0 20px 60px rgba(0,0,0,0.35);
-    border:1px solid rgba(212,181,101,0.15);
-  }
-  .report-card a { color:#92400e; }
-
-  .badge { display:inline-block; padding:6px 14px; background:#fef3c7; color:#92400e; font-weight:700; font-size:11px; letter-spacing:2px; border-radius:999px; font-family:Arial,sans-serif; }
-  .card-headline { font-family:Georgia,serif; font-size:26px; line-height:1.3; margin:20px 0 16px; color:#1a1a1a; font-weight:700; }
-  .card-opener { font-family:Georgia,serif; font-size:17px; color:#374151; line-height:1.65; margin:0; }
-  .context { font-family:Georgia,serif; font-style:italic; color:#6b7280; font-size:15px; line-height:1.6; margin:12px 0 0; }
-
-  h2.section-h { font-family:Arial,sans-serif; font-size:13px; letter-spacing:2px; text-transform:uppercase; color:#92400e; border-bottom:1px solid #e5e7eb; padding-bottom:8px; margin:32px 0 16px; }
-
-  .scorecard {
-    display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; margin-top:8px;
-  }
-  .score-tile {
-    padding:14px 12px; background:#fdf8f0; border-radius:6px;
-    display:flex; flex-direction:column; gap:6px; min-height:130px;
-  }
-  .score-dim { font-family:Arial,sans-serif; font-size:10px; font-weight:700; letter-spacing:1.5px; text-transform:uppercase; color:#6b7280; line-height:1.3; }
-  .score-num { font-family:Georgia,serif; font-size:34px; font-weight:700; line-height:1; }
-  .score-num .score-of { font-size:14px; font-weight:400; color:#9ca3af; margin-left:2px; }
-  .score-note { font-family:Georgia,serif; font-size:12px; color:#374151; line-height:1.4; margin-top:auto; }
-  @media (max-width:720px) {
-    .scorecard { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  }
-
-  .finding { padding:14px 16px; background:#fdf8f0; border-radius:4px; margin-bottom:10px; }
-  .finding-title { font-family:Georgia,serif; font-weight:700; font-size:16px; color:#1a1a1a; }
-  .finding .pri { font-family:Arial,sans-serif; font-size:10px; font-weight:700; letter-spacing:1.5px; margin-left:10px; }
-  .finding p { font-family:Georgia,serif; color:#374151; font-size:14px; margin:6px 0 0; line-height:1.55; }
-  .opp-impact { font-family:Arial,sans-serif; color:#92400e; font-weight:700; font-size:11px; margin-top:8px; letter-spacing:1.5px; text-transform:uppercase; }
-
-  .qw { padding:10px 14px; background:#fefdf7; border:1px solid #f3ebd4; border-radius:4px; margin-bottom:8px; }
-  .qw-title { font-family:Georgia,serif; font-weight:700; font-size:14px; color:#1a1a1a; }
-  .qw p { font-family:Georgia,serif; font-size:13px; color:#4b5563; margin:4px 0 0; line-height:1.5; }
-
-  .next h3 { font-family:Georgia,serif; font-size:20px; margin:0 0 8px; font-weight:700; color:#1a1a1a; }
-  .next p { font-family:Georgia,serif; color:#374151; font-size:16px; line-height:1.6; font-style:italic; margin:0; }
-
-  .signals { font-family:Arial,sans-serif; font-size:12px; color:#4b5563; }
-  .signals ul { padding-left:20px; margin:0 0 12px; }
-  details { margin-top:12px; }
-  summary { cursor:pointer; font-family:Arial,sans-serif; font-size:11px; letter-spacing:1.5px; color:#6b7280; text-transform:uppercase; }
-  pre { background:#0a0e14; color:#e5e7eb; padding:14px; overflow:auto; border-radius:6px; font-size:11px; line-height:1.4; }
-
-  .footer { text-align:center; padding:36px 24px 30px; margin-top:48px; border-top:1px solid rgba(255,255,255,0.05); font-family:var(--mono); font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--ink-dim); }
-  .footer img { display:block; height:32px; width:auto; margin:0 auto 14px; opacity:0.7; }
-</style>
-</head>
-<body>
-  <header class="topbar">
-    <div class="wrap">
-      <span class="logo"><img src="${logoSrc}" alt="CFO by Design"></span>
-      <span class="tier-chip">Marketing Audit</span>
-    </div>
-  </header>
-
-  <section class="hello">
-    <div class="wrap">
-      <p class="eyebrow">◆ Solomon Marketing Audit &middot; ${e(new Date().toISOString().slice(0,10))}</p>
-      <h1>${e(host)}, your <em>digital audit</em> is back.</h1>
-      <p class="target">Target: <a href="${e(signals.url)}" target="_blank" rel="noopener">${e(signals.url)}</a>${signals.redirected ? " · redirected to " + e(signals.finalUrl || "") : ""} · HTTP ${e(signals.status || "n/a")}</p>
-    </div>
-  </section>
-
-  <div class="report-card">
+  return `<div class="report-card">
     <div class="badge">${e(agent.badge || "AUDIT")}</div>
     <h1 class="card-headline">${e(agent.headline || "")}</h1>
     <p class="card-opener">${e(agent.opener || "")}</p>
@@ -1054,15 +1021,9 @@ function buildInternalAuditPage(agent, signals) {
         <pre>${e(rawSignals)}</pre>
       </details>
     </div>
-  </div>
-
-  <footer class="footer">
-    <img src="${logoSrc}" alt="CFO by Design">
-    <div>CFO by Design &middot; Solomon marketing audit</div>
-  </footer>
-</body>
-</html>`;
+  </div>`;
 }
+
 
 // Inline-styled HTML report body. Inline styles are essential for email clients
 // (Gmail / Outlook / Apple Mail) which strip <style> blocks.
@@ -3849,19 +3810,35 @@ export default {
             { status: 400, headers: htmlHeaders() }
           );
         }
-        try {
-          const { agent, signals } = await runMarketingAudit(target, env, mode);
-          return new Response(buildAuditPage(agent, signals, mode, env), { status: 200, headers: htmlHeaders() });
-        } catch (err) {
-          return new Response(
-            `<!DOCTYPE html><meta charset=utf-8><title>Audit failed</title>
-             <body style="font-family:Georgia,serif;max-width:640px;margin:80px auto;padding:20px;color:#1a1a1a;">
-             <h1 style="font-size:20px;color:#b91c1c;">Audit failed</h1>
-             <pre style="background:#fdf8f0;padding:14px;border-radius:6px;white-space:pre-wrap;font-size:12px;">${escapeHtml(err && err.message || String(err))}</pre>
-             </body>`,
-            { status: 500, headers: htmlHeaders() }
-          );
-        }
+        // Streaming response: send the shell + loading state immediately so the
+        // browser paints something in <1s, then keep the stream open while the
+        // audit runs and swap the loading card for the real card body in-place.
+        const normalizedTarget = normalizeAuditUrl(target) || target;
+        const host = (() => { try { return new URL(normalizedTarget).host; } catch { return target; } })();
+        const encoder = new TextEncoder();
+        const { readable, writable } = new TransformStream();
+        const writer = writable.getWriter();
+        // Send shell + loading mount synchronously so the first bytes hit the
+        // wire before we start the audit.
+        writer.write(encoder.encode(buildAuditShellStart(host, normalizedTarget, mode)));
+        // Run the audit asynchronously; when it returns, swap the mount and close.
+        (async () => {
+          try {
+            const { agent, signals } = await runMarketingAudit(target, env, mode);
+            const cardHtml = buildAuditCardBody(agent, signals, mode, env);
+            const swap = `<script>(function(){var m=document.getElementById('audit-mount');if(m){m.outerHTML=${JSON.stringify(cardHtml)};}})();</script>`;
+            await writer.write(encoder.encode(swap));
+            await writer.write(encoder.encode(buildAuditShellEnd()));
+          } catch (err) {
+            const errCard = buildAuditErrorCard(err);
+            const swap = `<script>(function(){var m=document.getElementById('audit-mount');if(m){m.outerHTML=${JSON.stringify(errCard)};}})();</script>`;
+            try { await writer.write(encoder.encode(swap)); } catch {}
+            try { await writer.write(encoder.encode(buildAuditShellEnd())); } catch {}
+          } finally {
+            try { await writer.close(); } catch {}
+          }
+        })();
+        return new Response(readable, { status: 200, headers: htmlHeaders() });
       }
       if (path === "/asksolomon/rubric") {
         if (!checkConsolePassword(request, env)) {
