@@ -850,54 +850,6 @@ const AUDIT_PAGE_CSS = `
 
 const LOGO_SRC = "https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png";
 
-// Detect user agents from social / messaging preview unfurlers. When one of
-// these hits /marketing we serve a small metadata-only response instead of
-// the streaming audit — bots often wait for EOF before parsing OG tags, and
-// holding the connection open 30–60s while Claude runs makes them abandon
-// the fetch. This list covers the major platforms; it's a substring match
-// so it catches version suffixes ("facebookexternalhit/1.1", etc.).
-function isSocialCrawler(ua) {
-  if (!ua) return false;
-  const s = ua.toLowerCase();
-  return (
-    s.includes("facebookexternalhit") ||
-    s.includes("facebookcatalog") ||
-    s.includes("twitterbot") ||
-    s.includes("linkedinbot") ||
-    s.includes("slackbot") ||
-    s.includes("slack-imgproxy") ||
-    s.includes("discordbot") ||
-    s.includes("whatsapp") ||
-    s.includes("telegrambot") ||
-    s.includes("pinterest") ||
-    s.includes("redditbot") ||
-    s.includes("skypeuripreview") ||
-    s.includes("bingpreview") ||
-    s.includes("applebot") ||
-    s.includes("iframely") ||
-    s.includes("embedly") ||
-    s.includes("linkpreview") ||
-    s.includes("mattermost") ||
-    s.includes("googlebot")
-  );
-}
-
-// Metadata-only response served to social crawlers. Full <head> with OG /
-// Twitter tags, minimal <body> so bots have everything they need on close.
-// Bots ignore the body — the head is what matters for preview cards.
-function buildAuditPreviewOnly(host, targetUrl, env = {}) {
-  const e = escapeHtml;
-  const shell = buildAuditShellStart(host, targetUrl, "public", env);
-  const headEnd = shell.indexOf("</head>");
-  const headOnly = headEnd >= 0 ? shell.slice(0, headEnd + 7) : shell;
-  return `${headOnly}
-<body style="font-family:Georgia,serif;background:#0a0e14;color:#f2ecdf;text-align:center;padding:80px 24px;">
-  <h1 style="font-family:'Playfair Display',Georgia,serif;font-size:32px;margin:0 0 12px;">View Your Digital Presence Diagnostic</h1>
-  <p style="color:#a8b0bd;font-size:16px;">Marketing audit for <strong>${e(host)}</strong>, powered by CFO by Design.</p>
-</body>
-</html>`;
-}
-
 // Immediate HTML sent to the client before the audit runs. Includes topbar, hero,
 // and an animated loading card at #audit-mount that gets swapped in-place when
 // the audit finishes.
@@ -3986,48 +3938,63 @@ export default {
         }
         const normalizedTarget = normalizeAuditUrl(target) || target;
         const host = (() => { try { return new URL(normalizedTarget).host; } catch { return target; } })();
-        // If the request is from a social-preview crawler (iMessage / Facebook /
-        // Slack / LinkedIn / Twitter / WhatsApp / Discord etc.), do NOT stream
-        // the audit — many unfurlers wait for EOF before parsing metadata, and
-        // our streaming path holds the connection open for 30–60s while Claude
-        // runs. They would time out and fall back to a bare URL, defeating the
-        // OG tags. Instead, serve a small closed response with just the head /
-        // OG tags and a minimal body. Public mode only — internal audits emit
-        // no OG tags, so crawlers have nothing to consume there anyway.
-        const userAgent = request.headers.get("user-agent") || "";
-        if (mode === "public" && isSocialCrawler(userAgent)) {
-          return new Response(
-            buildAuditPreviewOnly(host, normalizedTarget, env),
-            { status: 200, headers: htmlHeaders() }
-          );
+        // Serve a CLOSED response to every client with the OG-tagged shell and
+        // a small <script> that fetches /marketing/render for the actual audit
+        // body. This makes UA sniffing unnecessary — social unfurlers (iMessage,
+        // Facebook, Slack, LinkedIn, WhatsApp, Discord, Twitter, whatever) get
+        // their preview metadata immediately without waiting on Claude, and
+        // real browsers run the fetch script to fill in the card. The earlier
+        // streaming approach held the connection open for 30–60s, which some
+        // unfurlers (iMessage in particular, which sends a Safari-style UA
+        // rather than facebookexternalhit/Applebot) timed out on.
+        const modeParam = mode === "internal" ? "&mode=internal" : "";
+        const renderUrl = `/marketing/render?url=${encodeURIComponent(target)}${modeParam}`;
+        const shell = buildAuditShellStart(host, normalizedTarget, mode, env);
+        const fetchScript = `
+<script>
+(function () {
+  var mount = document.getElementById('audit-mount');
+  if (!mount) return;
+  fetch(${JSON.stringify(renderUrl)}, { cache: 'no-store', headers: { 'Accept': 'text/html' } })
+    .then(function (r) { return r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)); })
+    .then(function (html) { mount.outerHTML = html; })
+    .catch(function (err) {
+      mount.outerHTML = ${JSON.stringify(buildAuditErrorCard({ message: "The audit failed to load. Please refresh." }))};
+      // eslint-disable-next-line no-console
+      try { console.error('audit render failed:', err); } catch (_) {}
+    });
+})();
+</script>`;
+        return new Response(
+          shell + fetchScript + buildAuditShellEnd(),
+          { status: 200, headers: htmlHeaders() }
+        );
+      }
+
+      // GET /marketing/render?url=<domain>&mode=<mode> — runs the audit and
+      // returns ONLY the .report-card HTML fragment. Called by client-side JS
+      // from /marketing (and /audit). No auth. Cache-Control no-store so
+      // browsers don't reuse stale audits.
+      if (path === "/marketing/render" || path === "/audit/render") {
+        const target = url.searchParams.get("url");
+        const mode = url.searchParams.get("mode") === "internal" ? "internal" : "public";
+        if (!target) {
+          return new Response(buildAuditErrorCard({ message: "Missing url parameter." }),
+            { status: 400, headers: { ...htmlHeaders(), "Cache-Control": "no-store" } });
         }
-        // Streaming response: send the shell + loading state immediately so the
-        // browser paints something in <1s, then keep the stream open while the
-        // audit runs and swap the loading card for the real card body in-place.
-        const encoder = new TextEncoder();
-        const { readable, writable } = new TransformStream();
-        const writer = writable.getWriter();
-        // Send shell + loading mount synchronously so the first bytes hit the
-        // wire before we start the audit.
-        writer.write(encoder.encode(buildAuditShellStart(host, normalizedTarget, mode, env)));
-        // Run the audit asynchronously; when it returns, swap the mount and close.
-        (async () => {
-          try {
-            const { agent, signals } = await runMarketingAudit(target, env, mode);
-            const cardHtml = buildAuditCardBody(agent, signals, mode, env);
-            const swap = `<script>(function(){var m=document.getElementById('audit-mount');if(m){m.outerHTML=${JSON.stringify(cardHtml)};}})();</script>`;
-            await writer.write(encoder.encode(swap));
-            await writer.write(encoder.encode(buildAuditShellEnd()));
-          } catch (err) {
-            const errCard = buildAuditErrorCard(err);
-            const swap = `<script>(function(){var m=document.getElementById('audit-mount');if(m){m.outerHTML=${JSON.stringify(errCard)};}})();</script>`;
-            try { await writer.write(encoder.encode(swap)); } catch {}
-            try { await writer.write(encoder.encode(buildAuditShellEnd())); } catch {}
-          } finally {
-            try { await writer.close(); } catch {}
-          }
-        })();
-        return new Response(readable, { status: 200, headers: htmlHeaders() });
+        try {
+          const { agent, signals } = await runMarketingAudit(target, env, mode);
+          const cardHtml = buildAuditCardBody(agent, signals, mode, env);
+          return new Response(cardHtml, {
+            status: 200,
+            headers: { ...htmlHeaders(), "Cache-Control": "no-store" },
+          });
+        } catch (err) {
+          return new Response(buildAuditErrorCard(err), {
+            status: 500,
+            headers: { ...htmlHeaders(), "Cache-Control": "no-store" },
+          });
+        }
       }
       if (path === "/asksolomon/rubric") {
         if (!checkConsolePassword(request, env)) {
