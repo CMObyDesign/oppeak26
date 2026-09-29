@@ -528,6 +528,7 @@ async function callClaudeWithSystem(prompt, systemText, env) {
 
 function buildAuditPage(agent, signals) {
   const e = escapeHtml;
+  const logoSrc = "https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png";
   const priColor = (p) =>
     p === "CRITICAL" ? "#b91c1c" :
     p === "HIGH" ? "#d97706" :
@@ -577,10 +578,14 @@ function buildAuditPage(agent, signals) {
   summary { cursor:pointer; font-family:Arial,sans-serif; font-size:11px; letter-spacing:1.5px; color:#6b7280; text-transform:uppercase; }
   pre { background:#111827; color:#e5e7eb; padding:14px; overflow:auto; border-radius:6px; font-size:11px; line-height:1.4; }
   .site-link { color:#92400e; word-break:break-all; }
-  .footer { margin-top:32px; font-family:Arial,sans-serif; font-size:11px; color:#9ca3af; letter-spacing:1px; text-transform:uppercase; }
+  .footer { margin-top:32px; font-family:Arial,sans-serif; font-size:11px; color:#9ca3af; letter-spacing:1px; text-transform:uppercase; text-align:center; }
+  .brandbar { display:flex; align-items:center; justify-content:center; padding:24px 0 4px; border-bottom:1px solid #e5e7eb; margin-bottom:28px; }
+  .brandbar img { max-height:56px; width:auto; display:block; }
+  .footer-logo { display:block; max-height:36px; width:auto; margin:0 auto 12px; opacity:0.6; }
 </style>
 </head><body>
 <div class="wrap">
+  <div class="brandbar"><img src="${e(logoSrc)}" alt="CFO by Design"></div>
   <div class="eyebrow">Marketing audit &middot; ${e(new Date().toISOString().slice(0,10))}</div>
   <div class="badge">${e(agent.badge || "AUDIT")}</div>
   <h1>${e(agent.headline || "")}</h1>
@@ -616,7 +621,10 @@ function buildAuditPage(agent, signals) {
     </details>
   </div>
 
-  <div class="footer">CFO by Design &middot; Solomon marketing audit &middot; internal test surface</div>
+  <div style="margin-top:32px;">
+    <img class="footer-logo" src="${e(logoSrc)}" alt="CFO by Design">
+    <div class="footer">CFO by Design &middot; Solomon marketing audit</div>
+  </div>
 </div>
 </body></html>`;
 }
