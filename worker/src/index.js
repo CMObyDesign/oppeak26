@@ -2014,7 +2014,11 @@ async function handleReport(contactId, env) {
           var contactId = pathParts[pathParts.length - 1] || '';
           var pollUrl = window.location.origin + '/report/' + encodeURIComponent(contactId) + '/status';
 
-          function showReady() {
+          // Fallback shown if the seamless in-place swap fails for any reason
+          // (fetch error, HTML parse error, target elements missing). Keeps the
+          // pre-existing "See My Results" button so the flow still works — we
+          // just prefer to skip it when we can.
+          function showReadyFallback() {
             clearInterval(stepInterval);
             var wrap = document.getElementById('analyzing');
             if (!wrap) return;
@@ -2032,6 +2036,36 @@ async function handleReport(contactId, env) {
                 'text-decoration:none;transition:transform .15s;">' +
                 'See My Results <span style="font-size:18px;line-height:1;margin-left:6px;">→</span>' +
               '</a>';
+          }
+
+          // Seamless swap: fetch the current /report page fresh (now with a
+          // populated report field), parse it, extract the .report-card
+          // contents, and drop them into the current DOM in place of the
+          // analyzing spinner. No reload, no intermediate button. Matches the
+          // /marketing streaming UX. Falls back to showReadyFallback on any
+          // error (parse failure, missing target, network hiccup) so the flow
+          // still resolves.
+          function showReady() {
+            clearInterval(stepInterval);
+            fetch(window.location.pathname, { cache: 'no-store' })
+              .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+              .then(function (html) {
+                var doc = new DOMParser().parseFromString(html, 'text/html');
+                var fresh = doc.querySelector('.report-card');
+                var here = document.querySelector('.report-card');
+                if (!fresh || !here) throw new Error('missing report card');
+                here.innerHTML = fresh.innerHTML;
+                // The CTA panel (upgrade block) lives OUTSIDE the .report-card
+                // when tier=free (isPending=true suppresses it). Bring it over
+                // if the fresh page has one and we don't.
+                var freshCta = doc.querySelector('.cta-panel');
+                var hereCta = document.querySelector('.cta-panel');
+                if (freshCta && !hereCta) {
+                  here.parentNode.insertBefore(freshCta, here.nextSibling);
+                }
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+              })
+              .catch(function () { showReadyFallback(); });
           }
 
           function showTimeout() {
