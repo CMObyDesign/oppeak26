@@ -939,7 +939,12 @@ function buildAuditPage(agent, signals, mode = "public", env = {}) {
 // Client-facing card body (goes inside #audit-mount).
 function buildPublicCardBody(agent, signals, env = {}) {
   const e = escapeHtml;
-  const bookingLink47 = (env && env.BOOKING_LINK_47) || CONFIG.BOOKING_LINK_47;
+  // Prefer AUDIT_BOOKING_URL (marketing-audit-specific consult calendar).
+  // Fall back to BOOKING_LINK_47 if unset — that keeps the audit working
+  // whether the env var is deployed or not.
+  const bookingUrl = (env && env.AUDIT_BOOKING_URL)
+    || (env && env.BOOKING_LINK_47)
+    || CONFIG.BOOKING_LINK_47;
   const priColor = (p) =>
     p === "CRITICAL" ? "#b91c1c" :
     p === "HIGH" ? "#d97706" :
@@ -1006,7 +1011,7 @@ function buildPublicCardBody(agent, signals, env = {}) {
     <div class="cta-block">
       <h3>${e(agent.nextStepHeadline || "Ready for the specific playbook?")}</h3>
       <p>${e(agent.nextStepBody || "")}</p>
-      <a class="cta-btn" href="${e(bookingLink47)}" target="_blank" rel="noopener">Book a 30-minute call with a human <span class="arrow">→</span></a>
+      <a class="cta-btn" href="${e(bookingUrl)}" target="_blank" rel="noopener">Book a 30-minute call with a human <span class="arrow">→</span></a>
     </div>
   </div>`;
 }
