@@ -850,6 +850,54 @@ const AUDIT_PAGE_CSS = `
 
 const LOGO_SRC = "https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png";
 
+// Detect user agents from social / messaging preview unfurlers. When one of
+// these hits /marketing we serve a small metadata-only response instead of
+// the streaming audit — bots often wait for EOF before parsing OG tags, and
+// holding the connection open 30–60s while Claude runs makes them abandon
+// the fetch. This list covers the major platforms; it's a substring match
+// so it catches version suffixes ("facebookexternalhit/1.1", etc.).
+function isSocialCrawler(ua) {
+  if (!ua) return false;
+  const s = ua.toLowerCase();
+  return (
+    s.includes("facebookexternalhit") ||
+    s.includes("facebookcatalog") ||
+    s.includes("twitterbot") ||
+    s.includes("linkedinbot") ||
+    s.includes("slackbot") ||
+    s.includes("slack-imgproxy") ||
+    s.includes("discordbot") ||
+    s.includes("whatsapp") ||
+    s.includes("telegrambot") ||
+    s.includes("pinterest") ||
+    s.includes("redditbot") ||
+    s.includes("skypeuripreview") ||
+    s.includes("bingpreview") ||
+    s.includes("applebot") ||
+    s.includes("iframely") ||
+    s.includes("embedly") ||
+    s.includes("linkpreview") ||
+    s.includes("mattermost") ||
+    s.includes("googlebot")
+  );
+}
+
+// Metadata-only response served to social crawlers. Full <head> with OG /
+// Twitter tags, minimal <body> so bots have everything they need on close.
+// Bots ignore the body — the head is what matters for preview cards.
+function buildAuditPreviewOnly(host, targetUrl, env = {}) {
+  const e = escapeHtml;
+  const shell = buildAuditShellStart(host, targetUrl, "public", env);
+  const headEnd = shell.indexOf("</head>");
+  const headOnly = headEnd >= 0 ? shell.slice(0, headEnd + 7) : shell;
+  return `${headOnly}
+<body style="font-family:Georgia,serif;background:#0a0e14;color:#f2ecdf;text-align:center;padding:80px 24px;">
+  <h1 style="font-family:'Playfair Display',Georgia,serif;font-size:32px;margin:0 0 12px;">View Your Digital Presence Diagnostic</h1>
+  <p style="color:#a8b0bd;font-size:16px;">Marketing audit for <strong>${e(host)}</strong>, powered by CFO by Design.</p>
+</body>
+</html>`;
+}
+
 // Immediate HTML sent to the client before the audit runs. Includes topbar, hero,
 // and an animated loading card at #audit-mount that gets swapped in-place when
 // the audit finishes.
@@ -3936,11 +3984,26 @@ export default {
             { status: 400, headers: htmlHeaders() }
           );
         }
+        const normalizedTarget = normalizeAuditUrl(target) || target;
+        const host = (() => { try { return new URL(normalizedTarget).host; } catch { return target; } })();
+        // If the request is from a social-preview crawler (iMessage / Facebook /
+        // Slack / LinkedIn / Twitter / WhatsApp / Discord etc.), do NOT stream
+        // the audit — many unfurlers wait for EOF before parsing metadata, and
+        // our streaming path holds the connection open for 30–60s while Claude
+        // runs. They would time out and fall back to a bare URL, defeating the
+        // OG tags. Instead, serve a small closed response with just the head /
+        // OG tags and a minimal body. Public mode only — internal audits emit
+        // no OG tags, so crawlers have nothing to consume there anyway.
+        const userAgent = request.headers.get("user-agent") || "";
+        if (mode === "public" && isSocialCrawler(userAgent)) {
+          return new Response(
+            buildAuditPreviewOnly(host, normalizedTarget, env),
+            { status: 200, headers: htmlHeaders() }
+          );
+        }
         // Streaming response: send the shell + loading state immediately so the
         // browser paints something in <1s, then keep the stream open while the
         // audit runs and swap the loading card for the real card body in-place.
-        const normalizedTarget = normalizeAuditUrl(target) || target;
-        const host = (() => { try { return new URL(normalizedTarget).host; } catch { return target; } })();
         const encoder = new TextEncoder();
         const { readable, writable } = new TransformStream();
         const writer = writable.getWriter();
