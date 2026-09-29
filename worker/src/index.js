@@ -3396,18 +3396,19 @@ export default {
         return new Response(CONSOLE_PAGE, { status: 200, headers: htmlHeaders() });
       }
       // GET /audit?url=<domain> — public marketing audit endpoint.
+      // Also served at /marketing (branded path for asksolomon.cfobydesign.com/marketing).
       // URL-in, audit-out. No auth: worst abuse is Anthropic token cost. If that
       // becomes a problem, add a per-IP rate limit rather than restoring the
       // password gate (which was awkward from a browser tab).
-      if (path === "/audit") {
+      if (path === "/audit" || path === "/marketing") {
         const target = url.searchParams.get("url");
         if (!target) {
           return new Response(
-            `<!DOCTYPE html><meta charset=utf-8><title>Audit</title>
+            `<!DOCTYPE html><meta charset=utf-8><title>Marketing audit</title>
              <body style="font-family:Georgia,serif;max-width:520px;margin:80px auto;padding:20px;">
              <h1 style="font-size:20px;">Marketing audit</h1>
              <p>Missing <code>url</code> parameter. Try
-             <code>/audit?url=example.com</code>.</p></body>`,
+             <code>${escapeHtml(path)}?url=example.com</code>.</p></body>`,
             { status: 400, headers: htmlHeaders() }
           );
         }
@@ -3523,8 +3524,9 @@ export default {
     }
 
     // POST /audit — JSON marketing audit. No auth (matches GET /audit).
+    // Also served at /marketing for symmetry with the GET route.
     // Body: { url: "example.com" }. Response: { success, agent, signals }.
-    if (path === "/audit") {
+    if (path === "/audit" || path === "/marketing") {
       let body;
       try { body = await request.json(); }
       catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
