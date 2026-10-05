@@ -1189,6 +1189,7 @@ async function buildReportPage(reportBody, tierLabel, contactName, tier, env, co
 
   // Tier-appropriate CTA block rendered UNDER the report card
   let cta = "";
+  let couponScript = "";
   if (tier === "free") {
     // Beta cohort bypass: user enters SOLOMON50 → CTA swaps to survey (skips paywall).
     // Only active when env.UPGRADE_47_URL is set (coupon target = upgrade47Href).
@@ -1196,7 +1197,7 @@ async function buildReportPage(reportBody, tierLabel, contactName, tier, env, co
     // would just re-point at payment — pointless — so we hide the coupon row entirely.
     const couponEnabled = Boolean(env && env.UPGRADE_47_URL);
     const couponRow = couponEnabled ? `
-        <div class="coupon-row" id="coupon-row">
+        <div class="coupon-row" id="coupon-row" data-contact-id="${e(contactId || "")}" data-apply-token="${e(applyToken || "")}">
           <label for="coupon-input" class="coupon-label">Have a beta code?</label>
           <div class="coupon-inputgroup">
             <input id="coupon-input" type="text" placeholder="Enter code (e.g. SOLOMON50)" autocomplete="off" spellcheck="false">
@@ -1204,9 +1205,10 @@ async function buildReportPage(reportBody, tierLabel, contactName, tier, env, co
           </div>
           <p class="coupon-msg" id="coupon-msg" aria-live="polite"></p>
         </div>` : "";
-    const couponScript = couponEnabled ? `
+    couponScript = couponEnabled ? `
         <script>
-          (function () {
+          window.initReportCoupon = function () {
+            var row = document.getElementById('coupon-row');
             var input = document.getElementById('coupon-input');
             var apply = document.getElementById('coupon-apply');
             var msg = document.getElementById('coupon-msg');
@@ -1214,9 +1216,11 @@ async function buildReportPage(reportBody, tierLabel, contactName, tier, env, co
             var label = document.getElementById('upgrade-label');
             var micro = document.getElementById('upgrade-micro');
             var chip = document.querySelector('.cta-panel .upgrade-chip');
+            if (!row || !input || !apply || !msg || !cta || !label || !micro || apply.dataset.couponBound) return;
+            apply.dataset.couponBound = 'true';
             var VALID = { 'SOLOMON50': { href: cta.dataset.betaHref, label: 'Claim My Beta Access — Full Diagnostic', micro: 'Beta cohort · SOLOMON50 applied · skip payment, go straight to intake.' } };
-            var CONTACT_ID = ${JSON.stringify(contactId || "")};
-            var APPLY_TOKEN = ${JSON.stringify(applyToken || "")};
+            var CONTACT_ID = row.dataset.contactId;
+            var APPLY_TOKEN = row.dataset.applyToken;
             function tryCoupon() {
               var code = (input.value || '').trim().toUpperCase();
               if (!code) return;
@@ -1293,7 +1297,8 @@ async function buildReportPage(reportBody, tierLabel, contactName, tier, env, co
             }
             apply.addEventListener('click', tryCoupon);
             input.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); tryCoupon(); } });
-          })();
+          };
+          window.initReportCoupon();
         </script>` : "";
     cta = `
       <div class="cta-panel">
@@ -1307,7 +1312,6 @@ ${couponRow}
           <span class="arrow">→</span>
         </a>
         <p class="micro" id="upgrade-micro">One-time payment. No subscription. No follow-up sales calls unless you book one.</p>
-${couponScript}
       </div>`;
   } else if (tier === "paid_47") {
     // "Keep going" opens a sales/story page for the Deep Dive (env-configurable).
@@ -1478,6 +1482,7 @@ ${couponScript}
   </div>
 
   ${isPending ? "" : cta}
+  ${couponScript}
 
   <footer class="footer">
     CFO by Design · cfobydesign.com
@@ -2078,14 +2083,26 @@ async function handleReport(contactId, env) {
                 var fresh = doc.querySelector('.report-card');
                 var here = document.querySelector('.report-card');
                 if (!fresh || !here) throw new Error('missing report card');
+                // Race guard: /status said ready but the fresh render might still
+                // show the analyzing spinner (eventually-consistent GHL read, or
+                // the status/report endpoints disagreeing). Fall back so polling
+                // continues instead of swapping a spinner in for a spinner.
+                var freshHello = doc.querySelector('.hello');
+                var hereHello = document.querySelector('.hello');
+                if (!freshHello || !hereHello || fresh.querySelector('#analyzing')) throw new Error('report not ready');
+                // Replace the "GENERATING YOUR REPORT · diagnostic is on the way"
+                // greeting with the "YOUR REPORT · READY · diagnostic is back" one.
+                hereHello.replaceWith(freshHello);
                 here.innerHTML = fresh.innerHTML;
                 // The CTA panel (upgrade block) lives OUTSIDE the .report-card
                 // when tier=free (isPending=true suppresses it). Bring it over
-                // if the fresh page has one and we don't.
+                // if the fresh page has one and we don't, then re-bind the
+                // coupon script against the freshly inserted #coupon-row.
                 var freshCta = doc.querySelector('.cta-panel');
                 var hereCta = document.querySelector('.cta-panel');
                 if (freshCta && !hereCta) {
                   here.parentNode.insertBefore(freshCta, here.nextSibling);
+                  if (window.initReportCoupon) window.initReportCoupon();
                 }
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               })
