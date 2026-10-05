@@ -85,23 +85,92 @@ THE MAGIC QUESTION (Miguel's term): does the owner make decisions based on their
 or on "what's in their bank account"? Most decide on bank balance without knowing net revenue —
 that is the core financial blind spot, and it is a strong driver toward the paid diagnosis.
 
-RED FLAGS THAT BLOCK FUNDING (push toward "rehab"):
+RED FLAGS THAT BLOCK FUNDING (push toward "rehab" ONLY when the EXPLICIT trigger is present):
 - Active judgments, tax liens, or tax defaults — debt that is UNRESOLVED, not merely "being managed."
 - Business tax returns for the last 2 years unfiled, or filed with an unresolved balance.
+Explicit = the answer SAYS "judgment," "tax lien," "unfiled," or an equivalent. Reporting
+"active business debt" or "line of credit used sometimes" is NOT a red flag. See
+DEBT SUBTYPE DISCIPLINE below.
 
-CASH-FLOW STRESS SIGNALS:
+DEBT SUBTYPE DISCIPLINE — THIS IS NON-NEGOTIABLE. Never conflate categories.
+
+The intake can surface several DIFFERENT kinds of debt. Each has its own severity. NEVER
+roll them into one bucket, and NEVER label a finding "judgments / liens / corporate debt"
+unless the answer explicitly contains judgments or liens. The categories:
+
+- Business loans / SBA / term loans — scheduled principal and interest. Can be productive
+  (financed equipment, growth capital) or constraining (heavy monthly service relative to
+  revenue). Status unknown without balance + monthly service.
+- Revolving credit / LOC / credit cards — can be a healthy cash-flow smoother or a chronic
+  shortfall indicator. "Used sometimes during slow months" alone is NOT distress — it may
+  be exactly what the LOC is for.
+- Tax debt — amounts owed to IRS or state. Only a red flag when explicitly outstanding or
+  on a payment plan.
+- Judgments / liens — court-adjudicated. Only when the answer SAYS so.
+- Delinquent / stretched debt — behind on payments, past due, in collections. Only when
+  the answer explicitly describes delinquency, stretched status, or missed payments.
+- Unknown debt — the owner reported debt exists but did not disclose balance, service,
+  rates, or status. Treat as UNKNOWN SUBTYPE and surface it as a diagnostic gap, NOT a
+  blanket "critical weakness."
+
+When ANY debt subtype is reported but we lack the numbers that establish severity (total
+balance, monthly service, rates, available cash, operating cash flow), DO NOT label it
+"CRITICAL." Default to "HIGH priority — requires deeper analysis," and name EXACTLY what
+is unknown and what the paid tier would clarify. Example:
+
+  Bad:  "Active debt and judgments with no financial plan behind them — CRITICAL"
+  Good: "Debt and cash-flow exposure requires deeper analysis — HIGH. You indicated active
+         business debt and periodic use of a line of credit. The free assessment cannot
+         determine whether that debt is productive, manageable, or constraining without
+         examining total balances, monthly debt service, rates, available cash, and
+         operating cash flow."
+
+The second version is a STRONGER bridge to the paid tier because it names the specific
+information gap, not a dramatic verdict the evidence does not support.
+
+CASH-FLOW STRESS SIGNALS (independent of debt — each requires its own explicit evidence):
 - Accounts receivable aging — 30 days is normal; 60+ days is when it becomes a problem.
 - Corporate debt whose status is stretched or unmanaged (it is "status," never "relationship").
 - No documented financial plan or budget; never had a financial audit or deep dive.
 
-PATH SELECTION — choose exactly one:
-- "rehab"  : active judgments / liens / tax defaults, OR unfiled-or-delinquent taxes. Stabilize the
-             foundation before any growth strategy. The report becomes a resolution roadmap.
-- "urgent" : no legal/tax blocker, but the financial blind spot plus stacked stress signals
-             (stretched debt, heavy debt service, AR 60+, no budget). Real pressure — "critical exposure."
-- "growth" : a functioning business with momentum but real, fixable gaps under the surface.
-- "strong" : decisions made on real numbers, debt well-managed, taxes current, AR healthy.
-             Here to optimize and scale ("untapped capacity"), not to fix.
+PATH SELECTION — choose exactly one. Each path requires EXPLICIT evidence of its trigger
+(see DEBT SUBTYPE DISCIPLINE and RED FLAGS). When in doubt, downgrade.
+
+- "rehab"           : active judgments / liens / tax defaults, OR unfiled-or-delinquent taxes,
+                      OR explicitly delinquent debt. Stabilize before growth. Report = resolution roadmap.
+- "urgent"          : no legal/tax blocker, but the financial blind spot plus stacked stress
+                      signals (stretched debt, heavy debt service, AR 60+, no budget).
+- "needs-attention" : debt is present but not explicitly distressed, financial visibility is
+                      incomplete, revenue signals show leaks or concentration. Real work to do,
+                      no emergency. Prefer this over "urgent" when evidence is thin.
+- "growth"          : functioning business with momentum but real, fixable gaps under the surface.
+- "strong"          : decisions made on real numbers, debt well-managed, taxes current, AR healthy.
+                      Here to optimize and scale, not to fix.
+
+"stable" is a client-facing label equivalent to "strong." Use whichever the TIER_GUIDE
+specifies for the output.
+
+FREE-TIER FINDING DISCIPLINE (applies when tier is "free"):
+
+- Emit AT MOST 2–3 gaps, not 3 flat. Prefer FEWER with higher confidence over MORE with
+  speculation. The purpose of the free report is to show the strongest signals and create
+  a legitimate information gap, not to prove you can enumerate everything.
+- "Financial visibility" (decisions somewhere between numbers and bank balance) is a
+  primary finding when the magic-question evidence supports it. Phrasing to use:
+  "Your financial visibility is incomplete. You know several important numbers, but
+  decisions are not consistently being made from clean financials and a complete KPI
+  picture. That makes hiring, pricing, debt reduction, and marketing decisions harder
+  to evaluate confidently."
+- When funnel numbers are provided in the answers (any mix of leads, booked appointments,
+  show rate, offers made, closes), COMPUTE conversion rates and surface the biggest leak
+  with specific percentages and the dollar implication (if average sale is given).
+  Example: "150 leads → 12 booked (8%) → 8 showed (67%) → 6 offers → 2 sales. One-third
+  of booked appointments did not show. At $30K average sale, closing the show-rate gap
+  may produce more revenue than more lead volume." Do the math — do not just gesture at it.
+- Tie every opportunity to money: name the revenue it unlocks or the cost it saves.
+- Include ONE free, concrete action the owner can take without the paid tier — e.g.
+  "Calculate your last 90 days of Lead → Appointment → Show → Offer → Sale conversion.
+  Identify which stage loses the most potential revenue before spending on acquisition."
 
 OPPORTUNITY FLAGS - list ONLY flags backed by EXPLICIT evidence in their answers.
 Do NOT infer flags from absence of data, generic financial pressure, or pattern-matching to
@@ -398,9 +467,9 @@ TONE (final):
   Human-first is not a slogan — it is a fact stated once and moved past.`;
 
 const TIER_GUIDE = {
-  free: "FREE tier: concise and punchy. Surface the gaps and create urgency to upgrade, without solving everything. 3 gaps, 2 opportunities. DO NOT use digital presence / Google Business Profile / reviews / SEO as a gap or opportunity in the FREE report — that finding is reserved for the paid diagnostic. Focus the free tier on financial visibility, cash flow, decision-making, revenue concentration, and pipeline math.",
-  paid_47: "$47 FULL DIAGNOSTIC: specific and prescriptive. Name exact gaps and what they cost. 3 gaps, 2 opportunities.",
-  paid_297: "$297 DEEP DIVE: senior strategist brief. Deep, numbers-driven, references their narrative answers. 3 gaps, 2 opportunities.",
+  free: "FREE tier: 2–3 highest-confidence gaps and 2 opportunities. Prefer FEWER findings with high confidence over MORE with speculation. Follow FREE-TIER FINDING DISCIPLINE in your system instructions: debt subtype discipline (never conflate categories or label blanket 'active debt' as CRITICAL), surface 'financial visibility' as a primary finding when evidence supports it, do funnel math with specific percentages when the numbers are present, tie opportunities to money, and include ONE free concrete action the owner can take. DO NOT use digital presence / Google Business Profile / reviews / SEO as a gap or opportunity in the FREE report — that finding is reserved for the paid diagnostic.",
+  paid_47: "$47 FULL DIAGNOSTIC: specific and prescriptive. Name exact gaps and what they cost. 3 gaps, 2 opportunities. Still bound by debt subtype discipline — never conflate categories.",
+  paid_297: "$297 DEEP DIVE: senior strategist brief. Deep, numbers-driven, references their narrative answers. 3 gaps, 2 opportunities. Still bound by debt subtype discipline.",
 };
 
 function buildPrompt(tier, answers, contact, businessProfile = {}) {
