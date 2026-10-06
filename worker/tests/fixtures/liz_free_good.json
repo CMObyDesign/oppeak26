@@ -1,0 +1,40 @@
+{
+  "path": "needs-attention",
+  "badge": "NEEDS ATTENTION",
+  "headline": "Your $60K in debt and $6,500 sitting 60+ days past due are quietly blocking the second production lead and second market you already know you need.",
+  "opener": "Liz, you've built something genuinely rare in residential remodeling \u2014 a single design-and-build team that owns every project from first conversation to final punch-list, and clients are saying so out loud: 'they actually finished when they said they would.' That reputation is your most valuable asset. But right now, $1,800 a month in debt service plus $6,500 in receivables that are 60-plus days overdue are doing exactly what you described \u2014 keeping you from making the hire and the market move without adding more debt. The financial picture isn't in crisis, but the gap between where you're managing and where you need to be making decisions is costing you momentum.",
+  "context": "This is a business with a clear competitive edge and a defined next move \u2014 the constraint isn't demand, it's the financial visibility and A/R discipline required to fund that move on your own terms.",
+  "gaps": [
+    {
+      "title": "Bank-balance decisions on a $60K debt load \u2014 no budget, no formal financials",
+      "impact": "You said decisions are 'mostly on what's in the bank account' and you've never had a formal financial audit. With $1,800/month in debt service running against a revenue stream that has 60+ day A/R drag, you cannot reliably tell whether a given month's bank balance means you are profitable or just temporarily flush from a recent draw. That uncertainty is the direct reason you said the debt service and A/R lag are 'what's keeping us from making the move' to hire a second production lead.",
+      "priority": "HIGH"
+    },
+    {
+      "title": "$6,500 at 60+ days overdue \u2014 A/R aging is past the point where collection risk rises sharply",
+      "impact": "You reported $18,000 at 30-plus days and $6,500 at 60-plus days. The 30-day bucket is normal in construction; the 60-day bucket is not. At $1,800/month in debt service, that $6,500 represents more than three full months of loan payments sitting uncollected. If that 60-day balance slips further, it compresses the exact cash cushion you said you'd need to avoid 'dipping into the LOC' if one referral partner went away.",
+      "priority": "HIGH"
+    },
+    {
+      "title": "Top-three referral partners drive a disproportionate share of booked jobs \u2014 one departure hits debt service in 30\u201360 days",
+      "impact": "You said if two referral partners went away at once, you'd struggle to cover debt service without drawing on the line of credit. That concentration means your $60K debt load \u2014 currently described as 'current but stretched' \u2014 is only one relationship change away from becoming genuinely stressed. A business that can't absorb the loss of a single referral channel without touching its LOC is carrying more revenue-concentration risk than its debt posture can comfortably handle.",
+      "priority": "HIGH"
+    }
+  ],
+  "opportunities": [
+    {
+      "title": "Collect the 60-day A/R and formalize draw schedules to fund the second production lead without new debt",
+      "desc": "You already said 20% more profit on the same revenue would let you hire a second production lead and open a second market without needing more debt \u2014 recovering the $6,500 at 60-plus days and tightening draw-schedule terms on future projects puts cash back in the operating account where it belongs, reducing LOC dependence and accelerating that hire on the timeline you described.",
+      "impact": "Fund next hire without adding to $60K debt load"
+    },
+    {
+      "title": "Monetize the 400-client back-end with a home-care or protection plan \u2014 a channel you already own",
+      "desc": "You identified roughly 400 past clients who already trust your team's craftsmanship and on-time delivery, and you said you 'haven't monetized the back-end at all' \u2014 a recurring home-care or protection plan sold to even 10% of that list at a modest annual fee would create predictable revenue that runs independently of new-job referral volume, directly reducing the referral-concentration risk that currently threatens your debt coverage.",
+      "impact": "New recurring revenue from existing trust base \u2014 diversifies away from top-3 referral dependency"
+    }
+  ],
+  "nextStepHeadline": "One free action you can take this week",
+  "nextStepBody": "Pull every open invoice right now and sort by age: anything 60-plus days gets a direct phone call this week \u2014 not an email \u2014 with a specific payment date requested. Then write down what you collected last quarter versus what was invoiced, and calculate the gap. That number is the minimum cash your A/R process is costing you before you spend a dollar on a new market or a new hire. When you're ready to look at the full picture \u2014 the debt posture, the referral concentration, and what a clean budget would actually show about your capacity to fund a second production lead \u2014 that's the conversation a paid diagnostic is built for.",
+  "opportunityFlags": [],
+  "strategistBrief": "INTERNAL ONLY \u2014 DO NOT SHOW CLIENT.\n\nPath verdict \u2014 needs-attention: No red flags (taxes filed and current, no judgments or liens). Debt is explicitly 'current but stretched' at $60K total / $1,800/month service \u2014 not distressed, but real. The magic-question answer is unambiguous: 'mostly on what's in the bank account, no formal budget, never had a formal financial audit.' A/R has a 60-day bucket ($6,500) which is past normal construction aging. Referral concentration is explicitly flagged by the client herself \u2014 two partners gone = LOC draw needed to cover debt service. That combination of bank-balance decision-making + stretched debt + 60-day A/R + referral concentration is a clear needs-attention signal, not yet urgent because nothing is delinquent or in default.\n\nTop upsell angles: (1) Full financial diagnostic \u2014 the gap between bank-balance management and actual profitability is the core pain. She can't evaluate the second-market move or the second production lead hire with confidence until she has clean financials, a real budget, and a debt-paydown schedule modeled against operating cash flow. The paid tier gives her that. (2) Back-end revenue planning \u2014 she has 400 past clients and zero monetization of that list. A recurring home-care plan is a natural CFO-adjacent conversation: pricing, margin, cash-flow timing, and how it offsets referral concentration risk. Frame it as a revenue architecture project, not a marketing idea.\n\nSuggested opener for the strategy call: 'You told us you're mostly making decisions based on what's in the bank account \u2014 walk me through what a typical month looks like: when do you feel flush, when do you feel tight, and does that rhythm match when you actually think you've had a good month in the business?'"
+}

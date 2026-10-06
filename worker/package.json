@@ -1,0 +1,10 @@
+{
+  "name": "swot-engine-worker",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Cloudflare Worker for the Solomon diagnostic engine. package.json exists only to declare ESM mode and expose the test script; Workers deploy is driven by wrangler.toml at the repo root and does not use this file.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/"
+  }
+}

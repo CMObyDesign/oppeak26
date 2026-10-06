@@ -523,6 +523,14 @@ Return ONLY valid JSON — no markdown code fences, no text before or after — 
 }
 
 async function callClaude(prompt, env) {
+  // Test-only escape hatch: when a stub is installed on env, deliver its
+  // canned response instead of calling the real API. Prefixed with `__` to
+  // signal "not production surface" and ignored unless a test explicitly
+  // sets it. The stub receives the same (prompt, env) and must return the
+  // raw text Claude would have returned (same shape callers already parse).
+  if (typeof env?.__CLAUDE_STUB__ === "function") {
+    return env.__CLAUDE_STUB__(prompt, env);
+  }
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -1639,8 +1647,35 @@ function normalizeAnswers(raw) {
   return [];
 }
 
-async function updateGHLContact(contactId, fields, env) {
+// Intake-completeness gate shared between the GHL survey webhook and any
+// future caller that needs to decide whether a tier's answer set is complete
+// enough to run Solomon on. Each tier has a known minimum answer count
+// (free: 3 curated, paid_47: ~16 fields, paid_297: ~20); we floor the
+// thresholds a bit below the real-world question count so an operator
+// omitting one or two optional questions doesn't trip the gate.
+//
+// Returns a plain object the caller can inspect:
+//   { ok: boolean, answersSeen: number, minExpected: number, tier: string }
+// `ok: false` means the caller should defer (webhook returns 409) and let
+// the retry cycle re-fire once all fields have landed.
+const INTAKE_MIN_ANSWERS = Object.freeze({ free: 3, paid_47: 10, paid_297: 12 });
+function checkIntakeCompleteness(answers, tier) {
+  const answersSeen = Array.isArray(answers) ? answers.length : 0;
+  const minExpected = INTAKE_MIN_ANSWERS[tier] || 0;
+  return {
+    ok: !minExpected || answersSeen >= minExpected,
+    answersSeen,
+    minExpected,
+    tier: tier || null,
+  };
+}
+
+async function updateGHLContact(contactId, fields, env, opts = {}) {
   if (!contactId || !env.GHL_API_KEY) return false;
+  if (opts.dryRun) {
+    console.log(`[DRY_RUN] updateGHLContact skipped contactId=${contactId} fieldCount=${fields?.length || 0}`);
+    return true;
+  }
   const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}`, {
     method: "PUT",
     headers: {
@@ -1714,8 +1749,12 @@ async function resolveGHLContactId(contact, env, mode = "match_only") {
   return null;
 }
 
-async function addGHLTag(contactId, tags, env) {
+async function addGHLTag(contactId, tags, env, opts = {}) {
   if (!contactId || !env.GHL_API_KEY || !tags.length) return false;
+  if (opts.dryRun) {
+    console.log(`[DRY_RUN] addGHLTag skipped contactId=${contactId} tags=${tags.join(",")}`);
+    return true;
+  }
   const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}/tags`, {
     method: "POST",
     headers: {
@@ -1774,9 +1813,13 @@ const TIER_REQUIRED_TAG = {
 // Fire an event to the HL Inbound Webhook (Workflow trigger). Non-blocking:
 // runs inside a Promise.allSettled so its failure never breaks the primary
 // GHL writeback. Skips silently if no webhook URL is configured.
-async function fireTrackingEvent(payload, env) {
+async function fireTrackingEvent(payload, env, opts = {}) {
   const url = env.HL_TRACKING_WEBHOOK || CONFIG.HL_TRACKING_WEBHOOK;
   if (!url) return { skipped: true };
+  if (opts.dryRun) {
+    console.log(`[DRY_RUN] fireTrackingEvent skipped event=${payload?.event_type || "?"}`);
+    return { skipped: true, dryRun: true };
+  }
   try {
     const res = await fetch(url, {
       method: "POST",
@@ -2506,6 +2549,11 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
   const contact = body.contact || {};
   const businessProfile = body.businessProfile || {};
   const answers = normalizeAnswers(body.answers);
+  // Explicit dry-run flag — the request may set body.dry_run:true to force
+  // the handler through its full Claude + render path with NO GHL side
+  // effects (writeback, tag, note, tracking). Takes precedence over any
+  // other signal; the response carries dryRun:true so the caller knows.
+  const dryRun = body.dry_run === true;
   if (!answers.length) return json({ success: false, error: "No answers provided" }, 400);
 
   // Build the user prompt the normal way. Then call Claude with either the default
@@ -2587,9 +2635,11 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
       ].join("\n");
 
       ctx.waitUntil(Promise.allSettled([
-        updateGHLContact(contactId, fields, env),
-        addGHLTag(contactId, tags, env),
-        addGHLNote(contactId, noteBody, env),
+        updateGHLContact(contactId, fields, env, { dryRun }),
+        addGHLTag(contactId, tags, env, { dryRun }),
+        // addGHLNote does not yet honor dryRun; a dry-run request still skips
+        // it here so the console-note audit trail stays accurate.
+        dryRun ? Promise.resolve(true) : addGHLNote(contactId, noteBody, env),
       ]));
       emailedTo = contact.email || null; // for UI display only; no delivery email actually fires
     } catch (err) {
@@ -2608,6 +2658,7 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
     reportHtml,
     emailedTo, // null if no email provided; otherwise the address that will receive the workflow email
     elapsedMs, // Anthropic API round-trip time in ms; ~drops after cache hits
+    dryRun,
     ...agent,
   });
 }
@@ -3525,9 +3576,11 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
 
   const contactId = body.contactId || body.contact_id || body.contact?.id;
   const tier = body.tier || "free";
-
-  if (!contactId) return json({ success: false, error: "Missing contactId in webhook body" }, 400);
-  if (!env.GHL_API_KEY) return json({ success: false, error: "GHL not configured" }, 500);
+  // Explicit dry-run flag — see docs/SOLOMON_ARCHITECTURE.md. When true, the
+  // handler runs Solomon end-to-end but every GHL side effect is skipped
+  // (writeback, tags, tracking event). The response reports dryRun:true so
+  // the caller knows nothing landed on the contact.
+  const dryRun = body.dry_run === true;
 
   const contact = await fetchGHLContact(contactId, env);
   if (!contact) return json({ success: false, error: "Contact not found in GHL" }, 404);
@@ -3584,20 +3637,18 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   // minutes later with the full intake and overwrites the path tag but
   // the report HTML / email have already shipped).
   //
-  // Each tier has a known minimum answer count (free: 3 curated, paid_47:
-  // ~16 fields, paid_297: ~20). Returning 409 lets GHL's workflow retry
-  // policy re-fire once the rest of the fields have persisted.
-  const MIN_ANSWERS = { free: 3, paid_47: 10, paid_297: 12 };
-  const minForTier = MIN_ANSWERS[tier] || 0;
-  if (minForTier && answers.length < minForTier) {
-    console.warn(`[from-ghl-survey] intake short (${answers.length} of ${minForTier} expected for ${tier}) for contact ${contact.id}; deferring`);
+  // Returning 409 lets GHL's workflow retry policy re-fire once the rest of
+  // the fields have persisted.
+  const completeness = checkIntakeCompleteness(answers, tier);
+  if (!completeness.ok) {
+    console.warn(`[from-ghl-survey] intake short (${completeness.answersSeen} of ${completeness.minExpected} expected for ${tier}) for contact ${contact.id}; deferring`);
     return json({
       success: false,
       error: "Intake not yet complete; retry when all survey fields have landed",
       tier,
       contactId: contact.id,
-      answersSeen: answers.length,
-      minExpected: minForTier,
+      answersSeen: completeness.answersSeen,
+      minExpected: completeness.minExpected,
     }, 409);
   }
 
@@ -3693,7 +3744,7 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
     // Chained: writeback must succeed before either the email-trigger tag
     // (paid_47 / paid_297 replay / free) OR the paid_297-fresh writeback
     // signal tag (swot_playbook_written) lands.
-    updateGHLContact(contactId, fields, env).then(async ok => {
+    updateGHLContact(contactId, fields, env, { dryRun }).then(async ok => {
       if (!ok) {
         console.warn("[from-ghl-survey] Contact writeback failed; skipping post-write tags");
         return;
@@ -3719,9 +3770,9 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
           .includes("swot_paid_297");
         if (nowPaid) postWriteTags.push("swot_report_ready_paid_297");
       }
-      if (postWriteTags.length) return addGHLTag(contactId, postWriteTags, env);
+      if (postWriteTags.length) return addGHLTag(contactId, postWriteTags, env, { dryRun });
     }),
-    addGHLTag(contactId, lifecycleTags, env),
+    addGHLTag(contactId, lifecycleTags, env, { dryRun }),
     fireTrackingEvent({
       event_type: `report_generated_${tier}`,
       tier,
@@ -3735,7 +3786,7 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
       opportunity_flags: agent.opportunityFlags || [],
       answers,
       source: "ghl_survey",
-    }, env),
+    }, env, { dryRun }),
   ]));
 
   return json({
@@ -3746,6 +3797,7 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
     flags: agent.opportunityFlags || [],
     elapsedMs,
     tagsAppliedAsync: lifecycleTags,
+    dryRun,
   });
 }
 // ----- end GHL survey webhook -----
@@ -3952,6 +4004,10 @@ async function handleResetContactTags(request, env) {
 // Like callClaude but accepts an explicit rubric (for the console's override path).
 // When the rubric is the default, cache_control still applies — repeated runs hit the cache.
 async function callClaudeWithRubric(prompt, rubric, env) {
+  // Test-only escape hatch — see callClaude above.
+  if (typeof env?.__CLAUDE_STUB__ === "function") {
+    return env.__CLAUDE_STUB__(prompt, env, rubric);
+  }
   const isDefault = rubric === ASSESSMENT_RUBRIC;
   const systemBlock = [
     isDefault
@@ -4596,4 +4652,25 @@ export default {
 
     return json({ success: true, tier, ...agent, bookingLink });
   },
+};
+
+// -----------------------------------------------------------------------------
+// Named exports — for `worker/tests/*` only. The Workers runtime ignores these
+// (it only consumes `export default`), and no production code path imports from
+// this module as named exports. Keep this block append-only; adding a name here
+// does not change runtime behavior.
+// -----------------------------------------------------------------------------
+export {
+  ASSESSMENT_RUBRIC,
+  TIER_GUIDE,
+  SURVEY_FIELD_MAP,
+  SOLOMON_OWNED_FIELDS,
+  INTAKE_MIN_ANSWERS,
+  buildPrompt,
+  parseAgentJson,
+  normalizeAnswers,
+  checkIntakeCompleteness,
+  updateGHLContact,
+  addGHLTag,
+  fireTrackingEvent,
 };
