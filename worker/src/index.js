@@ -35,6 +35,7 @@ import {
 } from "./db.js";
 import { normalizeContactFields, flatNormalized } from "./normalize.js";
 import { deriveMetrics } from "./derived.js";
+import { buildFactsForPrompt, validateStructuredFindings } from "./findings.js";
 
 // Versioning for canonical records (Phase 1 architecture — see
 // docs/SOLOMON_ARCHITECTURE.md and docs/CLOUDFLARE_DATA_MODEL.md). Each
@@ -45,7 +46,12 @@ import { deriveMetrics } from "./derived.js";
 // generator than today's code.
 const ASSESSMENT_VERSION = "v1";    // intake question set
 const RUBRIC_VERSION     = "r2.0";  // ASSESSMENT_RUBRIC — bumped on PR #52 debt-subtype rewrite
-const PROMPT_VERSION     = "p1.0";  // buildPrompt() format
+// buildPrompt() format. Bumped to p2.0 on Phase 2C: the prompt now
+// optionally includes a FACTS + DERIVED METRICS block and the output
+// JSON shape adds an additive structured_findings array. The rubric
+// string itself is unchanged — only the user-message template and the
+// output schema evolved.
+const PROMPT_VERSION     = "p2.0";
 
 const CONFIG = {
   CLAUDE_MODEL: "claude-sonnet-4-6",
@@ -497,7 +503,7 @@ const TIER_GUIDE = {
   paid_297: "$297 DEEP DIVE: senior strategist brief. Deep, numbers-driven, references their narrative answers. 3 gaps, 2 opportunities. Still bound by debt subtype discipline.",
 };
 
-function buildPrompt(tier, answers, contact, businessProfile = {}) {
+function buildPrompt(tier, answers, contact, businessProfile = {}, factsBundle = null) {
   const answerBlock = answers
     .map((a) => `- ${a.question}\n  Answer: ${a.answer}`)
     .join("\n");
@@ -516,6 +522,36 @@ function buildPrompt(tier, answers, contact, businessProfile = {}) {
     ? `\nBUSINESS PROFILE:\n${profileLines.join("\n")}\n`
     : "";
 
+  // Phase 2C: inject the deterministic FACTS and DERIVED METRICS the
+  // model should cite verbatim in its structured_findings output. Only
+  // emit the sections when the caller computed them (webhook path);
+  // console runs that didn't normalize pass null and the sections are
+  // omitted — the model falls back to its existing prose-only behavior.
+  // Code — not the model — did the math. The model's job is to interpret.
+  let factsBlock = "";
+  if (factsBundle && (Object.keys(factsBundle.facts || {}).length || (factsBundle.derived_metrics || []).length)) {
+    const factsJson = JSON.stringify(factsBundle.facts || {}, null, 2);
+    const metricsJson = JSON.stringify(factsBundle.derived_metrics || [], null, 2);
+    factsBlock = `
+## FACTS (deterministic — computed from their intake answers)
+
+These are the typed values the normalizer produced from their answers.
+When a structured_findings entry cites an intake field, use ONLY a key
+from this object as evidence.field. Do NOT invent a key.
+
+${factsJson}
+
+## DERIVED METRICS (deterministic — do NOT recompute)
+
+These ratios and dollar passthroughs were computed in code from the
+FACTS above. When a structured_findings entry cites a ratio, use ONLY
+a metric name from this list as derived_metrics.metric, with the same
+value. Do NOT invent a metric. Do NOT reinvent the math.
+
+${metricsJson}
+`;
+  }
+
   // NOTE: ASSESSMENT_RUBRIC is sent in the Anthropic `system` block (with cache_control),
   // NOT inlined here. Keep this user-message dynamic-only so cache hits land.
   return `CLIENT: ${contact.name || "Business Owner"}${profileBlock}
@@ -523,7 +559,7 @@ TIER: ${tier}
 
 THEIR ANSWERS:
 ${answerBlock}
-
+${factsBlock}
 TASK: Assess this business using the methodology in your system instructions. ${guide}
 Every sentence must reference THEIR actual answers — no generic filler, no invented numbers.
 
@@ -543,8 +579,40 @@ Return ONLY valid JSON — no markdown code fences, no text before or after — 
   "nextStepHeadline": "short",
   "nextStepBody": "2-3 sentences leading to a strategy call",
   "opportunityFlags": ["MERCHANT_PROCESSING_OPP"],
-  "strategistBrief": "INTERNAL-ONLY brief for the CFO consultant — NEVER shown to the client. 2-3 short paragraphs covering: (1) why this lead got their path verdict — which specific signals in their answers triggered it; (2) the top 2 upsell angles based on the opportunity flags fired and what's underneath their answers; (3) a single suggested opener question the consultant should use to open the strategy call. Write in consultant-to-consultant voice — direct, no fluff."
-}`;
+  "strategistBrief": "INTERNAL-ONLY brief for the CFO consultant — NEVER shown to the client. 2-3 short paragraphs covering: (1) why this lead got their path verdict — which specific signals in their answers triggered it; (2) the top 2 upsell angles based on the opportunity flags fired and what's underneath their answers; (3) a single suggested opener question the consultant should use to open the strategy call. Write in consultant-to-consultant voice — direct, no fluff.",
+  "structured_findings": [
+    {
+      "finding_id": "kebab-case-stable-slug",
+      "category": "cash_flow | debt | revenue | visibility | team | other",
+      "severity": "low | medium | high",
+      "evidence": [
+        { "field": "<question_key from FACTS>", "value": "<the matching value>" }
+      ],
+      "derived_metrics": [
+        { "metric": "<metric name from DERIVED METRICS>", "value": "<the matching value>" }
+      ],
+      "interpretation": "one-line what this means for the business",
+      "recommendation": "one-line what to investigate or do"
+    }
+  ]
+}
+
+STRUCTURED FINDINGS RULES (strict — a finding that breaks any rule is
+rejected before storage):
+- Only populate structured_findings when FACTS or DERIVED METRICS are
+  provided above. If both sections are absent, return an empty array
+  (or omit the key entirely).
+- Every evidence.field MUST be a key that appears in FACTS. Do NOT
+  invent a key.
+- Every derived_metrics.metric MUST be a name that appears in
+  DERIVED METRICS. Do NOT invent a metric. Do NOT recompute a ratio
+  the deterministic engine already produced.
+- Every finding MUST have at least one evidence entry OR one
+  derived_metric entry — a finding grounded in nothing is nothing.
+- The existing gaps[] and opportunities[] arrays MUST still be
+  populated as before. structured_findings is ADDITIONAL, not a
+  replacement — the renderer continues to read the prose arrays.
+`;
 }
 
 async function callClaude(prompt, env) {
@@ -4010,7 +4078,27 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   };
 
   const businessProfile = {}; // Reserved for future paid-tier profile fields.
-  const prompt = buildPrompt(tier, answers, contactPayload, businessProfile);
+
+  // Phase 2A + 2B + 2C: compute normalization and derived metrics BEFORE
+  // Solomon runs so we can inject the deterministic FACTS and DERIVED
+  // METRICS into the prompt. The rubric is instructed to cite only these
+  // typed values when emitting structured_findings; the post-parse
+  // validator (below) rejects any finding that references a field or
+  // metric that isn't here. On catalog unavailability we log and
+  // continue with facts=null; Solomon still produces the prose output.
+  let normalizedAnswers = null;
+  let derivedMetrics = null;
+  let factsBundle = null;
+  try {
+    const catalog = await fetchGHLCustomFieldsCatalog(env);
+    normalizedAnswers = normalizeContactFields(contact, catalog);
+    derivedMetrics = deriveMetrics(flatNormalized(normalizedAnswers));
+    factsBundle = buildFactsForPrompt(normalizedAnswers, derivedMetrics);
+  } catch (err) {
+    console.warn(`[handleGHLSurveyWebhook] normalization/derived skipped (catalog unavailable): ${err?.message || err}`);
+  }
+
+  const prompt = buildPrompt(tier, answers, contactPayload, businessProfile, factsBundle);
   const rubric = ASSESSMENT_RUBRIC;
 
   // Idempotency: skip if we already ran for this contact+tier moments ago
@@ -4035,6 +4123,29 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
     agent.opportunityFlags = (agent.opportunityFlags || []).filter(f => f !== "DIGITAL_PRESENCE_OPP");
   }
 
+  // Phase 2C: validate structured findings against the deterministic
+  // facts + derived metrics. Any finding that cites a field that isn't
+  // in the normalized intake, or a metric that wasn't computed by
+  // deriveMetrics(), is REJECTED here — before it reaches the stored
+  // diagnostic_json or the HTML renderer. Invalid findings are logged
+  // (reasons included) and stripped. The prose arrays (gaps,
+  // opportunities) are untouched; this layer only polices the
+  // structured_findings addition.
+  if (Array.isArray(agent?.structured_findings)) {
+    const flatFacts = factsBundle?.facts || flatNormalized(normalizedAnswers || []);
+    const { valid, invalid } = validateStructuredFindings(agent.structured_findings, {
+      normalized: flatFacts,
+      derivedMetrics: derivedMetrics || [],
+    });
+    if (invalid.length) {
+      console.warn(
+        `[handleGHLSurveyWebhook] stripped ${invalid.length} invalid structured_findings for contact ${contact.id}: ` +
+        invalid.map((x) => `${x.finding?.finding_id || "<no id>"} (${x.reasons.join("; ")})`).join(" | ")
+      );
+    }
+    agent.structured_findings = valid;
+  }
+
   const reportHtml = buildReportHtml(agent);
 
   // Canonical write (Phase 1b). Runs synchronously BEFORE the GHL
@@ -4043,26 +4154,6 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   // the response includes it so callers can trace which record this
   // generation produced. Dry runs, missing D1 binding, and duplicate
   // source_event_id all surface as `skipped` with a reason.
-  // Phase 2A: compute the normalized answer entries from the contact's
-  // hydrated customFields. The catalog is fetched again here but hits
-  // the 5-min TTL cache that answersFromContactFields warmed above —
-  // no extra GHL API call. If the catalog is unavailable we log and
-  // continue with normalized=null; writeCanonicalRecord stores a null
-  // normalized_answers_json and Phase 2B skips derived metrics.
-  let normalizedAnswers = null;
-  let derivedMetrics = null;
-  try {
-    const catalog = await fetchGHLCustomFieldsCatalog(env);
-    normalizedAnswers = normalizeContactFields(contact, catalog);
-    // Phase 2B: derive deterministic metrics from the flat normalized
-    // view. Code — not the LLM — computes every ratio Solomon cites.
-    // If any required input is missing or carries the "unknown" sentinel,
-    // the derived-metrics engine simply does not emit the metric; it
-    // never fabricates a denominator.
-    derivedMetrics = deriveMetrics(flatNormalized(normalizedAnswers));
-  } catch (err) {
-    console.warn(`[handleGHLSurveyWebhook] normalization/derived skipped (catalog unavailable): ${err?.message || err}`);
-  }
 
   const canonical = await writeCanonicalRecord(env, {
     contact: { id: contactId, ...contact },
@@ -5115,3 +5206,6 @@ export { FIELD_NORMALIZERS, PRIMITIVES, normalizeContactFields, flatNormalized }
 
 // Phase 2B: derived-metrics engine. Same re-export pattern.
 export { deriveMetrics, findMetric } from "./derived.js";
+
+// Phase 2C: structured findings schema + validator + prompt-facts builder.
+export { validateStructuredFinding, validateStructuredFindings, buildFactsForPrompt } from "./findings.js";

@@ -12,8 +12,8 @@ database up.
 | 1b | Dual-write from `handleGHLSurveyWebhook` and `handleConsoleRun`, R2 HTML artifact | shipped |
 | 1c | `/report/{contactId}` reads D1 with GHL fallback; `?v=N` / `?report_id=` history | shipped |
 | 2a | Deterministic normalization — populates `normalized_answers_json` | shipped |
-| **2b** | Deterministic derived-metrics engine — populates `derived_metrics_json` | **shipped (this change)** |
-| 2c | Structured findings schema + evidence-backed validation | not yet |
+| 2b | Deterministic derived-metrics engine — populates `derived_metrics_json` | shipped |
+| **2c** | Structured findings schema + evidence-backed validation | **shipped (this change)** |
 | 2d | Report renderer consumes structured findings | not yet |
 
 Phase 1c is **safe to ship before the D1 and R2 bindings are wired**.
@@ -296,11 +296,77 @@ intake exactly as spec'd.
 Phase 2C will add structured findings that CITE these metrics by name,
 giving each finding `derived_metrics: [{metric, value}]` provenance.
 
-## Not yet
+## Structured findings (Phase 2C)
 
-- Structured findings schema inside `diagnostic_json` — Phase 2C
-- Renderer that consumes structured findings — Phase 2D
-- Strategist feedback capture — Phase 3
+The diagnosis becomes data; the wording stays presentation. Solomon now
+emits an **additive** `structured_findings` array inside `diagnostic_json`
+alongside the existing `gaps` / `opportunities` prose arrays. Each entry
+names the specific intake fields it relies on and the deterministic
+metrics it cites. The schema:
 
-The schema has columns reserved for the storage shapes so Phases 2C+
+```json
+{
+  "finding_id": "ar-aging-001",
+  "category": "cash_flow",
+  "severity": "high",
+  "evidence": [
+    { "field": "ar_60_plus", "value": 6500 },
+    { "field": "monthly_debt_service", "value": 1800 }
+  ],
+  "derived_metrics": [
+    { "metric": "ar_60_plus_months_of_debt_service", "value": 3.61 }
+  ],
+  "interpretation": "Meaningfully aged receivables may be adding avoidable cash-flow pressure.",
+  "recommendation": "Improve collection cadence before assuming additional expansion debt."
+}
+```
+
+### Prompt-side wiring
+
+When the submission has normalized + derived data available (the GHL
+webhook path), `buildPrompt` injects two sections into the user message:
+
+- `## FACTS` — the flat `question_key → value` object. Solomon's
+  structured findings may cite ONLY keys from this object.
+- `## DERIVED METRICS` — the Phase 2B metrics array. Solomon's
+  structured findings may cite ONLY metric names from this list, with
+  the same values; it must not reinvent a ratio the engine already
+  computed.
+
+When facts/derived are absent (console runs that didn't normalize),
+both sections are omitted and Solomon falls back to prose-only output.
+`structured_findings` is additive — the renderer continues to read the
+prose arrays for Phase 2C.
+
+### Validation (strict — any violation strips the finding)
+
+The post-parse validator in `worker/src/findings.js`
+(`validateStructuredFindings`) rejects any finding that:
+
+1. Cites an `evidence.field` that is not a question_key in the
+   normalized intake, or whose stored value is null.
+2. Cites a primitive `evidence.value` that does not match the stored
+   normalized value.
+3. Cites a `derived_metrics.metric` that was not computed by the
+   deterministic engine, or whose value differs by more than ±1%.
+4. Has zero evidence AND zero derived_metrics (grounded in nothing).
+5. Has empty `interpretation` or `recommendation`.
+6. Has an invalid `severity` (must be `low` | `medium` | `high`).
+7. Has an empty `finding_id` or `category`.
+
+Invalid findings are logged with their rejection reasons and stripped
+from `agent.structured_findings` before storage. The prose arrays
+(`gaps`, `opportunities`) are untouched by this layer. This is the
+exact PR #52 debt-subtype discipline played out at the structural
+layer: a finding that would claim `tax_lien = true` without supporting
+intake is rejected before it reaches the customer.
+
+### Not yet
+
+- Phase 2D: HTML renderer consumes `structured_findings` and renders
+  prose from the structured record. Phase 2C's prose fields
+  (`gaps`, `opportunities`) continue to serve the renderer until then.
+- Phase 3: strategist feedback capture against individual finding_ids.
+
+The schema has columns reserved for the storage shapes so Phase 2D+
 don't require a migration.
