@@ -29,6 +29,9 @@ import {
   nextReportVersion,
   insertReportVersion,
   recordGhlSyncAttempt,
+  latestSuccessfulReport,
+  reportByVersion,
+  reportById,
 } from "./db.js";
 
 // Versioning for canonical records (Phase 1 architecture — see
@@ -2217,13 +2220,84 @@ async function handleReportStatus(contactId, env) {
 // GET /report/{contactId} — serve the contact's stored report as a styled standalone HTML page.
 // Tier is determined from the contact's tags (swot_paid_297 / swot_paid_47 / swot_free_lead).
 // Used by "View Report Online" links written to swot_report_path on every successful run.
-async function handleReport(contactId, env) {
+// Phase 1c: /report resolution policy, in short:
+//   - Default read (no query params): D1 latest successful → GHL fallback
+//     for pre-canonical contacts (and when the D1 binding is missing).
+//   - Historical read (`?v=N` or `?report_id=<uuid>`): D1 only. History
+//     belongs to D1; a historical URL must never reconstruct from the
+//     owner's current GHL fields (SOLOMON_ARCHITECTURE Answer snapshot
+//     contract). Missing D1 or missing row → 404.
+//
+// HTML source for a resolved D1 row: R2 artifact first (immutable); if
+// the R2 object is missing or the binding isn't wired, re-render from
+// `diagnostic_json` with buildReportHtml. This covers two real cases:
+// (a) rows written before the R2 binding existed, and (b) rows whose
+// R2 artifact was deleted or expired. Either way the diagnostic survives.
+const REPORT_ID_SHAPE = /^[0-9a-f-]{32,40}$/i;
+function tierLabelOf(tier) {
+  if (tier === "paid_297") return "Business Playbook";
+  if (tier === "paid_47")  return "Full Diagnostic";
+  return "SWOT Diagnostic";
+}
+
+async function fetchArtifactHtml(env, r2Key) {
+  if (!r2Key || !env?.SOLOMON_REPORTS) return null;
+  try {
+    const obj = await env.SOLOMON_REPORTS.get(r2Key);
+    if (!obj) return null;
+    return await obj.text();
+  } catch (err) {
+    console.error(`[fetchArtifactHtml] R2 get failed for ${r2Key}: ${err?.message || err}`);
+    return null;
+  }
+}
+
+// Resolve HTML for a D1 report row. Prefers R2; falls back to re-rendering
+// the stored diagnostic JSON with buildReportHtml. Returns null only when
+// both the R2 artifact AND the diagnostic are unusable (e.g. corrupted
+// JSON) — callers should treat that as a signal to serve the analyzing
+// shell or 404.
+async function resolveReportHtml(env, report) {
+  const r2Html = await fetchArtifactHtml(env, report?.r2_html_key);
+  if (r2Html) return r2Html;
+  // Fall back to re-rendering from the stored diagnostic. This keeps the
+  // read working for rows written before R2 was wired, and for cases
+  // where the R2 artifact was manually deleted. The output is the same
+  // HTML the writer would have produced; the diagnostic JSON is the
+  // canonical content, R2 is just a cache of its rendering.
+  try {
+    if (report?.diagnostic && typeof report.diagnostic === "object") {
+      return buildReportHtml(report.diagnostic);
+    }
+  } catch (err) {
+    console.error(`[resolveReportHtml] re-render failed for report ${report?.id}: ${err?.message || err}`);
+  }
+  return null;
+}
+
+async function handleReport(contactId, env, requestUrl) {
   if (!contactId) {
     return new Response("Missing contact id", { status: 400, headers: htmlHeaders() });
   }
   if (!env.GHL_API_KEY) {
     return new Response("Server not configured", { status: 500, headers: htmlHeaders() });
   }
+
+  // Parse history selectors. `v` = integer version; `report_id` = UUID of a
+  // specific report_versions row. Either one puts us on the history path
+  // (D1-only, no GHL fallback for the HTML body).
+  const versionParam  = requestUrl?.searchParams?.get("v") || null;
+  const reportIdParam = requestUrl?.searchParams?.get("report_id") || null;
+  if (versionParam && reportIdParam) {
+    return new Response("Pass only one of ?v or ?report_id", { status: 400, headers: htmlHeaders() });
+  }
+  if (versionParam && !/^\d+$/.test(versionParam)) {
+    return new Response("Invalid ?v (expected positive integer)", { status: 400, headers: htmlHeaders() });
+  }
+  if (reportIdParam && !REPORT_ID_SHAPE.test(reportIdParam)) {
+    return new Response("Invalid ?report_id", { status: 400, headers: htmlHeaders() });
+  }
+  const isHistoryRead = Boolean(versionParam || reportIdParam);
 
   const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}`, {
     headers: {
@@ -2237,6 +2311,63 @@ async function handleReport(contactId, env) {
 
   const data = await res.json().catch(() => ({}));
   const c = data?.contact || {};
+
+  // History path: D1-only. No GHL custom-field fallback. If the D1 binding
+  // is missing OR the specific row is missing OR it belongs to another
+  // contact, we 404 — the historical URL must not quietly resolve to a
+  // different generation than the one its holder shared.
+  if (isHistoryRead) {
+    const db = dbFromEnv(env);
+    if (!db) {
+      return new Response("Historical reports require the D1 binding", { status: 404, headers: htmlHeaders() });
+    }
+    let report;
+    if (reportIdParam) {
+      report = await reportById(db, reportIdParam);
+      // Prevent crafted URL that points at another contact's report. The
+      // contactId in the URL path must match the stored row's contact_id.
+      if (report && report.contact_id !== contactId) report = null;
+    } else {
+      report = await reportByVersion(db, contactId, parseInt(versionParam, 10));
+    }
+    if (!report) {
+      return new Response("Report version not found", { status: 404, headers: htmlHeaders() });
+    }
+    const html = await resolveReportHtml(env, report);
+    if (!html) {
+      return new Response("Report artifact missing", { status: 410, headers: htmlHeaders() });
+    }
+    const contactName =
+      c.firstName || c.contactName || [c.firstName, c.lastName].filter(Boolean).join(" ") || "Business Owner";
+    return new Response(
+      await buildReportPage(html, tierLabelOf(report.tier), contactName, report.tier, env, c.email || "", contactId),
+      { status: 200, headers: htmlHeaders() }
+    );
+  }
+
+  // Default read: try D1 latest successful (matches HighLevel's
+  // "latest-state" projection). If no D1 row for this contact yet
+  // (pre-Phase-1b submission, or binding missing), fall through to the
+  // existing GHL custom-field read below.
+  const db = dbFromEnv(env);
+  if (db) {
+    const latest = await latestSuccessfulReport(db, contactId);
+    if (latest) {
+      const html = await resolveReportHtml(env, latest);
+      if (html) {
+        const contactName =
+          c.firstName || c.contactName || [c.firstName, c.lastName].filter(Boolean).join(" ") || "Business Owner";
+        const readyPrelude = `<script>try{sessionStorage.removeItem('cfobd-elapsed');}catch(e){}</script>`;
+        return new Response(
+          await buildReportPage(readyPrelude + html, tierLabelOf(latest.tier), contactName, latest.tier, env, c.email || "", contactId),
+          { status: 200, headers: htmlHeaders() }
+        );
+      }
+    }
+  }
+
+  // Fallback: GHL custom-field read. This is the existing path and
+  // continues to serve every contact until D1 has a row for them.
   const tags = (c.tags || []).map((t) => String(t).toLowerCase());
   const customFields = c.customFields || [];
 
@@ -4338,7 +4469,7 @@ export default {
       }
       const reportMatch = path.match(/^\/report\/([A-Za-z0-9_-]+)$/);
       if (reportMatch) {
-        return handleReport(reportMatch[1], env);
+        return handleReport(reportMatch[1], env, url);
       }
       if (path === "/asksolomon") {
         return new Response(CONSOLE_PAGE, { status: 200, headers: htmlHeaders() });
@@ -4937,4 +5068,9 @@ export {
   writeCanonicalRecord,
   writeReportArtifact,
   recordGhlWriteback,
+  // Phase 1c read helpers
+  handleReport,
+  resolveReportHtml,
+  fetchArtifactHtml,
+  tierLabelOf,
 };

@@ -9,21 +9,20 @@ database up.
 | Phase | What it does | State |
 |---|---|---|
 | 1a | Schema + migration + data-access module | shipped |
-| **1b** | Dual-write from `handleGHLSurveyWebhook` and `handleConsoleRun`, R2 HTML artifact | **shipped (this change)** |
-| 1c | `/report/{contactId}` reads from D1 with GHL fallback | not yet |
+| 1b | Dual-write from `handleGHLSurveyWebhook` and `handleConsoleRun`, R2 HTML artifact | shipped |
+| **1c** | `/report/{contactId}` reads D1 with GHL fallback; `?v=N` / `?report_id=` history | **shipped (this change)** |
 
-Phase 1b is **inert in production until the D1 and R2 bindings are
-wired**. The dual-write call sites exist and run on every request; when
-the bindings are missing (freshly cloned repo, un-provisioned Cloudflare
-account) every helper returns a `{skipped: true, reason: ...}` sentinel
-and the live GHL flow continues untouched. The response includes a
-`canonical` object so you can see whether a write landed, and why not if
-it didn't.
+Phase 1c is **safe to ship before the D1 and R2 bindings are wired**.
+The default `/report/{contactId}` read tries D1 first and falls through
+to the pre-existing GHL custom-field read whenever D1 is empty, missing,
+or has no row for the contact — so every pre-canonical contact keeps
+working. Historical reads (`?v=N`, `?report_id=`) are D1-only; without
+the binding they return 404 (the architecture forbids reconstructing
+history from the owner's current GHL fields).
 
-Dry runs (`body.dry_run: true`) never land in canonical history. A test
-run must not create a row that a strategist could later mistake for a real
-customer event — that's enforced in `writeCanonicalRecord` as the first
-short-circuit.
+Dry runs (`body.dry_run: true`) still never land in canonical history —
+that short-circuit is in `writeCanonicalRecord` from Phase 1b and
+nothing in Phase 1c reads during a dry run.
 
 ## One-time setup
 
@@ -158,14 +157,28 @@ canonical immediately, old ones remain reachable.
 
 ## Reading history
 
-Once Phase 1c lands:
+Live as of Phase 1c:
 
-| URL | Resolves to |
-|---|---|
-| `/report/{contactId}` | latest successful report (same as HighLevel's current `swot_full_report`) |
-| `/report/{contactId}?v=2` | report_version 2 for that contact's latest submission chain |
-| `/report/{contactId}?report_id=<uuid>` | that specific report row |
-| `/report/{contactId}?include=failed` | internal-only; audit view |
+| URL | Resolves to | Source |
+|---|---|---|
+| `/report/{contactId}` | latest successful report (same as HighLevel's current `swot_full_report`) | D1 latest → GHL fallback |
+| `/report/{contactId}?v=2` | report_version 2 for that contact's latest submission chain | D1 only |
+| `/report/{contactId}?report_id=<uuid>` | that specific report row | D1 only |
+| `/report/{contactId}?include=failed` | internal-only; audit view | reserved, not yet implemented |
+
+**HTML source for a resolved D1 row:** R2 artifact first; else re-render
+from the stored `diagnostic_json` with `buildReportHtml`. This covers two
+real cases: rows written before R2 was wired, and rows whose R2 artifact
+was deleted. The diagnostic JSON is canonical; R2 is just a cache.
+
+**Historical URLs do not fall back to GHL.** A `?v=N` or `?report_id=`
+request returns 404 if the D1 row is missing. The architecture forbids
+reconstructing a historical report from the owner's current GHL fields
+(see `docs/SOLOMON_ARCHITECTURE.md` → Answer snapshot contract).
+
+**Cross-contact safety:** `?report_id=<uuid>` checks that the stored
+row's `contact_id` matches the URL path. A crafted URL that points at
+another contact's report returns 404.
 
 ## Not in Phase 1
 
