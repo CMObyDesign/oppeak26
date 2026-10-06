@@ -39,6 +39,7 @@ import {
   pendingFeedbackSummary,
   listApprovedFeedbackByType,
   updateFeedback,
+  isD1QueryError,
   FEEDBACK_TYPES,
 } from "./db.js";
 import { normalizeContactFields, flatNormalized } from "./normalize.js";
@@ -2612,6 +2613,11 @@ async function handleReport(contactId, env, requestUrl) {
         report = await reportByVersion(db, contactId, parseInt(versionParam, 10));
       }
     } catch (err) {
+      // Only swallow D1-query failures. A hydrateReport throw (malformed
+      // diagnostic_json or strategist_brief_json) is a data-integrity
+      // bug: let it propagate so the operator sees a real error, not
+      // a misleading 503 that implies "come back later."
+      if (!isD1QueryError(err)) throw err;
       console.warn(`[handleReport] D1 history read failed for ${contactId}: ${err?.message || err}`);
       return new Response("Historical report temporarily unavailable", { status: 503, headers: htmlHeaders() });
     }
@@ -2645,6 +2651,13 @@ async function handleReport(contactId, env, requestUrl) {
     try {
       latest = await latestSuccessfulReport(db, contactId);
     } catch (err) {
+      // Only swallow D1-query failures and fall through to GHL. A
+      // hydrateReport throw (malformed diagnostic_json or
+      // strategist_brief_json) is a data-integrity bug — Codex caught
+      // the earlier version of this fix masking it as a cache miss.
+      // Let the throw propagate so the operator sees it rather than
+      // silently serve a stale GHL projection.
+      if (!isD1QueryError(err)) throw err;
       console.warn(`[handleReport] D1 default read failed for ${contactId}, falling through to GHL: ${err?.message || err}`);
     }
     if (latest) {
@@ -4909,6 +4922,11 @@ export default {
         }
         feedback = await listFeedbackForReport(db, report.id);
       } catch (err) {
+        // Only swallow D1-query failures. A hydrateReport throw
+        // (malformed diagnostic_json or strategist_brief_json) is a
+        // data-integrity bug: let it propagate so the operator sees
+        // the real error rather than a misleading 503.
+        if (!isD1QueryError(err)) throw err;
         console.warn(`[/strategist/report] D1 query failed for ${strategistReportMatch[1]}: ${err?.message || err}`);
         return json({ success: false, error: "Strategist review temporarily unavailable" }, 503);
       }

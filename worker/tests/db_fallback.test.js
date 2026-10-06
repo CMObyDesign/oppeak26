@@ -150,19 +150,28 @@ describe("GET /strategist/report/{reportId} — distinguishes D1 error from no-r
   });
 });
 
-// --- hydration errors surface, don't fall back silently -----------
+// --- hydration errors propagate — call-site catches do NOT swallow them -
 //
-// safeParse (in db.js) deliberately throws on malformed JSON — the
-// comment there calls it a "data-integrity bug, surface, don't
-// swallow." The previous version of this fix had catches in db.js
-// that would have hidden a safeParse throw as "no row," masking data
-// corruption as a cache miss. With the catches now at the call
-// sites, the strategist route surfaces the problem as a 503 and the
-// public /report path can log it. Either way the operator sees it.
+// safeParse (in db.js) deliberately throws on malformed JSON ("data-
+// integrity bug, surface, don't swallow"). PR #73's call-site catch
+// still masked hydration failures as "fall through to GHL" because
+// the catch wrapped both the D1 fetch AND hydrate. Codex caught it.
+//
+// The fix: runD1Query() tags D1-query errors with isD1Query=true. The
+// call sites catch only tagged errors. A hydrateReport throw is
+// untagged and bubbles up past the call site into the Worker runtime
+// (which returns a generic 500). The operator sees a loud "something
+// is wrong with your canonical data," not a quiet GHL fallback.
+//
+// This section pins:
+//   - strategist route: untagged throw → 500 (NOT 200, NOT 503).
+//   - public /report (default): untagged throw → 500 (NOT 200 from
+//     GHL fallback — Codex's P1).
+//   - public /report (history): untagged throw → 500 (NOT 503).
 
-describe("hydrateReport parse failures — surface via 503, not swallowed", () => {
-  it("the strategist route returns 503 (not 200/404) when diagnostic_json is malformed", async () => {
-    const malformedDb = {
+describe("hydrateReport parse failures — propagate past call-site catches", () => {
+  function malformedRowDb() {
+    return {
       prepare() {
         return {
           bind() { return this; },
@@ -179,17 +188,36 @@ describe("hydrateReport parse failures — surface via 503, not swallowed", () =
         };
       },
     };
-    const env = { CONSOLE_PASSWORD: PW, SOLOMON_DB: malformedDb };
-    const res = await worker.fetch(
-      new Request("https://example.com/strategist/report/rep_1", {
-        method: "GET",
-        headers: { "x-console-password": PW },
-      }),
-      env, {},
+  }
+
+  it("the strategist route lets the parse failure throw (NOT a 503, which would hide it)", async () => {
+    const env = { CONSOLE_PASSWORD: PW, SOLOMON_DB: malformedRowDb() };
+    await assert.rejects(
+      () => worker.fetch(
+        new Request("https://example.com/strategist/report/rep_1", {
+          method: "GET",
+          headers: { "x-console-password": PW },
+        }),
+        env, {},
+      ),
+      /JSON/i,
     );
-    // 503, not 404 — a parse failure is a real problem, not a missing row.
-    assert.equal(res.status, 503);
-    const body = await res.json();
-    assert.match(body.error, /temporarily unavailable/i);
+  });
+
+  it("the public /report default read lets the parse failure throw (does NOT fall through to GHL — Codex P1)", async () => {
+    const env = { GHL_API_KEY: "test-key", SOLOMON_DB: malformedRowDb() };
+    // No fetch stub needed — the throw should happen before any GHL call.
+    await assert.rejects(
+      () => handleReport("c1", env, new URL("https://example.com/report/c1")),
+      /JSON/i,
+    );
+  });
+
+  it("the public /report history read (?v=N) lets the parse failure throw (NOT a 503)", async () => {
+    const env = { GHL_API_KEY: "test-key", SOLOMON_DB: malformedRowDb() };
+    await assert.rejects(
+      () => handleReport("c1", env, new URL("https://example.com/report/c1?v=1")),
+      /JSON/i,
+    );
   });
 });

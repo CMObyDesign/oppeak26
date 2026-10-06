@@ -49,6 +49,37 @@ export function dbFromEnv(env) {
   return h && typeof h.prepare === "function" ? h : null;
 }
 
+/**
+ * Run a D1 query and tag any thrown error with `isD1Query = true`, so
+ * callers can distinguish a D1 outage (fail-open safe) from a
+ * hydration/parse failure (data-integrity bug — surface loudly).
+ *
+ * Codex caught the bug this helper exists to prevent: wrapping the
+ * full read-helper in a try/catch at the call site swallows BOTH the
+ * D1 query AND the subsequent hydrateReport call. A malformed
+ * diagnostic_json would then quietly fall through to the GHL
+ * projection instead of surfacing — the opposite of safeParse's
+ * documented "surface, don't swallow" contract.
+ *
+ * Usage inside db.js read helpers: wrap only the `.first()` /
+ * `.all()` call with runD1Query. Hydration runs after and is NOT
+ * tagged — a hydration throw propagates unchanged.
+ */
+async function runD1Query(fn) {
+  try {
+    return await fn();
+  } catch (err) {
+    const wrapped = err instanceof Error ? err : new Error(String(err));
+    wrapped.isD1Query = true;
+    throw wrapped;
+  }
+}
+
+/** True iff this error came from a D1 query (set by runD1Query). */
+export function isD1QueryError(err) {
+  return Boolean(err && err.isD1Query === true);
+}
+
 /** New UUID for a submission row. */
 export function newSubmissionId() {
   return crypto.randomUUID();
@@ -200,18 +231,18 @@ export async function insertReportVersion(db, r) {
  */
 export async function latestSuccessfulReport(db, contactId) {
   if (!db) return null;
-  // D1 errors propagate so the caller can distinguish them from "no row"
-  // (null). Different callers want different fallback semantics
-  // (public /report falls through to GHL; strategist review returns
-  // 503) and the DB layer can't make that choice. hydrateReport is
-  // intentionally outside any error-swallowing wrapper — a malformed
-  // diagnostic_json is a data-integrity bug and must surface loudly.
-  const row = await db.prepare(`
+  // D1 errors are tagged (isD1Query = true) via runD1Query so the
+  // caller can distinguish them from a "no row" return (null) AND
+  // from a hydration failure. Hydrate runs OUTSIDE the tagged scope:
+  // a malformed diagnostic_json surfaces as an untagged throw, which
+  // the call-site fallback rightly refuses to swallow (safeParse's
+  // "surface, don't swallow" contract).
+  const row = await runD1Query(() => db.prepare(`
     SELECT * FROM report_versions
     WHERE contact_id = ? AND is_successful = 1
     ORDER BY created_at DESC
     LIMIT 1
-  `).bind(contactId).first();
+  `).bind(contactId).first());
   return hydrateReport(row);
 }
 
@@ -231,9 +262,9 @@ export async function latestSuccessfulReport(db, contactId) {
  */
 export async function latestSubmissionIdForContact(db, contactId) {
   if (!db) return null;
-  const row = await db.prepare(
+  const row = await runD1Query(() => db.prepare(
     `SELECT id FROM submissions WHERE contact_id = ? ORDER BY created_at DESC LIMIT 1`
-  ).bind(contactId).first();
+  ).bind(contactId).first());
   return row?.id || null;
 }
 
@@ -254,11 +285,11 @@ export async function reportByVersion(db, contactId, version) {
   if (!db) return null;
   const submissionId = await latestSubmissionIdForContact(db, contactId);
   if (!submissionId) return null;
-  const row = await db.prepare(`
+  const row = await runD1Query(() => db.prepare(`
     SELECT * FROM report_versions
     WHERE submission_id = ? AND report_version = ? AND is_successful = 1
     LIMIT 1
-  `).bind(submissionId, Number(version)).first();
+  `).bind(submissionId, Number(version)).first());
   return hydrateReport(row);
 }
 
@@ -273,9 +304,9 @@ export async function reportByVersion(db, contactId, version) {
  */
 export async function reportById(db, reportId) {
   if (!db) return null;
-  const row = await db.prepare(
+  const row = await runD1Query(() => db.prepare(
     `SELECT * FROM report_versions WHERE id = ? AND is_successful = 1 LIMIT 1`
-  ).bind(reportId).first();
+  ).bind(reportId).first());
   return hydrateReport(row);
 }
 
