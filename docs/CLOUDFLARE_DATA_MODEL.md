@@ -33,17 +33,29 @@ nothing in Phase 1c reads during a dry run.
 
 ## One-time setup
 
-`wrangler.toml` already carries the `[[d1_databases]]` and
-`[[r2_buckets]] SOLOMON_REPORTS` blocks, with a `database_id` placeholder.
-Run these from a shell with Cloudflare auth (`wrangler login` or
-`CLOUDFLARE_API_TOKEN`):
+Cloudflare Workers Builds validates `database_id` at build time and
+rejects a placeholder, so the `[[d1_databases]]` block in
+`wrangler.toml` stays commented until the real id is in hand. The
+whole flow is one authenticated session; do it from a shell with
+Cloudflare auth (`wrangler login` or `CLOUDFLARE_API_TOKEN`):
 
 ```bash
 # 1. Create the D1 database. Prints a database_id — copy it.
 wrangler d1 create solomon-canonical
 
-# 2. In wrangler.toml, replace PASTE_DATABASE_ID_HERE with the id
-#    printed above. Commit that change on the deployment branch.
+# 2. In wrangler.toml, uncomment the [[d1_databases]] and
+#    [[r2_buckets]] SOLOMON_REPORTS blocks and paste the id from
+#    step 1 as database_id. Commit on the deployment branch.
+#
+#    [[d1_databases]]
+#    binding = "SOLOMON_DB"
+#    database_name = "solomon-canonical"
+#    database_id = "<paste the id from step 1>"
+#    migrations_dir = "worker/migrations"
+#
+#    [[r2_buckets]]
+#    binding = "SOLOMON_REPORTS"
+#    bucket_name = "solomon-reports"
 
 # 3. Apply ALL migrations to the remote database (0001 + 0002, so the
 #    strategist_feedback table and its indexes land alongside the base
@@ -57,10 +69,8 @@ wrangler r2 bucket create solomon-reports
 wrangler deploy
 ```
 
-Deploy fails fast while `database_id` is still the placeholder — that's
-intentional, so a half-wired config can't ship. Both bindings are
-read lazily; writes degrade to `{skipped:true}` on any environment
-that doesn't carry them.
+Both bindings are read lazily; writes degrade to `{skipped:true}` on
+any environment that doesn't carry them.
 
 After deploy, submissions and reports start landing in D1 on every
 real (non-dry-run) generation; rendered HTML lands in R2 under

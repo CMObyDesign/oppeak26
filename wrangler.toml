@@ -61,20 +61,26 @@ bucket_name = "solomon-library-archive"
 
 # D1 — canonical structured store for submissions, report versions,
 # GHL sync state, and strategist feedback. See
-# docs/CLOUDFLARE_DATA_MODEL.md for the one-time setup. Before this
-# config can deploy, replace PASTE_DATABASE_ID_HERE with the id printed
-# by `wrangler d1 create solomon-canonical`. Attempting to deploy with
-# the placeholder in place will fail; that's intentional.
-[[d1_databases]]
-binding = "SOLOMON_DB"
-database_name = "solomon-canonical"
-database_id = "PASTE_DATABASE_ID_HERE"
-migrations_dir = "worker/migrations"
+# docs/CLOUDFLARE_DATA_MODEL.md for the one-time setup. The block is
+# commented until the DB is provisioned — Cloudflare Workers Builds
+# validates database_id at build time and would reject a placeholder,
+# so uncommenting with a real id is a single-commit step done once
+# `wrangler d1 create solomon-canonical` has printed it. All feedback,
+# submission, and report endpoints degrade gracefully to
+# {skipped:true, reason:"no_db_binding"} until this binding is wired.
+#
+# [[d1_databases]]
+# binding = "SOLOMON_DB"
+# database_name = "solomon-canonical"
+# database_id = "paste-from-wrangler-d1-create"
+# migrations_dir = "worker/migrations"
 
 # R2 — immutable rendered-HTML artifacts for canonical reports. Keyed as
-# reports/{contact_id}/{report_id}/report.html. The bucket must be
-# created once with `wrangler r2 bucket create solomon-reports` before
-# the first deploy with this binding present.
-[[r2_buckets]]
-binding = "SOLOMON_REPORTS"
-bucket_name = "solomon-reports"
+# reports/{contact_id}/{report_id}/report.html. Phase 1b writes here
+# when the binding is present. The bucket is created once with
+# `wrangler r2 bucket create solomon-reports`; this block is uncommented
+# in the same commit that wires D1.
+#
+# [[r2_buckets]]
+# binding = "SOLOMON_REPORTS"
+# bucket_name = "solomon-reports"
