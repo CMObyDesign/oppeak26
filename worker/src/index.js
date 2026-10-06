@@ -21,6 +21,7 @@
  * Runtime secrets (set in Cloudflare dashboard): ANTHROPIC_API_KEY, GHL_API_KEY, CONSOLE_PASSWORD
  */
 import { CONSOLE_PAGE } from "./console_page.js";
+import { renderStrategistPage } from "./strategist_page.js";
 import {
   dbFromEnv,
   newSubmissionId,
@@ -4837,6 +4838,41 @@ export default {
         error: "Pass ?report_id=<uuid> for one report's feedback, or ?pending_type=<type> for the pending-review queue",
         allowed_types: FEEDBACK_TYPES,
       }, 400);
+    }
+
+    // Phase 3B: strategist review UI.
+    //   GET /strategist                  — the HTML review page (served
+    //                                      to any browser; API calls
+    //                                      made from the page carry
+    //                                      the console password).
+    //   GET /strategist/report/{reportId} — JSON lookup used by the page:
+    //                                       returns the report row (with
+    //                                       its structured_findings) and
+    //                                       every feedback already attached
+    //                                       to it, in one call. Password-
+    //                                       protected like the other
+    //                                       console API routes.
+    if (path === "/strategist" && request.method === "GET") {
+      return new Response(renderStrategistPage(FEEDBACK_TYPES), {
+        status: 200,
+        headers: htmlHeaders(),
+      });
+    }
+    const strategistReportMatch = path.match(/^\/strategist\/report\/([A-Za-z0-9_-]+)$/);
+    if (strategistReportMatch && request.method === "GET") {
+      if (!checkConsolePassword(request, env)) {
+        return json({ success: false, error: "Unauthorized" }, 401);
+      }
+      const db = dbFromEnv(env);
+      if (!db) {
+        return json({ success: false, error: "Strategist review requires the D1 binding" }, 503);
+      }
+      const report = await reportById(db, strategistReportMatch[1]);
+      if (!report) {
+        return json({ success: false, error: "Report not found" }, 404);
+      }
+      const feedback = await listFeedbackForReport(db, report.id);
+      return json({ success: true, report, feedback });
     }
 
     // GET /report/{contactId} — public-readable hosted report view.
