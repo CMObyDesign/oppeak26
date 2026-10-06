@@ -21,6 +21,26 @@
  * Runtime secrets (set in Cloudflare dashboard): ANTHROPIC_API_KEY, GHL_API_KEY, CONSOLE_PASSWORD
  */
 import { CONSOLE_PAGE } from "./console_page.js";
+import {
+  dbFromEnv,
+  newSubmissionId,
+  newReportId,
+  insertSubmission,
+  nextReportVersion,
+  insertReportVersion,
+  recordGhlSyncAttempt,
+} from "./db.js";
+
+// Versioning for canonical records (Phase 1 architecture — see
+// docs/SOLOMON_ARCHITECTURE.md and docs/CLOUDFLARE_DATA_MODEL.md). Each
+// stored row carries the prompt / rubric / assessment stack that produced
+// it so a historical report is always re-explainable. Bump these when the
+// corresponding surface changes materially; a bump is what tells
+// `/report/{contactId}?v=N` the archived row was produced by a different
+// generator than today's code.
+const ASSESSMENT_VERSION = "v1";    // intake question set
+const RUBRIC_VERSION     = "r2.0";  // ASSESSMENT_RUBRIC — bumped on PR #52 debt-subtype rewrite
+const PROMPT_VERSION     = "p1.0";  // buildPrompt() format
 
 const CONFIG = {
   CLAUDE_MODEL: "claude-sonnet-4-6",
@@ -1647,6 +1667,164 @@ function normalizeAnswers(raw) {
   return [];
 }
 
+// ---------- Canonical record (D1 + R2) ----------
+// Phase 1b: after Solomon generates a report, write the whole-answer
+// snapshot + diagnostic + R2 HTML artifact to the canonical store, then
+// let the live GHL writeback happen as before. GHL writeback stays the
+// primary user-facing path — a D1 or R2 failure must NOT break the live
+// flow. When the D1 binding is missing (fresh deploy before `wrangler d1
+// create` has been run), these helpers return a `{skipped:true}` sentinel
+// so the request path is a no-op. The /report read path still falls back
+// to GHL custom fields in Phase 1b; Phase 1c switches reads to D1.
+//
+// Dry runs never land in canonical history. A test run (body.dry_run:true)
+// must not create a row that a strategist could later mistake for a real
+// customer event.
+
+async function sha256Hex(bytes) {
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// Immutable R2 artifact for one generated report. Keyed under
+// reports/{contact_id}/{report_id}/report.html; the pair of contact+report
+// is enough to find the artifact without a D1 lookup. Returns the metadata
+// trio the report_versions row needs, or null when the binding is missing
+// or the put failed. Callers continue even on null — HTML still lives in
+// the GHL custom field through Phase 1c and the diagnostic JSON is in D1.
+async function writeReportArtifact(env, { contactId, reportId, html }) {
+  const bucket = env?.SOLOMON_REPORTS;
+  if (!bucket) return null;
+  const key = `reports/${contactId}/${reportId}/report.html`;
+  const bodyBytes = new TextEncoder().encode(html || "");
+  try {
+    const sha256 = await sha256Hex(bodyBytes);
+    await bucket.put(key, bodyBytes, {
+      httpMetadata: { contentType: "text/html; charset=utf-8" },
+      customMetadata: {
+        contact_id: contactId,
+        report_id: reportId,
+        generated_at: String(Date.now()),
+      },
+    });
+    return { r2_html_key: key, r2_html_bytes: bodyBytes.byteLength, r2_html_sha256: sha256 };
+  } catch (err) {
+    console.error(`[writeReportArtifact] R2 put failed for ${key}: ${err?.message || err}`);
+    return null;
+  }
+}
+
+// Write the canonical record for a Solomon generation: one `submissions`
+// row (whole-answer snapshot) + one `report_versions` row + the R2 HTML
+// artifact. All writes are best-effort; a failure logs and returns
+// `{ok:false}` without throwing. Returns `{skipped:true, reason}` when:
+//   - dryRun is true
+//   - the D1 binding is missing
+//   - no contactId is available (synthetic console test)
+//
+// Phase 2 will populate `normalized_answers`, `derived_metrics`, and the
+// `validation` object with real content; Phase 1b stores nulls / minimal
+// shells and gets the write path landed.
+async function writeCanonicalRecord(env, args) {
+  const { contact, tier, answers, agent, reportHtml, sourceEventId, dryRun } = args;
+  if (dryRun) return { skipped: true, reason: "dry_run" };
+  if (!contact?.id) return { skipped: true, reason: "no_contact_id" };
+  const db = dbFromEnv(env);
+  if (!db) return { skipped: true, reason: "no_db_binding" };
+
+  const submissionId = newSubmissionId();
+  const reportId = newReportId();
+
+  try {
+    // 1. Submissions row — the whole-answer snapshot (Answer snapshot
+    //    contract). Later owner edits to GHL fields never mutate this.
+    const subResult = await insertSubmission(db, {
+      id: submissionId,
+      contact_id: contact.id,
+      tier,
+      assessment_version: ASSESSMENT_VERSION,
+      source_event_id: sourceEventId || null,
+      raw_answers: answers,
+      normalized_answers: undefined, // Phase 2
+      derived_metrics: undefined,    // Phase 2
+      validation: { complete: true, missing_fields: [], warnings: [] },
+      status: "ready",
+    });
+    if (subResult?.duplicate) {
+      // Durable idempotency: a webhook retry carrying the same source_event_id
+      // hit the UNIQUE index. Report that back to the caller rather than
+      // inserting a second report_versions row against a stranger's submission.
+      return { skipped: true, reason: "duplicate_submission", source_event_id: sourceEventId };
+    }
+
+    // 2. R2 HTML artifact — immutable. Null when the bucket binding is
+    //    missing or the put failed; the report_versions row still records
+    //    the generation, just without an artifact reference.
+    const r2 = await writeReportArtifact(env, {
+      contactId: contact.id,
+      reportId,
+      html: reportHtml || "",
+    });
+
+    // 3. report_versions row — immutable record of this generation.
+    //    report_version starts at 1 and increments per submission.
+    const reportVersion = await nextReportVersion(db, submissionId);
+    await insertReportVersion(db, {
+      id: reportId,
+      submission_id: submissionId,
+      contact_id: contact.id,
+      tier,
+      report_version: reportVersion,
+      classification: agent?.path || null,
+      diagnostic: agent,
+      strategist_brief: agent?.strategistBrief ? { brief: String(agent.strategistBrief) } : null,
+      prompt_version: PROMPT_VERSION,
+      rubric_version: RUBRIC_VERSION,
+      model_version: CONFIG.CLAUDE_MODEL,
+      code_version: env?.CODE_VERSION || null,
+      r2_html_key: r2?.r2_html_key || null,
+      r2_html_bytes: r2?.r2_html_bytes || null,
+      r2_html_sha256: r2?.r2_html_sha256 || null,
+      is_successful: true,
+    });
+
+    return {
+      ok: true,
+      submissionId,
+      reportId,
+      reportVersion,
+      r2_html_key: r2?.r2_html_key || null,
+    };
+  } catch (err) {
+    // Canonical write failure is a telemetry concern, not a user-facing
+    // failure. GHL writeback is still primary at Phase 1b; the live flow
+    // continues.
+    console.error(`[writeCanonicalRecord] D1 write failed for contact ${contact.id}: ${err?.message || err}`);
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
+// Record the outcome of a GHL writeback attempt in the append-only
+// ghl_sync log. Called from the ctx.waitUntil chain so it never blocks
+// the response; skips cleanly if D1 isn't wired or if no reportId was
+// produced (writeCanonicalRecord returned skipped).
+async function recordGhlWriteback(env, { reportId, contactId, status, error }) {
+  if (!reportId || !contactId) return { skipped: true, reason: "no_report_id" };
+  const db = dbFromEnv(env);
+  if (!db) return { skipped: true, reason: "no_db_binding" };
+  try {
+    return await recordGhlSyncAttempt(db, {
+      report_id: reportId,
+      contact_id: contactId,
+      status,
+      error: error || null,
+    });
+  } catch (err) {
+    console.error(`[recordGhlWriteback] insert failed: ${err?.message || err}`);
+    return { ok: false, error: String(err?.message || err) };
+  }
+}
+
 // Intake-completeness gate shared between the GHL survey webhook and any
 // future caller that needs to decide whether a tier's answer set is complete
 // enough to run Solomon on. Each tier has a known minimum answer count
@@ -2588,6 +2766,22 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
 
   const reportHtml = buildReportHtml(agent);
 
+  // Canonical write (Phase 1b). Console runs that target a real contact
+  // (contactId present and not a dry-run) land in canonical history the
+  // same way webhook submissions do — they are legitimate Solomon
+  // generations and belong in the record. Synthetic console runs (no
+  // contactId) and dry runs return a `skipped` sentinel and no row is
+  // written. See writeCanonicalRecord for the full contract.
+  const canonical = await writeCanonicalRecord(env, {
+    contact: contact.contactId ? { id: contact.contactId, ...contact } : {},
+    tier,
+    answers,
+    agent,
+    reportHtml,
+    sourceEventId: null, // console runs don't have a GHL webhook event id
+    dryRun,
+  });
+
   // TIGHTENED (2026-09-16): OPT-IN GHL writeback for console test runs.
   // Requires an explicit contactId — email-only lookups are refused so a
   // typo in the console can't retarget an unrelated contact. Solomon
@@ -2635,7 +2829,15 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
       ].join("\n");
 
       ctx.waitUntil(Promise.allSettled([
-        updateGHLContact(contactId, fields, env, { dryRun }),
+        updateGHLContact(contactId, fields, env, { dryRun }).then(async (ok) => {
+          await recordGhlWriteback(env, {
+            reportId: canonical?.reportId || null,
+            contactId,
+            status: ok ? "succeeded" : "failed",
+            error: ok ? null : "updateGHLContact returned false",
+          });
+          return ok;
+        }),
         addGHLTag(contactId, tags, env, { dryRun }),
         // addGHLNote does not yet honor dryRun; a dry-run request still skips
         // it here so the console-note audit trail stays accurate.
@@ -2659,6 +2861,14 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
     emailedTo, // null if no email provided; otherwise the address that will receive the workflow email
     elapsedMs, // Anthropic API round-trip time in ms; ~drops after cache hits
     dryRun,
+    canonical: canonical?.ok
+      ? {
+          submissionId: canonical.submissionId,
+          reportId: canonical.reportId,
+          reportVersion: canonical.reportVersion,
+          r2_html_key: canonical.r2_html_key,
+        }
+      : { skipped: true, reason: canonical?.reason || canonical?.error || "unknown" },
     ...agent,
   });
 }
@@ -3685,6 +3895,35 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   }
 
   const reportHtml = buildReportHtml(agent);
+
+  // Canonical write (Phase 1b). Runs synchronously BEFORE the GHL
+  // writeback so the stored record exists before anyone reads from
+  // HighLevel. Returns a shape describing success / skipped / failure;
+  // the response includes it so callers can trace which record this
+  // generation produced. Dry runs, missing D1 binding, and duplicate
+  // source_event_id all surface as `skipped` with a reason.
+  const canonical = await writeCanonicalRecord(env, {
+    contact: { id: contactId, ...contact },
+    tier,
+    answers,
+    agent,
+    reportHtml,
+    sourceEventId: body?.event_id || body?.webhook_id || body?.source_event_id || null,
+    dryRun,
+  });
+  if (canonical?.skipped && canonical.reason === "duplicate_submission") {
+    // The GHL retry carried the same source_event_id and D1 saw it
+    // first. Return early — do not run the GHL writeback a second time
+    // (that would duplicate the delivery email on paid tiers).
+    return json({
+      success: true,
+      deduped: true,
+      source_event_id: canonical.source_event_id,
+      contactId,
+      tier,
+    });
+  }
+
   const reportFieldKey =
     tier === "paid_297" ? "business_playbook"
     : tier === "paid_47" ? "swot_full_report"
@@ -3743,8 +3982,19 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   ctx.waitUntil(Promise.allSettled([
     // Chained: writeback must succeed before either the email-trigger tag
     // (paid_47 / paid_297 replay / free) OR the paid_297-fresh writeback
-    // signal tag (swot_playbook_written) lands.
+    // signal tag (swot_playbook_written) lands. The ghl_sync log row is
+    // appended either way — success or failure — so operations can see
+    // which generations landed in HighLevel.
     updateGHLContact(contactId, fields, env, { dryRun }).then(async ok => {
+      // Record the writeback outcome in the ghl_sync log. canonical?.reportId
+      // is null when the canonical write was skipped (dry run, no D1 binding,
+      // etc.) — recordGhlWriteback no-ops in that case.
+      await recordGhlWriteback(env, {
+        reportId: canonical?.reportId || null,
+        contactId,
+        status: ok ? "succeeded" : "failed",
+        error: ok ? null : "updateGHLContact returned false",
+      });
       if (!ok) {
         console.warn("[from-ghl-survey] Contact writeback failed; skipping post-write tags");
         return;
@@ -3798,6 +4048,14 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
     elapsedMs,
     tagsAppliedAsync: lifecycleTags,
     dryRun,
+    canonical: canonical?.ok
+      ? {
+          submissionId: canonical.submissionId,
+          reportId: canonical.reportId,
+          reportVersion: canonical.reportVersion,
+          r2_html_key: canonical.r2_html_key,
+        }
+      : { skipped: true, reason: canonical?.reason || canonical?.error || "unknown" },
   });
 }
 // ----- end GHL survey webhook -----
@@ -4666,6 +4924,9 @@ export {
   SURVEY_FIELD_MAP,
   SOLOMON_OWNED_FIELDS,
   INTAKE_MIN_ANSWERS,
+  ASSESSMENT_VERSION,
+  RUBRIC_VERSION,
+  PROMPT_VERSION,
   buildPrompt,
   parseAgentJson,
   normalizeAnswers,
@@ -4673,4 +4934,7 @@ export {
   updateGHLContact,
   addGHLTag,
   fireTrackingEvent,
+  writeCanonicalRecord,
+  writeReportArtifact,
+  recordGhlWriteback,
 };

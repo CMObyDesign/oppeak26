@@ -63,8 +63,10 @@ bucket_name = "solomon-library-archive"
 # GHL sync state. See docs/CLOUDFLARE_DATA_MODEL.md for the one-time setup
 # (wrangler d1 create, migration apply, binding wiring). Commented until
 # the DB is provisioned — leaving a placeholder database_id here would
-# break deploy. Phase 1a ships the schema + data-access module; nothing
-# calls into D1 yet, so an un-wired worker still runs fine.
+# break deploy. Phase 1a shipped the schema + data-access module; Phase 1b
+# added dual-write call sites. Both are gated on the binding being present
+# — an un-wired worker still runs fine (writeCanonicalRecord returns
+# {skipped:true, reason:"no_db_binding"}).
 #
 # To wire D1:
 #   1. wrangler d1 create solomon-canonical
@@ -78,3 +80,18 @@ bucket_name = "solomon-library-archive"
 # database_name = "solomon-canonical"
 # database_id = "fill-me-in-from-wrangler-d1-create"
 # migrations_dir = "worker/migrations"
+
+# R2 — immutable rendered-HTML artifacts for canonical reports. Keyed as
+# reports/{contact_id}/{report_id}/report.html. Phase 1b writes here when
+# the binding is present; the r2_html_key column on report_versions
+# references the object. Un-wired worker still runs (writeReportArtifact
+# returns null and the report_versions row records null for the key).
+#
+# To wire R2:
+#   1. wrangler r2 bucket create solomon-reports
+#   2. Uncomment the two lines
+#   3. Deploy
+#
+# [[r2_buckets]]
+# binding = "SOLOMON_REPORTS"
+# bucket_name = "solomon-reports"

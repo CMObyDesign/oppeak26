@@ -8,22 +8,29 @@ database up.
 
 | Phase | What it does | State |
 |---|---|---|
-| **1a** | Schema + migration + data-access module | **shipped (this change)** |
-| 1b | Dual-write from `handleGHLSurveyWebhook` and `handleConsoleRun` | not yet |
+| 1a | Schema + migration + data-access module | shipped |
+| **1b** | Dual-write from `handleGHLSurveyWebhook` and `handleConsoleRun`, R2 HTML artifact | **shipped (this change)** |
 | 1c | `/report/{contactId}` reads from D1 with GHL fallback | not yet |
-| 1d | Rendered HTML moves to R2; D1 stores the key | not yet |
 
-Phase 1a is **inert in production** — no call site reads or writes to D1.
-The schema and the `worker/src/db.js` module ship so the next phase has
-somewhere to land. An un-wired worker still runs; every DB helper checks
-`env.SOLOMON_DB` first and returns a `{skipped: true}` sentinel if missing.
+Phase 1b is **inert in production until the D1 and R2 bindings are
+wired**. The dual-write call sites exist and run on every request; when
+the bindings are missing (freshly cloned repo, un-provisioned Cloudflare
+account) every helper returns a `{skipped: true, reason: ...}` sentinel
+and the live GHL flow continues untouched. The response includes a
+`canonical` object so you can see whether a write landed, and why not if
+it didn't.
+
+Dry runs (`body.dry_run: true`) never land in canonical history. A test
+run must not create a row that a strategist could later mistake for a real
+customer event — that's enforced in `writeCanonicalRecord` as the first
+short-circuit.
 
 ## One-time setup
 
 Run these from a shell with Cloudflare auth (`wrangler login` or `CLOUDFLARE_API_TOKEN`):
 
 ```bash
-# 1. Create the database. Prints a database_id — save it.
+# 1. Create the D1 database. Prints a database_id — save it.
 wrangler d1 create solomon-canonical
 
 # 2. Uncomment the [[d1_databases]] block in wrangler.toml and paste
@@ -32,9 +39,20 @@ wrangler d1 create solomon-canonical
 # 3. Apply the initial schema to the remote database.
 wrangler d1 migrations apply solomon-canonical --remote
 
-# 4. Deploy the worker so the binding takes effect.
+# 4. Create the R2 bucket for rendered-HTML artifacts (Phase 1b).
+wrangler r2 bucket create solomon-reports
+
+# 5. Uncomment the [[r2_buckets]] SOLOMON_REPORTS block in wrangler.toml.
+
+# 6. Deploy the worker so both bindings take effect.
 wrangler deploy
 ```
+
+After deploy, submissions and reports start landing in D1 on every
+real (non-dry-run) generation; rendered HTML lands in R2 under
+`reports/{contact_id}/{report_id}/report.html`. HighLevel `swot_*` fields
+continue to carry the latest customer-facing projection as before — the
+read path doesn't change until Phase 1c.
 
 For local development against a sqlite shim:
 
