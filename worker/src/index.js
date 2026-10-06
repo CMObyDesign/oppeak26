@@ -3575,6 +3575,32 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   }
   if (!answers.length) return json({ success: false, error: "No answers on this contact yet" }, 400);
 
+  // Intake-completeness gate. GHL writes survey answers back to the contact's
+  // custom fields asynchronously — the "survey submitted" webhook can fire
+  // before every field has landed. If we run Solomon on a half-written
+  // intake we ship an INCOMPLETE INTAKE report, apply the wrong path tag,
+  // and the delivery email goes out carrying a broken first-pass version
+  // (idempotency's short TTL doesn't save us — the second webhook fires
+  // minutes later with the full intake and overwrites the path tag but
+  // the report HTML / email have already shipped).
+  //
+  // Each tier has a known minimum answer count (free: 3 curated, paid_47:
+  // ~16 fields, paid_297: ~20). Returning 409 lets GHL's workflow retry
+  // policy re-fire once the rest of the fields have persisted.
+  const MIN_ANSWERS = { free: 3, paid_47: 10, paid_297: 12 };
+  const minForTier = MIN_ANSWERS[tier] || 0;
+  if (minForTier && answers.length < minForTier) {
+    console.warn(`[from-ghl-survey] intake short (${answers.length} of ${minForTier} expected for ${tier}) for contact ${contact.id}; deferring`);
+    return json({
+      success: false,
+      error: "Intake not yet complete; retry when all survey fields have landed",
+      tier,
+      contactId: contact.id,
+      answersSeen: answers.length,
+      minExpected: minForTier,
+    }, 409);
+  }
+
   const contactPayload = {
     name: [contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.contactName || "Business Owner",
     email: contact.email || "",
