@@ -36,6 +36,9 @@ import {
   insertFeedback,
   listFeedbackForReport,
   listPendingFeedbackByType,
+  pendingFeedbackSummary,
+  listApprovedFeedbackByType,
+  updateFeedback,
   FEEDBACK_TYPES,
 } from "./db.js";
 import { normalizeContactFields, flatNormalized } from "./normalize.js";
@@ -4873,6 +4876,66 @@ export default {
       }
       const feedback = await listFeedbackForReport(db, report.id);
       return json({ success: true, report, feedback });
+    }
+
+    // Phase 3C: rule-promotion review queue. All three routes are
+    // CONSOLE_PASSWORD-gated and drive the Ask Solomon → Rule
+    // Promotions pane. Nothing here promotes a rule into the rubric
+    // automatically — approval flips a boolean so a human can bump
+    // rubric_version in code and ship the new ASSESSMENT_RUBRIC in a
+    // separate deploy.
+    //   GET   /feedback/pending-summary       — per-type pending/approved counts
+    //   GET   /feedback/approved?feedback_type=X — approved rows for the export view
+    //   PATCH /feedback/{id}                   — toggle approval and/or edit candidate_rule
+    if (path === "/feedback/pending-summary" && request.method === "GET") {
+      if (!checkConsolePassword(request, env)) {
+        return json({ success: false, error: "Unauthorized" }, 401);
+      }
+      const db = dbFromEnv(env);
+      if (!db) {
+        return json({ success: true, skipped: true, reason: "no_db_binding", summary: [] });
+      }
+      const summary = await pendingFeedbackSummary(db);
+      return json({ success: true, summary });
+    }
+    if (path === "/feedback/approved" && request.method === "GET") {
+      if (!checkConsolePassword(request, env)) {
+        return json({ success: false, error: "Unauthorized" }, 401);
+      }
+      const db = dbFromEnv(env);
+      if (!db) {
+        return json({ success: true, skipped: true, reason: "no_db_binding", feedback: [] });
+      }
+      const feedbackType = url.searchParams.get("feedback_type");
+      if (!feedbackType) {
+        return json({ success: false, error: "feedback_type (query param) is required" }, 400);
+      }
+      if (!FEEDBACK_TYPES.includes(feedbackType)) {
+        return json({ success: false, error: "Invalid feedback_type", allowed: FEEDBACK_TYPES }, 400);
+      }
+      const rows = await listApprovedFeedbackByType(db, feedbackType, { limit: 500 });
+      return json({ success: true, feedback: rows });
+    }
+    const feedbackPatchMatch = path.match(/^\/feedback\/([A-Za-z0-9_-]+)$/);
+    if (feedbackPatchMatch && request.method === "PATCH") {
+      if (!checkConsolePassword(request, env)) {
+        return json({ success: false, error: "Unauthorized" }, 401);
+      }
+      let body;
+      try { body = await request.json(); }
+      catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+      const db = dbFromEnv(env);
+      const result = await updateFeedback(db, feedbackPatchMatch[1], body);
+      if (!result.ok) {
+        const status = result.reason === "not_found" ? 404
+          : result.reason === "nothing_to_update" ? 400
+          : 400;
+        return json({ success: false, error: result.reason }, status);
+      }
+      if (result.skipped) {
+        return json({ success: true, skipped: true, reason: result.reason });
+      }
+      return json({ success: true, feedback: result.row });
     }
 
     // GET /report/{contactId} — public-readable hosted report view.
