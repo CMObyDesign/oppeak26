@@ -33,7 +33,8 @@ import {
   reportByVersion,
   reportById,
 } from "./db.js";
-import { normalizeContactFields } from "./normalize.js";
+import { normalizeContactFields, flatNormalized } from "./normalize.js";
+import { deriveMetrics } from "./derived.js";
 
 // Versioning for canonical records (Phase 1 architecture — see
 // docs/SOLOMON_ARCHITECTURE.md and docs/CLOUDFLARE_DATA_MODEL.md). Each
@@ -4049,11 +4050,18 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   // continue with normalized=null; writeCanonicalRecord stores a null
   // normalized_answers_json and Phase 2B skips derived metrics.
   let normalizedAnswers = null;
+  let derivedMetrics = null;
   try {
     const catalog = await fetchGHLCustomFieldsCatalog(env);
     normalizedAnswers = normalizeContactFields(contact, catalog);
+    // Phase 2B: derive deterministic metrics from the flat normalized
+    // view. Code — not the LLM — computes every ratio Solomon cites.
+    // If any required input is missing or carries the "unknown" sentinel,
+    // the derived-metrics engine simply does not emit the metric; it
+    // never fabricates a denominator.
+    derivedMetrics = deriveMetrics(flatNormalized(normalizedAnswers));
   } catch (err) {
-    console.warn(`[handleGHLSurveyWebhook] normalization skipped (catalog unavailable): ${err?.message || err}`);
+    console.warn(`[handleGHLSurveyWebhook] normalization/derived skipped (catalog unavailable): ${err?.message || err}`);
   }
 
   const canonical = await writeCanonicalRecord(env, {
@@ -4065,6 +4073,7 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
     sourceEventId: body?.event_id || body?.webhook_id || body?.source_event_id || null,
     dryRun,
     normalizedAnswers,
+    derivedMetrics,
   });
   if (canonical?.skipped && canonical.reason === "duplicate_submission") {
     // The GHL retry carried the same source_event_id and D1 saw it
@@ -5103,3 +5112,6 @@ export {
 // want to touch both the primitives and the request handlers can do it
 // from one import.
 export { FIELD_NORMALIZERS, PRIMITIVES, normalizeContactFields, flatNormalized } from "./normalize.js";
+
+// Phase 2B: derived-metrics engine. Same re-export pattern.
+export { deriveMetrics, findMetric } from "./derived.js";
