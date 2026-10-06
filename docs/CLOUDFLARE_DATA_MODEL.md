@@ -14,7 +14,8 @@ database up.
 | 2a | Deterministic normalization — populates `normalized_answers_json` | shipped |
 | 2b | Deterministic derived-metrics engine — populates `derived_metrics_json` | shipped |
 | 2c | Structured findings schema + evidence-backed validation | shipped |
-| **2d** | Report renderer consumes structured findings | **shipped (this change)** |
+| 2d | Report renderer consumes structured findings | shipped |
+| **3a** | Strategist feedback capture (capture-only, no auto-learning) | **shipped (this change)** |
 
 Phase 1c is **safe to ship before the D1 and R2 bindings are wired**.
 The default `/report/{contactId}` read tries D1 first and falls through
@@ -452,9 +453,79 @@ dedicated follow-up:
   `reportByVersion` filter them out. The reserved `?include=failed`
   audit path will have its own query when built.
 
+## Strategist feedback (Phase 3A)
+
+Phase 3A is **capture-only**. The strategist attaches structured
+feedback to any report (whole report) or any report + finding pair
+(single finding). Nothing in this layer makes Solomon learn from
+itself — rule promotion is a separate, human-gated step (Phase 3C)
+that reads approved rows out of this table.
+
+### `strategist_feedback`
+
+One row per feedback item. Full SQL in
+`worker/migrations/0002_strategist_feedback.sql`.
+
+| Column | Why |
+|---|---|
+| `id` | UUID primary key. |
+| `report_id` | FK to `report_versions.id` (the version being critiqued). |
+| `submission_id` | Denormalized for queries that scope to one intake chain. |
+| `contact_id` | Denormalized for the per-contact lifecycle view. |
+| `finding_id` | Null for whole-report feedback; else a `structured_findings.finding_id`. |
+| `feedback_type` | One of the 16 approved categories (below). |
+| `original_output` | The sentence or finding that was wrong. |
+| `strategist_revision` | What it should have said. |
+| `reason` | The strategist's explanation. |
+| `candidate_rule` | Proposed rubric rule, for Phase 3C review. |
+| `approved_for_learning` | `0` on insert; flipped to `1` only by a human in Phase 3C. |
+| `approved_by` / `approved_at` | Who approved it and when (null until approved). |
+| `created_by` / `created_at` | Who filed the feedback and when. |
+
+Indexes support three access patterns: fetch all feedback on a report
+(strategist review UI), fetch all pending feedback of a given type
+(rule-promotion queue), and fetch everything for one contact across
+all of their reports (lifecycle view).
+
+### `FEEDBACK_TYPES` vocabulary (§ 22)
+
+Frozen in `worker/src/db.js` so a new category can be added without
+a schema migration. If this list changes, update
+`docs/SOLOMON_ARCHITECTURE.md` and the strategist review UI (Phase 3B)
+in lockstep.
+
+`factual_error`, `invented_fact`, `tier_leakage`, `causal_overreach`,
+`severity_overstatement`, `severity_understatement`, `bad_calculation`,
+`poor_personalization`, `weak_opportunity`, `generic_language`,
+`incorrect_classification`, `financial_terminology`, `bad_cta`,
+`missing_context`, `great_output`, `approved_example`.
+
+### Endpoints
+
+Both are CONSOLE_PASSWORD-gated — the same gate used by `/asksolomon/run`.
+
+- `POST /feedback` — insert one feedback row. Rejects a missing
+  `report_id` or an unknown `feedback_type` with a shape error. Returns
+  `{skipped: true, reason: "no_db_binding"}` when D1 isn't wired, so
+  the UI can degrade gracefully before Phase 3B goes live.
+- `GET /feedback?report_id=<id>` — list all feedback on a report
+  (strategist review UI), newest first.
+- `GET /feedback?pending_type=<type>` — list pending (not yet approved)
+  feedback for a given category, newest first. Used by the Phase 3C
+  rule-promotion review queue.
+
+### What Phase 3A is **not**
+
+- Not auto-learning. `approved_for_learning` stays `0` on every row
+  the API writes. A human toggles it in Phase 3C, bumps `rubric_version`,
+  and re-runs the regression suite before anything in the generator
+  reads from here.
+- Not retroactive. Feedback is attached to the specific `report_id` it
+  critiques. Earlier reports that would have failed the same category
+  are not relabeled; they stay as they were generated.
+
 ### Not yet
 
-- Phase 3: strategist feedback capture against individual `finding_id`s.
-
-The schema has columns reserved for the storage shapes so Phase 3
-doesn't require a migration.
+- Phase 3B: strategist review UI (write + read against these endpoints).
+- Phase 3C: human-gated rule promotion from accumulated feedback into
+  the rubric. Bumps `rubric_version`, runs the regression suite, deploys.
