@@ -1,0 +1,26 @@
+name: worker tests
+
+on:
+  pull_request:
+    paths:
+      - "worker/**"
+      - ".github/workflows/test.yml"
+  push:
+    branches: [main]
+    paths:
+      - "worker/**"
+      - ".github/workflows/test.yml"
+
+jobs:
+  node-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # No dependencies — the suite uses node:test and plain fetch.
+      - name: Run worker regression tests
+        working-directory: worker
+        run: node --test tests/*.test.js

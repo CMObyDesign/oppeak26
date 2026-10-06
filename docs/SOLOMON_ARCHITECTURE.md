@@ -125,6 +125,13 @@ A customer or strategist correction creates a new submission (or new
 snapshot) with its own provenance — the original snapshot is not edited
 in place.
 
+**Never reconstruct a historical report from the customer's current GHL
+fields.** Doing so would quietly rewrite history: if version 1 was
+generated from `Q1=A, Q2=B, Q3=C` and the owner later changes Q2, the
+`/report/{contactId}?v=1` read must still show `A / B / C`, not `A / D / C`.
+Historical reads MUST resolve to the stored D1 snapshot for that version,
+never to the live GHL custom fields.
+
 ---
 
 ## Report read contract

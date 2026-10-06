@@ -1,0 +1,29 @@
+{
+  "path": "rehab",
+  "badge": "DEBT CRISIS",
+  "headline": "You have unresolved tax liens and judgments that are blocking every move you want to make.",
+  "opener": "Liz, you're carrying tax liens and judgments from distressed corporate debt — that is the crisis you have to address first.",
+  "context": "This is a business in financial distress with delinquent tax obligations and legal exposure.",
+  "gaps": [
+    {
+      "title": "Active tax liens from distressed corporate debt",
+      "impact": "high",
+      "priority": "immediate"
+    },
+    {
+      "title": "Unresolved legal judgments against the business",
+      "impact": "high",
+      "priority": "immediate"
+    },
+    {
+      "title": "Delinquent debt in default",
+      "impact": "high",
+      "priority": "immediate"
+    }
+  ],
+  "opportunities": [],
+  "nextStepHeadline": "You need professional help now",
+  "nextStepBody": "This level of distress requires immediate restructuring support.",
+  "opportunityFlags": ["DEBT_RESTRUCTURE_OPP"],
+  "strategistBrief": "Contact has active tax liens and judgments; recommend tax resolution attorney referral."
+}
