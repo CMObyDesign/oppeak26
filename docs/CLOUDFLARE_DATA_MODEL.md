@@ -425,12 +425,36 @@ have exposed:
   so an affirmative or ambiguous answer isn't silently converted into
   a clean denial.
 
+### Phase 1c follow-up (shipped alongside Phase 2)
+
+Three Codex findings on the original Phase 1c PR, addressed in a
+dedicated follow-up:
+
+- **D1 before GHL.** `handleReport` now resolves D1 first on both the
+  default and historical paths. GHL is consulted only for name/email
+  on the shell page via `fetchGhlContactMetadata`, which returns
+  `{ok:false, contact:null}` on any failure instead of propagating.
+  A GHL outage or a deleted GHL contact can no longer block the
+  canonical read of a report that lives safely in D1 + R2.
+
+- **Stable `?v=N` semantics.** `writeCanonicalRecord` mints a fresh
+  `submission_id` per generation, so a contact's free and paid chains
+  both start at `report_version = 1`. The previous query ordered by
+  `created_at DESC` and silently retargeted. The new
+  `reportByVersion` first resolves `latestSubmissionIdForContact`,
+  then queries `WHERE submission_id = ? AND report_version = ?`.
+  `?v=N` now refers to the Nth report in the owner's **current** intake
+  chain; cross-chain history is reachable via `?report_id=<uuid>` only.
+
+- **`is_successful = 1` on historical reads.** Audited failed
+  generations (`is_successful = 0`) retained for internal review
+  now stay out of customer-facing URLs — both `reportById` and
+  `reportByVersion` filter them out. The reserved `?include=failed`
+  audit path will have its own query when built.
+
 ### Not yet
 
 - Phase 3: strategist feedback capture against individual `finding_id`s.
-- Phase 1c `/report` read-path hardening (resolve D1 before GHL fetch;
-  stable `?v=N` semantics across submissions; filter `is_successful`
-  on historical reads) — queued as a follow-up PR.
 
-The schema has columns reserved for the storage shapes so these follow-ups
-don't require a migration.
+The schema has columns reserved for the storage shapes so Phase 3
+doesn't require a migration.

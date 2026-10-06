@@ -59,6 +59,8 @@ export function newReportId() {
   return crypto.randomUUID();
 }
 
+// --- Re-exports for callers that want to find a submission chain -------
+
 /**
  * Insert a submission row. Submissions are immutable; this is the only
  * write path. Returns the inserted id (echo of input.id) or `null` when
@@ -208,8 +210,35 @@ export async function latestSuccessfulReport(db, contactId) {
 }
 
 /**
- * Return a specific report_version for a contact's latest submission chain.
- * Used by /report/{contactId}?v=N.
+ * Return the submission_id of the contact's most recent intake. Phase 1c
+ * follow-up uses this to disambiguate `?v=N`: writeCanonicalRecord mints
+ * a fresh submission_id per generation and calls nextReportVersion with
+ * that id, so free and paid chains for the same contact both start at
+ * version 1. Without scoping `?v=N` to one chain, `?v=1` silently
+ * returns whichever chain is newest. Scoping to the latest chain means
+ * `?v=N` refers to the Nth report in the owner's current intake story;
+ * historical chains stay reachable via `?report_id=<uuid>`.
+ *
+ * @param {D1Database | null} db
+ * @param {string} contactId
+ * @returns {Promise<string | null>}
+ */
+export async function latestSubmissionIdForContact(db, contactId) {
+  if (!db) return null;
+  const row = await db.prepare(
+    `SELECT id FROM submissions WHERE contact_id = ? ORDER BY created_at DESC LIMIT 1`
+  ).bind(contactId).first();
+  return row?.id || null;
+}
+
+/**
+ * Return the Nth successful report in the contact's LATEST submission
+ * chain. Used by `/report/{contactId}?v=N`.
+ *
+ * Scoping to one chain is deliberate — see latestSubmissionIdForContact.
+ * `is_successful = 1` filter keeps retained-for-audit failed generations
+ * out of customer-facing URLs; the reserved `?include=failed` audit path
+ * will have its own query.
  *
  * @param {D1Database | null} db
  * @param {string} contactId
@@ -217,24 +246,29 @@ export async function latestSuccessfulReport(db, contactId) {
  */
 export async function reportByVersion(db, contactId, version) {
   if (!db) return null;
+  const submissionId = await latestSubmissionIdForContact(db, contactId);
+  if (!submissionId) return null;
   const row = await db.prepare(`
-    SELECT rv.* FROM report_versions rv
-    WHERE rv.contact_id = ? AND rv.report_version = ?
-    ORDER BY rv.created_at DESC
+    SELECT * FROM report_versions
+    WHERE submission_id = ? AND report_version = ? AND is_successful = 1
     LIMIT 1
-  `).bind(contactId, Number(version)).first();
+  `).bind(submissionId, Number(version)).first();
   return hydrateReport(row);
 }
 
 /**
- * Return a specific report by its UUID. Used by /report/{contactId}?report_id=.
+ * Return a specific report by its UUID. Used by
+ * `/report/{contactId}?report_id=<uuid>`. Filters out failed generations
+ * (`is_successful = 0`) so a leaked audit UUID cannot be served to a
+ * customer.
+ *
  * @param {D1Database | null} db
  * @param {string} reportId
  */
 export async function reportById(db, reportId) {
   if (!db) return null;
   const row = await db.prepare(
-    `SELECT * FROM report_versions WHERE id = ? LIMIT 1`
+    `SELECT * FROM report_versions WHERE id = ? AND is_successful = 1 LIMIT 1`
   ).bind(reportId).first();
   return hydrateReport(row);
 }
