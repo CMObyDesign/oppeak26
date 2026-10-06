@@ -4099,17 +4099,26 @@ export default {
           hint: "The deployed worker expects password header 'x-console-password' to match env.CONSOLE_PASSWORD exactly (case-sensitive, no trim). If passwordConfigured is false, the secret isn't in this environment.",
         });
       }
-      // GET /diag/contact/{contactId}?pw=<CONSOLE_PASSWORD> — intake diagnostic.
+      // GET /diag/contact/{contactId} — intake diagnostic.
       // Fetches the contact from GHL, runs the same hydration + mapping the
       // survey webhook does, and returns a sanitized view of what Solomon
       // would actually see. Lets us pinpoint whether an "incomplete intake"
       // outcome is caused by missing field values, catalog hydration gaps,
-      // or field-ID drift. Password-gated because it exposes contact state.
+      // or field-ID drift.
+      // AUTH: x-console-password header ONLY. Query-string ?pw= was rejected
+      // on security review (CONSOLE_PASSWORD is shared across /asksolomon
+      // routes; a query-string credential retains in browser history,
+      // referer headers, proxy and Cloudflare request logs). Use curl:
+      //   curl -H "x-console-password: $PW" \
+      //        https://swot-engine.cfobydesign.workers.dev/diag/contact/<id>
       const diagContactMatch = path.match(/^\/diag\/contact\/([A-Za-z0-9_-]+)$/);
       if (diagContactMatch) {
-        const pwParam = url.searchParams.get("pw") || request.headers.get("x-console-password");
-        if (!env.CONSOLE_PASSWORD || pwParam !== env.CONSOLE_PASSWORD) {
-          return json({ error: "Unauthorized" }, 401);
+        const pwHeader = request.headers.get("x-console-password");
+        if (!env.CONSOLE_PASSWORD || pwHeader !== env.CONSOLE_PASSWORD) {
+          return json({
+            error: "Unauthorized",
+            hint: "Pass the console password in the x-console-password header, not the URL. The query-string form was removed to avoid credential leakage into request logs.",
+          }, 401);
         }
         const cid = diagContactMatch[1];
         if (!env.GHL_API_KEY) return json({ error: "GHL_API_KEY not configured" }, 500);
