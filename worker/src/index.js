@@ -4772,6 +4772,73 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, "");
 
+    // Phase 3A: strategist feedback capture.
+    //   POST /feedback — attach feedback to a report_id (and optional
+    //                    structured finding_id). Capture only — no
+    //                    LLM involvement, no auto-training. See
+    //                    docs/SOLOMON_ARCHITECTURE.md § 21-23.
+    //   GET  /feedback?report_id=X — list every feedback row for one
+    //                                report (strategist review UI).
+    //   GET  /feedback?pending_type=T — list pending feedback of one
+    //                                   type (rule-promotion queue).
+    // Both routes gated on CONSOLE_PASSWORD. Sits above the method
+    // branches so POST isn't shadowed by the GET-only block below.
+    // A missing D1 binding degrades gracefully (POST returns
+    // {skipped:true, reason:"no_db_binding"}) so the Phase 3B UI can
+    // ship before D1 is wired.
+    if (path === "/feedback" && request.method === "POST") {
+      if (!checkConsolePassword(request, env)) {
+        return json({ success: false, error: "Unauthorized" }, 401);
+      }
+      let body;
+      try { body = await request.json(); }
+      catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
+      const db = dbFromEnv(env);
+      const result = await insertFeedback(db, body);
+      if (!result.ok) {
+        if (result.reason === "invalid_feedback_type") {
+          return json({
+            success: false,
+            error: "Invalid feedback_type",
+            got: result.feedback_type,
+            allowed: FEEDBACK_TYPES,
+          }, 400);
+        }
+        if (result.reason === "missing_report_id" || result.reason === "missing_body") {
+          return json({ success: false, error: "report_id (string) is required" }, 400);
+        }
+        return json({ success: false, error: result.reason || "Unknown feedback error" }, 400);
+      }
+      if (result.skipped) {
+        return json({ success: true, skipped: true, reason: result.reason });
+      }
+      return json({ success: true, feedback_id: result.id });
+    }
+    if (path === "/feedback" && request.method === "GET") {
+      if (!checkConsolePassword(request, env)) {
+        return json({ success: false, error: "Unauthorized" }, 401);
+      }
+      const db = dbFromEnv(env);
+      if (!db) {
+        return json({ success: true, skipped: true, reason: "no_db_binding", feedback: [] });
+      }
+      const reportId = url.searchParams.get("report_id");
+      const pendingType = url.searchParams.get("pending_type");
+      if (reportId) {
+        const rows = await listFeedbackForReport(db, reportId);
+        return json({ success: true, feedback: rows });
+      }
+      if (pendingType) {
+        const rows = await listPendingFeedbackByType(db, pendingType, { limit: 100 });
+        return json({ success: true, feedback: rows });
+      }
+      return json({
+        success: false,
+        error: "Pass ?report_id=<uuid> for one report's feedback, or ?pending_type=<type> for the pending-review queue",
+        allowed_types: FEEDBACK_TYPES,
+      }, 400);
+    }
+
     // GET /report/{contactId} — public-readable hosted report view.
     // GET /asksolomon — internal training console (HTML page, password-protected at the API layer).
     // GET /asksolomon/rubric — return the current ASSESSMENT_RUBRIC (password-protected).
@@ -4873,70 +4940,6 @@ export default {
           return json({ success: false, error: "Unauthorized" }, 401);
         }
         return json({ success: true, rubric: ASSESSMENT_RUBRIC });
-      }
-      // Phase 3A: strategist feedback capture.
-      //   POST /feedback — attach feedback to a report_id (and optional
-      //                    structured finding_id). Capture only — no
-      //                    LLM involvement, no auto-training. See
-      //                    docs/SOLOMON_ARCHITECTURE.md § 21-23.
-      //   GET  /feedback?report_id=X — list every feedback row for one
-      //                                report (strategist review UI).
-      //   GET  /feedback?pending_type=T — list pending feedback of one
-      //                                   type (rule-promotion queue).
-      // Both routes gated on CONSOLE_PASSWORD. No GHL contact lookup
-      // happens; a dangling report_id just inserts a row that the
-      // reviewer sees as orphaned.
-      if (path === "/feedback" && request.method === "POST") {
-        if (!checkConsolePassword(request, env)) {
-          return json({ success: false, error: "Unauthorized" }, 401);
-        }
-        let body;
-        try { body = await request.json(); }
-        catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
-        const db = dbFromEnv(env);
-        if (!db) {
-          return json({ success: false, error: "Feedback requires the D1 binding; see docs/CLOUDFLARE_DATA_MODEL.md" }, 503);
-        }
-        const result = await insertFeedback(db, body);
-        if (!result.ok) {
-          if (result.reason === "invalid_feedback_type") {
-            return json({
-              success: false,
-              error: "Invalid feedback_type",
-              got: result.feedback_type,
-              allowed: FEEDBACK_TYPES,
-            }, 400);
-          }
-          if (result.reason === "missing_report_id" || result.reason === "missing_body") {
-            return json({ success: false, error: "report_id (string) is required" }, 400);
-          }
-          return json({ success: false, error: result.reason || "Unknown feedback error" }, 400);
-        }
-        return json({ success: true, feedback_id: result.id });
-      }
-      if (path === "/feedback" && request.method === "GET") {
-        if (!checkConsolePassword(request, env)) {
-          return json({ success: false, error: "Unauthorized" }, 401);
-        }
-        const db = dbFromEnv(env);
-        if (!db) {
-          return json({ success: false, error: "Feedback requires the D1 binding" }, 503);
-        }
-        const reportId = url.searchParams.get("report_id");
-        const pendingType = url.searchParams.get("pending_type");
-        if (reportId) {
-          const rows = await listFeedbackForReport(db, reportId);
-          return json({ success: true, feedback: rows });
-        }
-        if (pendingType) {
-          const rows = await listPendingFeedbackByType(db, pendingType, { limit: 100 });
-          return json({ success: true, feedback: rows });
-        }
-        return json({
-          success: false,
-          error: "Pass ?report_id=<uuid> for one report's feedback, or ?pending_type=<type> for the pending-review queue",
-          allowed_types: FEEDBACK_TYPES,
-        }, 400);
       }
       // /asksolomon/diag — UNAUTHENTICATED diagnostic endpoint. Returns only whether
       // CONSOLE_PASSWORD is configured and its character length. NEVER returns the value.
