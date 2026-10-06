@@ -11,8 +11,8 @@ database up.
 | 1a | Schema + migration + data-access module | shipped |
 | 1b | Dual-write from `handleGHLSurveyWebhook` and `handleConsoleRun`, R2 HTML artifact | shipped |
 | 1c | `/report/{contactId}` reads D1 with GHL fallback; `?v=N` / `?report_id=` history | shipped |
-| **2a** | Deterministic normalization — populates `normalized_answers_json` | **shipped (this change)** |
-| 2b | Deterministic derived-metrics engine — populates `derived_metrics_json` | not yet |
+| 2a | Deterministic normalization — populates `normalized_answers_json` | shipped |
+| **2b** | Deterministic derived-metrics engine — populates `derived_metrics_json` | **shipped (this change)** |
 | 2c | Structured findings schema + evidence-backed validation | not yet |
 | 2d | Report renderer consumes structured findings | not yet |
 
@@ -240,12 +240,67 @@ proprietary process, where losing deals, financial metrics not tracked.
 Those are long-form narrative; they stay in `raw_answers_json` and the
 rubric still reads them as prose.
 
+## Derived metrics (Phase 2B)
+
+Code — not the LLM — computes every financial ratio Solomon cites.
+`worker/src/derived.js` reads the flat normalized view and emits entries
+to `derived_metrics_json`. Rules:
+
+- **Only emit a metric when ALL required inputs are usable numbers.**
+  Not `null`, not `undefined`, not the string `"unknown"`. If any input
+  is missing or ambiguous, the metric does not appear.
+- **Division-by-zero is a missing input.** If the denominator is zero
+  (or negative), the metric does not appear.
+- **Every emitted metric records its inputs.** The strategist must
+  always be able to trace a number back to the answers that produced it.
+- **Rounding is applied once at output** — 2 decimals for month-counts,
+  4 for ratios, no rounding for dollar passthroughs.
+
+Each entry:
+
+```json
+{
+  "metric": "ar_60_plus_months_of_debt_service",
+  "value": 3.61,
+  "unit": "months",
+  "inputs": [
+    { "field": "ar_60_plus", "value": 6500 },
+    { "field": "monthly_debt_service", "value": 1800 }
+  ]
+}
+```
+
+Currently computed metrics (bump this list when `derived.js` adds one):
+
+| metric | unit | inputs |
+|---|---|---|
+| `total_debt` | dollars | `total_corporate_debt` |
+| `monthly_debt_service_amount` | dollars | `monthly_debt_service` |
+| `ar_30_plus_amount` | dollars | `ar_30_plus` |
+| `ar_60_plus_amount` | dollars | `ar_60_plus` |
+| `ar_30_plus_months_of_debt_service` | months | `ar_30_plus`, `monthly_debt_service` |
+| `ar_60_plus_months_of_debt_service` | months | `ar_60_plus`, `monthly_debt_service` |
+| `lead_to_booking_rate` | ratio | `leads_per_month`, `bookings_per_month` |
+| `booking_to_show_rate` | ratio | `bookings_per_month`, `shows_per_month` |
+| `show_to_offer_rate` | ratio | `shows_per_month`, `offers_per_month` |
+| `offer_to_close_rate` | ratio | `offers_per_month`, `closes_per_month` |
+| `lead_to_sale_rate` | ratio | `leads_per_month`, `closes_per_month` |
+
+The five funnel-conversion rates do not fire against today's intake —
+the GHL survey does not yet collect per-stage counts. The code is in
+place for the day the normalizer adds `leads_per_month`,
+`bookings_per_month`, `shows_per_month`, `offers_per_month`,
+`closes_per_month`. The debt + A/R metrics fire on today's paid_47
+intake exactly as spec'd.
+
+Phase 2C will add structured findings that CITE these metrics by name,
+giving each finding `derived_metrics: [{metric, value}]` provenance.
+
 ## Not yet
 
-- Derived metrics (`derived_metrics_json`) — Phase 2B
 - Structured findings schema inside `diagnostic_json` — Phase 2C
 - Renderer that consumes structured findings — Phase 2D
 - Strategist feedback capture — Phase 3
 
-The schema has columns reserved for all three storage shapes so Phases
-2/3 don't require a migration.
+The schema has columns reserved for the storage shapes so Phases 2C+
+don't require a migration.
