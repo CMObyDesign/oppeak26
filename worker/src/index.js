@@ -2509,6 +2509,40 @@ async function resolveReportHtml(env, report) {
   return null;
 }
 
+// Phase 1c follow-up: fetch GHL contact metadata without letting a GHL
+// outage block the canonical read. Returns {ok, contact}. The contact
+// metadata is used ONLY for the shell page (name + email) when D1 has
+// the authoritative diagnostic. If GHL is unavailable, callers that
+// resolved from D1 render the shell with "Business Owner" + no email —
+// the diagnostic still ships.
+async function fetchGhlContactMetadata(contactId, env) {
+  if (!contactId || !env?.GHL_API_KEY) return { ok: false, contact: null };
+  try {
+    const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}`, {
+      headers: {
+        Authorization: `Bearer ${env.GHL_API_KEY}`,
+        Version: "2021-07-28",
+      },
+    });
+    if (!res.ok) return { ok: false, contact: null };
+    const data = await res.json().catch(() => ({}));
+    return { ok: true, contact: data?.contact || {} };
+  } catch (err) {
+    console.warn(`[fetchGhlContactMetadata] GHL fetch failed for ${contactId}: ${err?.message || err}`);
+    return { ok: false, contact: null };
+  }
+}
+
+function nameFromContact(c) {
+  if (!c) return "Business Owner";
+  return (
+    c.firstName ||
+    c.contactName ||
+    [c.firstName, c.lastName].filter(Boolean).join(" ") ||
+    "Business Owner"
+  );
+}
+
 async function handleReport(contactId, env, requestUrl) {
   if (!contactId) {
     return new Response("Missing contact id", { status: 400, headers: htmlHeaders() });
@@ -2533,25 +2567,18 @@ async function handleReport(contactId, env, requestUrl) {
   }
   const isHistoryRead = Boolean(versionParam || reportIdParam);
 
-  const res = await fetch(`${CONFIG.GHL_API_BASE}/contacts/${contactId}`, {
-    headers: {
-      Authorization: `Bearer ${env.GHL_API_KEY}`,
-      Version: "2021-07-28",
-    },
-  });
-  if (!res.ok) {
-    return new Response("Report not found", { status: 404, headers: htmlHeaders() });
-  }
+  // Phase 1c follow-up: resolve D1 BEFORE querying GHL. The architecture
+  // doc makes D1 canonical and GHL a projection; a GHL outage or deleted
+  // GHL contact must not block the historical read of a report that
+  // lives safely in D1 + R2. GHL is only consulted for name/email on
+  // the shell page.
+  const db = dbFromEnv(env);
 
-  const data = await res.json().catch(() => ({}));
-  const c = data?.contact || {};
-
-  // History path: D1-only. No GHL custom-field fallback. If the D1 binding
-  // is missing OR the specific row is missing OR it belongs to another
-  // contact, we 404 — the historical URL must not quietly resolve to a
-  // different generation than the one its holder shared.
+  // History path: D1-only for the HTML body. If the D1 binding is
+  // missing or the row isn't there, we 404 — the historical URL must
+  // not quietly resolve to a different generation than the one its
+  // holder shared.
   if (isHistoryRead) {
-    const db = dbFromEnv(env);
     if (!db) {
       return new Response("Historical reports require the D1 binding", { status: 404, headers: htmlHeaders() });
     }
@@ -2562,6 +2589,10 @@ async function handleReport(contactId, env, requestUrl) {
       // contactId in the URL path must match the stored row's contact_id.
       if (report && report.contact_id !== contactId) report = null;
     } else {
+      // reportByVersion is scoped to the contact's LATEST submission
+      // chain (see db.js). Cross-chain history is reachable via
+      // ?report_id= only. This closes the Codex finding where
+      // ?v=1 silently retargeted between free and paid chains.
       report = await reportByVersion(db, contactId, parseInt(versionParam, 10));
     }
     if (!report) {
@@ -2571,37 +2602,38 @@ async function handleReport(contactId, env, requestUrl) {
     if (!html) {
       return new Response("Report artifact missing", { status: 410, headers: htmlHeaders() });
     }
-    const contactName =
-      c.firstName || c.contactName || [c.firstName, c.lastName].filter(Boolean).join(" ") || "Business Owner";
+    const { contact: c } = await fetchGhlContactMetadata(contactId, env);
     return new Response(
-      await buildReportPage(html, tierLabelOf(report.tier), contactName, report.tier, env, c.email || "", contactId),
+      await buildReportPage(html, tierLabelOf(report.tier), nameFromContact(c), report.tier, env, c?.email || "", contactId),
       { status: 200, headers: htmlHeaders() }
     );
   }
 
-  // Default read: try D1 latest successful (matches HighLevel's
-  // "latest-state" projection). If no D1 row for this contact yet
-  // (pre-Phase-1b submission, or binding missing), fall through to the
-  // existing GHL custom-field read below.
-  const db = dbFromEnv(env);
+  // Default read: try D1 latest successful FIRST. GHL comes in later
+  // for identity (name/email on the shell) and for the fallback read
+  // when no D1 row exists.
   if (db) {
     const latest = await latestSuccessfulReport(db, contactId);
     if (latest) {
       const html = await resolveReportHtml(env, latest);
       if (html) {
-        const contactName =
-          c.firstName || c.contactName || [c.firstName, c.lastName].filter(Boolean).join(" ") || "Business Owner";
+        const { contact: c } = await fetchGhlContactMetadata(contactId, env);
         const readyPrelude = `<script>try{sessionStorage.removeItem('cfobd-elapsed');}catch(e){}</script>`;
         return new Response(
-          await buildReportPage(readyPrelude + html, tierLabelOf(latest.tier), contactName, latest.tier, env, c.email || "", contactId),
+          await buildReportPage(readyPrelude + html, tierLabelOf(latest.tier), nameFromContact(c), latest.tier, env, c?.email || "", contactId),
           { status: 200, headers: htmlHeaders() }
         );
       }
     }
   }
 
-  // Fallback: GHL custom-field read. This is the existing path and
-  // continues to serve every contact until D1 has a row for them.
+  // Fallback: GHL custom-field read. This path exists for pre-canonical
+  // contacts (no D1 row) and un-wired D1 workers. It requires a live
+  // GHL fetch; if GHL is unavailable, 404.
+  const { ok: ghlOk, contact: c } = await fetchGhlContactMetadata(contactId, env);
+  if (!ghlOk || !c) {
+    return new Response("Report not found", { status: 404, headers: htmlHeaders() });
+  }
   const tags = (c.tags || []).map((t) => String(t).toLowerCase());
   const customFields = c.customFields || [];
 

@@ -263,25 +263,59 @@ describe("latestSuccessfulReport", () => {
   });
 });
 
-describe("reportByVersion", () => {
-  it("binds contact_id and version in that order", async () => {
-    const db = makeMockDb({ firstResult: null });
+describe("reportByVersion (Phase 1c follow-up — scoped to latest chain, is_successful = 1)", () => {
+  // The firstResult handler differentiates by SQL so the two sequential
+  // D1 reads (submissions lookup, then report_versions lookup) can return
+  // different mock rows.
+  function dbWithChain({ submissionId, reportRow } = {}) {
+    return makeMockDb({
+      firstResult: (entry) => {
+        if (/SELECT id FROM submissions/i.test(entry.sql)) {
+          return submissionId ? { id: submissionId } : null;
+        }
+        if (/SELECT \* FROM report_versions/i.test(entry.sql)) {
+          return reportRow || null;
+        }
+        return null;
+      },
+    });
+  }
+
+  it("looks up the contact's latest submission_id, then version within it", async () => {
+    const db = dbWithChain({ submissionId: "sub_latest", reportRow: null });
     await reportByVersion(db, "contact_x", 2);
-    assert.deepEqual(db._log[0].binds, ["contact_x", 2]);
+    // First query: submission lookup bound by contact_id.
+    assert.match(db._log[0].sql, /FROM submissions/i);
+    assert.deepEqual(db._log[0].binds, ["contact_x"]);
+    // Second query: report lookup bound by submission_id + version.
+    assert.match(db._log[1].sql, /FROM report_versions/i);
+    assert.match(db._log[1].sql, /submission_id = \?/i);
+    assert.match(db._log[1].sql, /report_version = \?/i);
+    assert.match(db._log[1].sql, /is_successful = 1/i,
+      "historical reads must filter out audited failed generations");
+    assert.deepEqual(db._log[1].binds, ["sub_latest", 2]);
   });
 
-  it("coerces string versions to numbers", async () => {
-    const db = makeMockDb({ firstResult: null });
+  it("returns null when the contact has no submissions yet (no second query)", async () => {
+    const db = dbWithChain({ submissionId: null });
+    const result = await reportByVersion(db, "contact_x", 1);
+    assert.equal(result, null);
+    assert.equal(db._log.length, 1, "second query must NOT run when no submission exists");
+  });
+
+  it("coerces string versions to numbers in the second bind", async () => {
+    const db = dbWithChain({ submissionId: "sub_1", reportRow: null });
     await reportByVersion(db, "c", "5");
-    assert.equal(db._log[0].binds[1], 5);
+    assert.equal(db._log[1].binds[1], 5);
   });
 });
 
-describe("reportById", () => {
-  it("binds the report id", async () => {
+describe("reportById (filters out failed generations)", () => {
+  it("binds the report id and requires is_successful = 1", async () => {
     const db = makeMockDb({ firstResult: null });
     await reportById(db, "r-uuid");
-    assert.match(db._log[0].sql, /WHERE id = \?/);
+    assert.match(db._log[0].sql, /WHERE id = \? AND is_successful = 1/i,
+      "historical ?report_id= lookups must not serve audited failed rows");
     assert.deepEqual(db._log[0].binds, ["r-uuid"]);
   });
 });
