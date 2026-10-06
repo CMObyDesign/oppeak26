@@ -4099,6 +4099,95 @@ export default {
           hint: "The deployed worker expects password header 'x-console-password' to match env.CONSOLE_PASSWORD exactly (case-sensitive, no trim). If passwordConfigured is false, the secret isn't in this environment.",
         });
       }
+      // GET /diag/contact/{contactId}?pw=<CONSOLE_PASSWORD> — intake diagnostic.
+      // Fetches the contact from GHL, runs the same hydration + mapping the
+      // survey webhook does, and returns a sanitized view of what Solomon
+      // would actually see. Lets us pinpoint whether an "incomplete intake"
+      // outcome is caused by missing field values, catalog hydration gaps,
+      // or field-ID drift. Password-gated because it exposes contact state.
+      const diagContactMatch = path.match(/^\/diag\/contact\/([A-Za-z0-9_-]+)$/);
+      if (diagContactMatch) {
+        const pwParam = url.searchParams.get("pw") || request.headers.get("x-console-password");
+        if (!env.CONSOLE_PASSWORD || pwParam !== env.CONSOLE_PASSWORD) {
+          return json({ error: "Unauthorized" }, 401);
+        }
+        const cid = diagContactMatch[1];
+        if (!env.GHL_API_KEY) return json({ error: "GHL_API_KEY not configured" }, 500);
+        const contact = await fetchGHLContact(cid, env);
+        if (!contact) return json({ error: "Contact not found" }, 404);
+        let catalog = {};
+        let catalogError = null;
+        try { catalog = await fetchGHLCustomFieldsCatalog(env); }
+        catch (err) { catalogError = String(err && err.message || err).slice(0, 200); }
+        const cfs = contact.customFields || [];
+        const trunc = (v) => {
+          const s = String(v == null ? "" : v);
+          return s.length > 120 ? s.slice(0, 117) + "..." : s;
+        };
+        const kept = [];
+        const dropped = [];
+        for (const f of cfs) {
+          const id = f && f.id;
+          const value = (f && (f.value ?? f.field_value)) ?? null;
+          const hasValue = value != null && String(value).trim() !== "";
+          const meta = id ? catalog[id] : null;
+          const bareName = f && (f.name || null);
+          const bareKey = f && (f.fieldKey || f.key || null);
+          const effName = bareName || (meta && meta.name) || null;
+          const effKey = bareKey || (meta && meta.fieldKey) || null;
+          const curated = id ? SURVEY_FIELD_MAP[id] : null;
+          const solomonOwned = id ? SOLOMON_OWNED_FIELDS.has(id) : false;
+          const effKeyLower = String(effKey || "").toLowerCase();
+          const effNameLower = String(effName || "").toLowerCase();
+          const solomonByName = effKeyLower.startsWith("swot_") || effKeyLower.startsWith("contact.swot_")
+            || effNameLower.startsWith("swot ") || effNameLower === "internal notes";
+          const looksLikeUpload = (() => {
+            const vs = String(value || "").trim();
+            if (!/^https?:\/\//i.test(vs)) return false;
+            return effKeyLower.includes("upload") || effNameLower.includes("upload")
+              || /\.(pdf|xlsx|xls|csv|docx?|png|jpg|jpeg)(\?|$)/i.test(vs);
+          })();
+          const question = curated || effName || effKey || null;
+          const row = {
+            id,
+            hasValue,
+            valuePreview: hasValue ? trunc(value) : null,
+            bareName, bareKey,
+            catalogHit: Boolean(meta),
+            catalogName: meta ? meta.name : null,
+            catalogFieldKey: meta ? meta.fieldKey : null,
+            curated: Boolean(curated),
+            solomonOwned,
+            solomonByName,
+            looksLikeUpload,
+            effectiveQuestion: question,
+          };
+          if (!hasValue) { row.reason = "empty_value"; dropped.push(row); continue; }
+          if (solomonOwned) { row.reason = "solomon_owned_id"; dropped.push(row); continue; }
+          if (solomonByName) { row.reason = "solomon_owned_name"; dropped.push(row); continue; }
+          if (looksLikeUpload) { row.reason = "file_upload"; dropped.push(row); continue; }
+          if (!question) { row.reason = "no_label"; dropped.push(row); continue; }
+          kept.push({
+            id, question,
+            answerPreview: trunc(value),
+            source: curated ? "mapped" : (meta ? "catalog" : "bare"),
+          });
+        }
+        return json({
+          contactId: cid,
+          contactName: [contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.contactName || null,
+          contactEmail: contact.email || null,
+          contactTags: contact.tags || [],
+          customFieldsSeen: cfs.length,
+          customFieldsWithValue: cfs.filter(f => (f && (f.value ?? f.field_value) != null && String(f.value ?? f.field_value ?? "").trim() !== "")).length,
+          catalogSize: Object.keys(catalog).length,
+          catalogError,
+          keptCount: kept.length,
+          droppedCount: dropped.length,
+          kept,
+          dropped,
+        });
+      }
       // GET /asksolomon/library — list library items with metadata.
       if (path === "/asksolomon/library") {
         return handleLibraryList(request, env);
