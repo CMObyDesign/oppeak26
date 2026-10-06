@@ -288,6 +288,14 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
     <h3 id="bookmarks-header">Bookmarked Runs</h3>
     <div id="bookmarks-list"></div>
 
+    <h3 id="promotions-header" style="display:flex;align-items:center;justify-content:space-between;">
+      Rule Promotions (3C)
+      <button style="font-size:10px;padding:2px 6px;" onclick="openPromotions()">Open</button>
+    </h3>
+    <div id="promotions-summary-list" style="font-size:11px;color:#6b7280;padding:4px 8px;">
+      Click <strong>Open</strong> to review strategist feedback that's ready to become a rubric rule.
+    </div>
+
     <h3 id="library-header" style="display:flex;align-items:center;justify-content:space-between;">
       Reference Library
       <button style="font-size:10px;padding:2px 6px;" onclick="showLibraryUpload()">+ Upload</button>
@@ -1364,6 +1372,254 @@ async function regenerateRun(id) {
   if (!run) return toast("Couldn't find that run.", "error");
   loadInputsFromRun(id);
   await runSolomon();
+}
+
+// ---------- Rule Promotions (Phase 3C) ----------
+//
+// A modal that shows pending strategist feedback grouped by
+// feedback_type, lets a reviewer approve rows and edit each row's
+// candidate_rule, and renders an "export" view of the approved
+// batch — the text a human then pastes into ASSESSMENT_RUBRIC and
+// ships behind a rubric_version bump. Nothing here changes the
+// rubric automatically.
+
+async function openPromotions() {
+  if (document.getElementById("promotions-modal-backdrop")) return;
+  const html = \`
+    <div id="promotions-modal-backdrop" style="position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:300;display:flex;align-items:flex-start;justify-content:center;overflow-y:auto;">
+      <div style="background:#fff;margin:40px 0;padding:24px;border-radius:8px;max-width:860px;width:92%;min-height:200px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+          <div>
+            <h2 style="font-size:16px;margin:0;">Rule Promotions (Phase 3C)</h2>
+            <div class="meta" style="font-size:11px;color:#6b7280;margin-top:4px;">
+              Approve strategist feedback so it's ready for a <code>rubric_version</code> bump. Nothing here edits the rubric automatically.
+            </div>
+          </div>
+          <button onclick="closePromotions()">Close</button>
+        </div>
+        <div id="promotions-body" style="min-height:120px;">
+          <div class="empty-state">Loading…</div>
+        </div>
+      </div>
+    </div>
+  \`;
+  document.body.insertAdjacentHTML("beforeend", html);
+  await renderPromotionsSummary();
+}
+
+function closePromotions() {
+  document.getElementById("promotions-modal-backdrop")?.remove();
+}
+
+async function renderPromotionsSummary() {
+  const body = document.getElementById("promotions-body");
+  if (!body) return;
+  body.innerHTML = '<div class="empty-state">Loading…</div>';
+  try {
+    const res = await fetch("/feedback/pending-summary", {
+      headers: { "x-console-password": getPassword() },
+    });
+    if (res.status === 401) { body.innerHTML = '<div class="empty-state">Unauthorized — log out and back in.</div>'; return; }
+    const payload = await res.json();
+    if (payload.skipped) {
+      body.innerHTML = '<div class="empty-state">D1 isn\\'t wired in this environment yet — no feedback to review.</div>';
+      return;
+    }
+    const summary = Array.isArray(payload.summary) ? payload.summary : [];
+    if (!summary.length) {
+      body.innerHTML = '<div class="empty-state">No strategist feedback captured yet.</div>';
+      return;
+    }
+    const rows = summary.map(s => {
+      const total = s.pending_count + s.approved_count;
+      return \`
+        <tr>
+          <td style="padding:6px 8px;"><strong>\${escapeHtml(s.feedback_type)}</strong></td>
+          <td style="padding:6px 8px;text-align:right;">\${s.pending_count}</td>
+          <td style="padding:6px 8px;text-align:right;color:#065f46;">\${s.approved_count}</td>
+          <td style="padding:6px 8px;text-align:right;color:#6b7280;">\${total}</td>
+          <td style="padding:6px 8px;text-align:right;">
+            <button onclick="renderPromotionsType('\${escapeHtml(s.feedback_type)}')">Review</button>
+            \${s.approved_count ? \`<button onclick="renderPromotionsExport('\${escapeHtml(s.feedback_type)}')">Export</button>\` : ""}
+          </td>
+        </tr>
+      \`;
+    }).join("");
+    body.innerHTML = \`
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:#f9fafb;color:#6b7280;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;">
+            <th style="padding:8px;text-align:left;">Feedback type</th>
+            <th style="padding:8px;text-align:right;">Pending</th>
+            <th style="padding:8px;text-align:right;">Approved</th>
+            <th style="padding:8px;text-align:right;">Total</th>
+            <th style="padding:8px;text-align:right;"></th>
+          </tr>
+        </thead>
+        <tbody>\${rows}</tbody>
+      </table>
+    \`;
+  } catch (err) {
+    body.innerHTML = '<div class="empty-state">Load failed: ' + escapeHtml(err.message || String(err)) + '</div>';
+  }
+}
+
+async function renderPromotionsType(feedbackType) {
+  const body = document.getElementById("promotions-body");
+  if (!body) return;
+  body.innerHTML = '<div class="empty-state">Loading pending ' + escapeHtml(feedbackType) + '…</div>';
+  try {
+    const res = await fetch("/feedback?pending_type=" + encodeURIComponent(feedbackType), {
+      headers: { "x-console-password": getPassword() },
+    });
+    const payload = await res.json();
+    if (!payload.success) { body.innerHTML = '<div class="empty-state">' + escapeHtml(payload.error || "Load failed") + '</div>'; return; }
+    const rows = Array.isArray(payload.feedback) ? payload.feedback : [];
+    const header = \`
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <button onclick="renderPromotionsSummary()">← Back</button>
+        <h3 style="margin:0;font-size:14px;">Pending: \${escapeHtml(feedbackType)} (\${rows.length})</h3>
+      </div>
+    \`;
+    if (!rows.length) {
+      body.innerHTML = header + '<div class="empty-state">No pending rows for this type.</div>';
+      return;
+    }
+    const cards = rows.map(renderPromotionCard).join("");
+    body.innerHTML = header + cards;
+  } catch (err) {
+    body.innerHTML = '<div class="empty-state">Load failed: ' + escapeHtml(err.message || String(err)) + '</div>';
+  }
+}
+
+function renderPromotionCard(fb) {
+  const scope = fb.finding_id ? ("finding " + fb.finding_id) : "whole report";
+  const created = fb.created_at ? new Date(fb.created_at).toISOString().slice(0, 10) : "";
+  const by = fb.created_by || "unknown";
+  return \`
+    <div id="promo-card-\${escapeHtml(fb.id)}" style="border:1px solid #e5e7eb;border-radius:6px;padding:12px;margin-bottom:10px;background:#fff;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+        <div class="meta" style="font-size:11px;color:#6b7280;">\${escapeHtml(scope)} · report \${escapeHtml((fb.report_id || "").slice(0, 8))} · \${escapeHtml(by)} · \${escapeHtml(created)}</div>
+        <div>
+          <button class="primary" onclick="approveFeedback('\${escapeHtml(fb.id)}')">Approve</button>
+        </div>
+      </div>
+      \${fb.original_output ? \`<div style="font-size:12px;margin-bottom:4px;"><strong>Said:</strong> \${escapeHtml(fb.original_output)}</div>\` : ""}
+      \${fb.strategist_revision ? \`<div style="font-size:12px;margin-bottom:4px;"><strong>Should say:</strong> \${escapeHtml(fb.strategist_revision)}</div>\` : ""}
+      \${fb.reason ? \`<div style="font-size:12px;margin-bottom:4px;"><strong>Reason:</strong> \${escapeHtml(fb.reason)}</div>\` : ""}
+      <label style="font-size:11px;color:#6b7280;display:block;margin:8px 0 4px;text-transform:uppercase;letter-spacing:0.5px;">Candidate rule (edit before approving)</label>
+      <textarea id="promo-rule-\${escapeHtml(fb.id)}" style="width:100%;min-height:52px;font-size:13px;padding:6px 8px;border:1px solid #d1d5db;border-radius:4px;font-family:inherit;">\${escapeHtml(fb.candidate_rule || "")}</textarea>
+      <div style="display:flex;justify-content:space-between;margin-top:6px;">
+        <button onclick="saveCandidateRule('\${escapeHtml(fb.id)}')">Save draft rule</button>
+        <span id="promo-status-\${escapeHtml(fb.id)}" style="font-size:11px;color:#6b7280;"></span>
+      </div>
+    </div>
+  \`;
+}
+
+async function approveFeedback(id) {
+  const statusEl = document.getElementById("promo-status-" + id);
+  const ruleEl = document.getElementById("promo-rule-" + id);
+  if (statusEl) statusEl.textContent = "Approving…";
+  const body = {
+    approved_for_learning: true,
+    approved_by: (document.getElementById("staff-email")?.value || "").trim() || "console",
+  };
+  if (ruleEl) body.candidate_rule = ruleEl.value;
+  try {
+    const res = await fetch("/feedback/" + encodeURIComponent(id), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "x-console-password": getPassword() },
+      body: JSON.stringify(body),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!payload.success) { if (statusEl) statusEl.textContent = "Approve failed: " + (payload.error || res.status); return; }
+    toast("Approved — row is now ready for the next rubric bump.", "success");
+    document.getElementById("promo-card-" + id)?.remove();
+  } catch (err) {
+    if (statusEl) statusEl.textContent = "Approve failed: " + (err.message || String(err));
+  }
+}
+
+async function saveCandidateRule(id) {
+  const statusEl = document.getElementById("promo-status-" + id);
+  const ruleEl = document.getElementById("promo-rule-" + id);
+  if (!ruleEl) return;
+  if (statusEl) statusEl.textContent = "Saving…";
+  try {
+    const res = await fetch("/feedback/" + encodeURIComponent(id), {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "x-console-password": getPassword() },
+      body: JSON.stringify({ candidate_rule: ruleEl.value }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!payload.success) { if (statusEl) statusEl.textContent = "Save failed: " + (payload.error || res.status); return; }
+    if (statusEl) statusEl.textContent = "Saved.";
+    setTimeout(() => { if (statusEl) statusEl.textContent = ""; }, 2000);
+  } catch (err) {
+    if (statusEl) statusEl.textContent = "Save failed: " + (err.message || String(err));
+  }
+}
+
+async function renderPromotionsExport(feedbackType) {
+  const body = document.getElementById("promotions-body");
+  if (!body) return;
+  body.innerHTML = '<div class="empty-state">Loading approved ' + escapeHtml(feedbackType) + '…</div>';
+  try {
+    const res = await fetch("/feedback/approved?feedback_type=" + encodeURIComponent(feedbackType), {
+      headers: { "x-console-password": getPassword() },
+    });
+    const payload = await res.json();
+    const rows = Array.isArray(payload.feedback) ? payload.feedback : [];
+    const header = \`
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <button onclick="renderPromotionsSummary()">← Back</button>
+        <h3 style="margin:0;font-size:14px;">Approved: \${escapeHtml(feedbackType)} (\${rows.length})</h3>
+      </div>
+    \`;
+    if (!rows.length) {
+      body.innerHTML = header + '<div class="empty-state">No approved rows for this type.</div>';
+      return;
+    }
+    const rules = rows.filter(r => r.candidate_rule && r.candidate_rule.trim());
+    const exportText =
+      "# " + feedbackType + "\\n" +
+      "# " + rows.length + " approved feedback row" + (rows.length === 1 ? "" : "s") +
+      " · " + rules.length + " with a candidate rule" + "\\n\\n" +
+      rules.map((r, i) => (i + 1) + ". " + r.candidate_rule.trim()).join("\\n\\n");
+    const list = rows.map(r => \`
+      <div style="border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:8px;background:#fff;">
+        <div class="meta" style="font-size:11px;color:#065f46;">approved by \${escapeHtml(r.approved_by || "unknown")} · \${escapeHtml(r.approved_at ? new Date(r.approved_at).toISOString().slice(0,10) : "")}</div>
+        \${r.candidate_rule ? \`<div style="font-size:13px;margin-top:4px;"><strong>Rule:</strong> \${escapeHtml(r.candidate_rule)}</div>\` : '<div class="meta" style="margin-top:4px;color:#b91c1c;">no candidate_rule authored — skipped from export</div>'}
+      </div>
+    \`).join("");
+    body.innerHTML = header + \`
+      <h4 style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin:8px 0 6px;">Export (paste into ASSESSMENT_RUBRIC after a rubric_version bump)</h4>
+      <textarea readonly style="width:100%;min-height:140px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;padding:8px;border:1px solid #d1d5db;border-radius:4px;">\${escapeHtml(exportText)}</textarea>
+      <div style="display:flex;gap:8px;margin:8px 0 16px;">
+        <button class="primary" onclick="copyPromotionsExport()">Copy export</button>
+      </div>
+      <h4 style="font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;margin:16px 0 6px;">Approved rows</h4>
+      \${list}
+    \`;
+  } catch (err) {
+    body.innerHTML = '<div class="empty-state">Load failed: ' + escapeHtml(err.message || String(err)) + '</div>';
+  }
+}
+
+function copyPromotionsExport() {
+  const ta = document.querySelector("#promotions-body textarea[readonly]");
+  if (!ta) return;
+  ta.select();
+  try {
+    navigator.clipboard.writeText(ta.value).then(
+      () => toast("Export copied to clipboard.", "success"),
+      () => { document.execCommand("copy"); toast("Export copied.", "success"); }
+    );
+  } catch (_) {
+    document.execCommand("copy");
+    toast("Export copied.", "success");
+  }
 }
 
 // ---------- Sidebar ----------

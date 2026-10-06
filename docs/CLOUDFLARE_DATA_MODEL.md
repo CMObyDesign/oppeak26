@@ -16,7 +16,8 @@ database up.
 | 2c | Structured findings schema + evidence-backed validation | shipped |
 | 2d | Report renderer consumes structured findings | shipped |
 | 3a | Strategist feedback capture (capture-only, no auto-learning) | shipped |
-| **3b** | Strategist review UI (reads + writes against the 3A endpoints) | **shipped (this change)** |
+| 3b | Strategist review UI (reads + writes against the 3A endpoints) | shipped |
+| **3c** | Rule-promotion review queue inside Ask Solomon (human-gated) | **shipped (this change)** |
 
 Phase 1c is **safe to ship before the D1 and R2 bindings are wired**.
 The default `/report/{contactId}` read tries D1 first and falls through
@@ -570,8 +571,65 @@ Nothing about the UI changes the capture discipline:
   `report_id` the strategist loaded.
 - Nothing in Solomon's generator reads from this table.
 
-### Not yet
+## Rule promotion (Phase 3C)
 
-- Phase 3C: human-gated rule promotion from accumulated feedback
-  into the rubric. Bumps `rubric_version`, runs the regression
-  suite, deploys.
+Phase 3C is the final step in the learning loop: a human reviews
+accumulated strategist feedback, approves rows that reflect a real
+and generalizable mistake, and (separately) hand-authors the
+`candidate_rule` text that will go into the next
+`ASSESSMENT_RUBRIC`. The UI lives inside `/asksolomon` — the same
+console used to train and test Solomon — so the two human roles map
+cleanly to two surfaces:
+
+- `/strategist` → per-report capture (Phase 3B).
+- `/asksolomon` → Rule Promotions pane (Phase 3C).
+
+### Endpoints
+
+All CONSOLE_PASSWORD-gated.
+
+- `GET /feedback/pending-summary` — one row per `feedback_type` that
+  has at least one captured feedback record, with `pending_count` and
+  `approved_count`. Drives the Promotions pane's top-level view.
+  Degrades to `{success:true, skipped:true, summary:[]}` when D1
+  isn't wired.
+- `GET /feedback/approved?feedback_type=<T>` — approved rows for one
+  type, newest first. Backs the "Export approved batch" view. 400
+  on an unknown or missing `feedback_type`.
+- `PATCH /feedback/{id}` — update a single feedback row. The only
+  mutable fields are `approved_for_learning` and `candidate_rule`;
+  everything else about a feedback row (its scope, its original
+  critique) stays immutable from this layer. Approving stamps
+  `approved_by` + `approved_at`; unapproving clears both. 404 when
+  the row doesn't exist.
+
+### UI flow
+
+1. Open `/asksolomon`, click **Open** next to **Rule Promotions (3C)**.
+2. The modal lists each `feedback_type` with its pending/approved
+   counts. Types with zero captured rows don't appear.
+3. **Review** on a type → pending rows, newest first. Each row shows
+   the strategist's original/revision/reason and an editable
+   `candidate_rule` textarea pre-filled with the strategist's draft.
+4. Edit the rule text, then **Approve** to flip the row's
+   `approved_for_learning` and stamp the approver. **Save draft rule**
+   edits the rule without approving — useful when you want to
+   generalize the strategist's wording before deciding.
+5. **Export** on a type (visible once at least one row is approved) →
+   a monospace text block of all approved candidate rules for that
+   type, ready to paste into `ASSESSMENT_RUBRIC` after a
+   `rubric_version` bump.
+
+### What Phase 3C is **not**
+
+- Not auto-training. Nothing in Solomon's generator reads
+  `strategist_feedback`. Promotion is a human in the loop editing
+  code: bump `rubric_version` (e.g. `r2.0` → `r2.1`), paste the
+  approved rules into `ASSESSMENT_RUBRIC`, add a regression test if
+  the rule warrants one, run the suite, deploy. Past reports stay
+  stamped with their original version for audit.
+- Not retroactive. An approved rule only affects generations run
+  after the deploy that includes it.
+- Not public. The UI lives behind CONSOLE_PASSWORD; the API routes
+  reject unauthenticated calls with 401 and the review page
+  doesn't surface anything to a non-authenticated viewer.

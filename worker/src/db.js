@@ -403,6 +403,111 @@ export async function listPendingFeedbackByType(db, feedbackType, opts = {}) {
   return (results || []).map(hydrateFeedback);
 }
 
+/**
+ * Phase 3C — rule-promotion review queue summary.
+ *
+ * Returns one row per feedback_type that has at least one pending
+ * (approved_for_learning = 0) and/or approved (= 1) record, with
+ * both counts. Drives the Ask Solomon → Rule Promotions pane: the
+ * strategist sees which categories have enough signal to promote.
+ *
+ * The two counts come back regardless of the type's position in
+ * FEEDBACK_TYPES — categories with zero rows aren't returned.
+ */
+export async function pendingFeedbackSummary(db) {
+  if (!db) return [];
+  const { results } = await db.prepare(
+    `SELECT feedback_type,
+            SUM(CASE WHEN approved_for_learning = 0 THEN 1 ELSE 0 END) AS pending_count,
+            SUM(CASE WHEN approved_for_learning = 1 THEN 1 ELSE 0 END) AS approved_count
+       FROM strategist_feedback
+       GROUP BY feedback_type
+       ORDER BY pending_count DESC, feedback_type ASC`
+  ).all();
+  return (results || []).map(row => ({
+    feedback_type: row.feedback_type,
+    pending_count: Number(row.pending_count || 0),
+    approved_count: Number(row.approved_count || 0),
+  }));
+}
+
+/**
+ * Phase 3C — list approved rows for one feedback_type (export view).
+ * Newest first. Used by the "export approved batch" button to render
+ * the human-authored candidate rules that are ready for the next
+ * rubric_version bump.
+ */
+export async function listApprovedFeedbackByType(db, feedbackType, opts = {}) {
+  if (!db || !feedbackType) return [];
+  const requested = Number.isFinite(opts.limit) ? opts.limit : 100;
+  const limit = Math.max(1, Math.min(500, requested));
+  const { results } = await db.prepare(
+    `SELECT * FROM strategist_feedback
+       WHERE feedback_type = ? AND approved_for_learning = 1
+       ORDER BY approved_at DESC, created_at DESC
+       LIMIT ?`
+  ).bind(feedbackType, limit).all();
+  return (results || []).map(hydrateFeedback);
+}
+
+/**
+ * Phase 3C — update a feedback row's approval state and/or its
+ * strategist-authored candidate_rule text. Nothing else about a
+ * feedback row is mutable from this layer (not report_id, not
+ * feedback_type, not the strategist's original critique).
+ *
+ * Approving (approved_for_learning: true) stamps approved_by and
+ * approved_at; unapproving clears them. The candidate_rule text can
+ * be edited independently of the approval flag so a reviewer can
+ * draft the rule, approve later.
+ *
+ * Returns {ok, updated: n, row} on success, {ok: false, reason} on
+ * shape errors, and {ok: true, skipped: true, reason: "no_db_binding"}
+ * when D1 isn't wired.
+ */
+export async function updateFeedback(db, id, patch) {
+  if (!id || typeof id !== "string") return { ok: false, reason: "missing_id" };
+  if (!patch || typeof patch !== "object") return { ok: false, reason: "missing_patch" };
+  if (!db) return { ok: true, skipped: true, reason: "no_db_binding" };
+
+  const sets = [];
+  const binds = [];
+  const now = Date.now();
+  const hasApproval = Object.prototype.hasOwnProperty.call(patch, "approved_for_learning");
+  const hasCandidateRule = Object.prototype.hasOwnProperty.call(patch, "candidate_rule");
+
+  if (hasApproval) {
+    const approving = patch.approved_for_learning === true || patch.approved_for_learning === 1;
+    sets.push("approved_for_learning = ?");
+    binds.push(approving ? 1 : 0);
+    if (approving) {
+      sets.push("approved_by = ?");
+      sets.push("approved_at = ?");
+      binds.push(typeof patch.approved_by === "string" && patch.approved_by ? patch.approved_by : "unknown");
+      binds.push(now);
+    } else {
+      sets.push("approved_by = NULL");
+      sets.push("approved_at = NULL");
+    }
+  }
+  if (hasCandidateRule) {
+    sets.push("candidate_rule = ?");
+    binds.push(patch.candidate_rule == null ? null : String(patch.candidate_rule));
+  }
+  if (!sets.length) return { ok: false, reason: "nothing_to_update" };
+
+  binds.push(id);
+  const sql = `UPDATE strategist_feedback SET ${sets.join(", ")} WHERE id = ?`;
+  const result = await db.prepare(sql).bind(...binds).run();
+  const updated = result && result.meta ? Number(result.meta.changes || 0) : (result?.success ? 1 : 0);
+  if (!updated) return { ok: false, reason: "not_found" };
+
+  const row = await db.prepare(
+    `SELECT * FROM strategist_feedback WHERE id = ? LIMIT 1`
+  ).bind(id).first();
+  return { ok: true, updated, row: hydrateFeedback(row) };
+}
+
 function hydrateFeedback(row) {
   if (!row) return null;
   return {
