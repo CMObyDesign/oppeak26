@@ -2591,17 +2591,29 @@ async function handleReport(contactId, env, requestUrl) {
       return new Response("Historical reports require the D1 binding", { status: 404, headers: htmlHeaders() });
     }
     let report;
-    if (reportIdParam) {
-      report = await reportById(db, reportIdParam);
-      // Prevent crafted URL that points at another contact's report. The
-      // contactId in the URL path must match the stored row's contact_id.
-      if (report && report.contact_id !== contactId) report = null;
-    } else {
-      // reportByVersion is scoped to the contact's LATEST submission
-      // chain (see db.js). Cross-chain history is reachable via
-      // ?report_id= only. This closes the Codex finding where
-      // ?v=1 silently retargeted between free and paid chains.
-      report = await reportByVersion(db, contactId, parseInt(versionParam, 10));
+    // History reads treat D1 as a hard dependency — the contract forbids
+    // falling through to the GHL projection, which no longer carries
+    // old generations. A D1 query failure here is 503 ("try again
+    // shortly"), not 404 ("no such report"): the latter would mislead
+    // a reviewer or holder of a shared URL into thinking their
+    // generation was deleted. Codex caught this on PR #72 — reportById
+    // used to swallow D1 errors as null, which produced a wrong 404.
+    try {
+      if (reportIdParam) {
+        report = await reportById(db, reportIdParam);
+        // Prevent crafted URL that points at another contact's report. The
+        // contactId in the URL path must match the stored row's contact_id.
+        if (report && report.contact_id !== contactId) report = null;
+      } else {
+        // reportByVersion is scoped to the contact's LATEST submission
+        // chain (see db.js). Cross-chain history is reachable via
+        // ?report_id= only. This closes the Codex finding where
+        // ?v=1 silently retargeted between free and paid chains.
+        report = await reportByVersion(db, contactId, parseInt(versionParam, 10));
+      }
+    } catch (err) {
+      console.warn(`[handleReport] D1 history read failed for ${contactId}: ${err?.message || err}`);
+      return new Response("Historical report temporarily unavailable", { status: 503, headers: htmlHeaders() });
     }
     if (!report) {
       return new Response("Report version not found", { status: 404, headers: htmlHeaders() });
@@ -2620,8 +2632,21 @@ async function handleReport(contactId, env, requestUrl) {
   // Default read: try D1 latest successful FIRST. GHL comes in later
   // for identity (name/email on the shell) and for the fallback read
   // when no D1 row exists.
+  //
+  // Fail-open on D1 errors here: a missing report_versions table
+  // (migration-not-yet-applied window) or a transient D1 outage must
+  // not block the public /report/{contactId} read — we fall through to
+  // the GHL projection, which is Phase 1c's documented safety net.
+  // hydrateReport errors (malformed diagnostic_json) are NOT caught
+  // here — a data-integrity bug must surface, not silently serve a
+  // stale GHL copy.
   if (db) {
-    const latest = await latestSuccessfulReport(db, contactId);
+    let latest = null;
+    try {
+      latest = await latestSuccessfulReport(db, contactId);
+    } catch (err) {
+      console.warn(`[handleReport] D1 default read failed for ${contactId}, falling through to GHL: ${err?.message || err}`);
+    }
     if (latest) {
       const html = await resolveReportHtml(env, latest);
       if (html) {
@@ -4870,11 +4895,23 @@ export default {
       if (!db) {
         return json({ success: false, error: "Strategist review requires the D1 binding" }, 503);
       }
-      const report = await reportById(db, strategistReportMatch[1]);
-      if (!report) {
-        return json({ success: false, error: "Report not found" }, 404);
+      // D1 is a hard dependency for the strategist review (the review
+      // UI loads report rows out of D1 — there's no fallback). A D1
+      // outage here is 503, not 404: 404 would mislead the reviewer
+      // into thinking the report doesn't exist, when it just can't be
+      // reached right now. Codex caught this on PR #72 after the
+      // earlier version of reportById swallowed D1 errors as null.
+      let report, feedback;
+      try {
+        report = await reportById(db, strategistReportMatch[1]);
+        if (!report) {
+          return json({ success: false, error: "Report not found" }, 404);
+        }
+        feedback = await listFeedbackForReport(db, report.id);
+      } catch (err) {
+        console.warn(`[/strategist/report] D1 query failed for ${strategistReportMatch[1]}: ${err?.message || err}`);
+        return json({ success: false, error: "Strategist review temporarily unavailable" }, 503);
       }
-      const feedback = await listFeedbackForReport(db, report.id);
       return json({ success: true, report, feedback });
     }
 
