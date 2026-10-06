@@ -33,6 +33,7 @@ import {
   reportByVersion,
   reportById,
 } from "./db.js";
+import { normalizeContactFields } from "./normalize.js";
 
 // Versioning for canonical records (Phase 1 architecture — see
 // docs/SOLOMON_ARCHITECTURE.md and docs/CLOUDFLARE_DATA_MODEL.md). Each
@@ -1729,7 +1730,10 @@ async function writeReportArtifact(env, { contactId, reportId, html }) {
 // `validation` object with real content; Phase 1b stores nulls / minimal
 // shells and gets the write path landed.
 async function writeCanonicalRecord(env, args) {
-  const { contact, tier, answers, agent, reportHtml, sourceEventId, dryRun } = args;
+  const {
+    contact, tier, answers, agent, reportHtml, sourceEventId, dryRun,
+    normalizedAnswers, derivedMetrics,
+  } = args;
   if (dryRun) return { skipped: true, reason: "dry_run" };
   if (!contact?.id) return { skipped: true, reason: "no_contact_id" };
   const db = dbFromEnv(env);
@@ -1748,8 +1752,13 @@ async function writeCanonicalRecord(env, args) {
       assessment_version: ASSESSMENT_VERSION,
       source_event_id: sourceEventId || null,
       raw_answers: answers,
-      normalized_answers: undefined, // Phase 2
-      derived_metrics: undefined,    // Phase 2
+      // Phase 2A: normalized entries land here when the caller computed
+      // them (webhook path). Console runs still pass undefined (no
+      // field-id stream to normalize from); their canonical row stores
+      // null for normalized_answers_json and Phase 2B will skip derived
+      // metrics for those rows.
+      normalized_answers: normalizedAnswers === undefined ? undefined : normalizedAnswers,
+      derived_metrics: derivedMetrics === undefined ? undefined : derivedMetrics,
       validation: { complete: true, missing_fields: [], warnings: [] },
       status: "ready",
     });
@@ -4033,6 +4042,20 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   // the response includes it so callers can trace which record this
   // generation produced. Dry runs, missing D1 binding, and duplicate
   // source_event_id all surface as `skipped` with a reason.
+  // Phase 2A: compute the normalized answer entries from the contact's
+  // hydrated customFields. The catalog is fetched again here but hits
+  // the 5-min TTL cache that answersFromContactFields warmed above —
+  // no extra GHL API call. If the catalog is unavailable we log and
+  // continue with normalized=null; writeCanonicalRecord stores a null
+  // normalized_answers_json and Phase 2B skips derived metrics.
+  let normalizedAnswers = null;
+  try {
+    const catalog = await fetchGHLCustomFieldsCatalog(env);
+    normalizedAnswers = normalizeContactFields(contact, catalog);
+  } catch (err) {
+    console.warn(`[handleGHLSurveyWebhook] normalization skipped (catalog unavailable): ${err?.message || err}`);
+  }
+
   const canonical = await writeCanonicalRecord(env, {
     contact: { id: contactId, ...contact },
     tier,
@@ -4041,6 +4064,7 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
     reportHtml,
     sourceEventId: body?.event_id || body?.webhook_id || body?.source_event_id || null,
     dryRun,
+    normalizedAnswers,
   });
   if (canonical?.skipped && canonical.reason === "duplicate_submission") {
     // The GHL retry carried the same source_event_id and D1 saw it
@@ -5074,3 +5098,8 @@ export {
   fetchArtifactHtml,
   tierLabelOf,
 };
+
+// Phase 2A: normalization layer. Re-exported from index so tests that
+// want to touch both the primitives and the request handlers can do it
+// from one import.
+export { FIELD_NORMALIZERS, PRIMITIVES, normalizeContactFields, flatNormalized } from "./normalize.js";
