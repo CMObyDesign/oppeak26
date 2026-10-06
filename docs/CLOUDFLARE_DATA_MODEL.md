@@ -15,7 +15,8 @@ database up.
 | 2b | Deterministic derived-metrics engine — populates `derived_metrics_json` | shipped |
 | 2c | Structured findings schema + evidence-backed validation | shipped |
 | 2d | Report renderer consumes structured findings | shipped |
-| **3a** | Strategist feedback capture (capture-only, no auto-learning) | **shipped (this change)** |
+| 3a | Strategist feedback capture (capture-only, no auto-learning) | shipped |
+| **3b** | Strategist review UI (reads + writes against the 3A endpoints) | **shipped (this change)** |
 
 Phase 1c is **safe to ship before the D1 and R2 bindings are wired**.
 The default `/report/{contactId}` read tries D1 first and falls through
@@ -524,8 +525,53 @@ Both are CONSOLE_PASSWORD-gated — the same gate used by `/asksolomon/run`.
   critiques. Earlier reports that would have failed the same category
   are not relabeled; they stay as they were generated.
 
+## Strategist review UI (Phase 3B)
+
+The strategist opens `/strategist`, pastes a `report_id`, and attaches
+feedback to any structured finding on that report (or to the whole
+report). Every save goes through the Phase 3A `POST /feedback`
+endpoint, so the capture discipline is unchanged — Phase 3B is pure
+UI on top of the existing contract.
+
+### Endpoints
+
+- `GET /strategist` — the review page itself. Static HTML, served to
+  any browser; the API calls the page makes carry
+  `x-console-password`, so authentication happens on the data path,
+  not on the shell. The page bakes in the `FEEDBACK_TYPES`
+  vocabulary from `worker/src/db.js` at request time so the
+  dropdown and the server's accepted set can't drift.
+- `GET /strategist/report/{reportId}` — JSON lookup backing the
+  page. Returns `{report, feedback}` in one call: the hydrated
+  `report_versions` row (with its `structured_findings`) and every
+  feedback row already attached to it. Password-gated like
+  `/feedback`. 503 when D1 isn't wired (unlike `/feedback`,
+  there's no honest default), 404 for an unknown report.
+
+### How the page works
+
+- Set-password button → `sessionStorage`, never sent anywhere but
+  this worker.
+- Load → `GET /strategist/report/{id}` and render:
+  - A whole-report feedback form (always open).
+  - One card per structured finding with an "Add feedback" toggle;
+    the finding's text pre-fills the form's `original_output` so
+    the strategist edits a draft rather than retyping.
+  - A "Captured feedback" list showing pending vs. approved so the
+    strategist can see what's already on the record.
+- Save → `POST /feedback` with the finding scope. Re-loads the
+  report so the just-saved row appears in the captured list.
+
+### Scope boundary (unchanged from Phase 3A)
+
+Nothing about the UI changes the capture discipline:
+- No row is written as approved. The approval column stays `0`.
+- No row is retroactive. Feedback is attached to the exact
+  `report_id` the strategist loaded.
+- Nothing in Solomon's generator reads from this table.
+
 ### Not yet
 
-- Phase 3B: strategist review UI (write + read against these endpoints).
-- Phase 3C: human-gated rule promotion from accumulated feedback into
-  the rubric. Bumps `rubric_version`, runs the regression suite, deploys.
+- Phase 3C: human-gated rule promotion from accumulated feedback
+  into the rubric. Bumps `rubric_version`, runs the regression
+  suite, deploys.
