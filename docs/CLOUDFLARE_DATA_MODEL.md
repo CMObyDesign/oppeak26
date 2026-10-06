@@ -33,32 +33,47 @@ nothing in Phase 1c reads during a dry run.
 
 ## One-time setup
 
-Run these from a shell with Cloudflare auth (`wrangler login` or `CLOUDFLARE_API_TOKEN`):
+`wrangler.toml` already carries the `[[d1_databases]]` and
+`[[r2_buckets]] SOLOMON_REPORTS` blocks, with a `database_id` placeholder.
+Run these from a shell with Cloudflare auth (`wrangler login` or
+`CLOUDFLARE_API_TOKEN`):
 
 ```bash
-# 1. Create the D1 database. Prints a database_id — save it.
+# 1. Create the D1 database. Prints a database_id — copy it.
 wrangler d1 create solomon-canonical
 
-# 2. Uncomment the [[d1_databases]] block in wrangler.toml and paste
-#    the printed database_id into the `database_id =` line.
+# 2. In wrangler.toml, replace PASTE_DATABASE_ID_HERE with the id
+#    printed above. Commit that change on the deployment branch.
 
-# 3. Apply the initial schema to the remote database.
+# 3. Apply ALL migrations to the remote database (0001 + 0002, so the
+#    strategist_feedback table and its indexes land alongside the base
+#    schema). `--remote` targets prod; drop it only in local dev.
 wrangler d1 migrations apply solomon-canonical --remote
 
 # 4. Create the R2 bucket for rendered-HTML artifacts (Phase 1b).
 wrangler r2 bucket create solomon-reports
 
-# 5. Uncomment the [[r2_buckets]] SOLOMON_REPORTS block in wrangler.toml.
-
-# 6. Deploy the worker so both bindings take effect.
+# 5. Deploy the worker so both bindings take effect.
 wrangler deploy
 ```
+
+Deploy fails fast while `database_id` is still the placeholder — that's
+intentional, so a half-wired config can't ship. Both bindings are
+read lazily; writes degrade to `{skipped:true}` on any environment
+that doesn't carry them.
 
 After deploy, submissions and reports start landing in D1 on every
 real (non-dry-run) generation; rendered HTML lands in R2 under
 `reports/{contact_id}/{report_id}/report.html`. HighLevel `swot_*` fields
 continue to carry the latest customer-facing projection as before — the
-read path doesn't change until Phase 1c.
+read path reads D1 first and falls back to GHL (Phase 1c).
+
+Phase 3A-3C endpoints (`POST /feedback`, `GET /feedback`,
+`GET /strategist/report/{reportId}`, `GET /feedback/pending-summary`,
+`GET /feedback/approved`, `PATCH /feedback/{id}`) all become fully
+functional once D1 is wired. Before wiring they already return the
+documented `{skipped:true, reason:"no_db_binding"}` shape so the UI
+degrades gracefully.
 
 For local development against a sqlite shim:
 
