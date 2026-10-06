@@ -200,13 +200,23 @@ export async function insertReportVersion(db, r) {
  */
 export async function latestSuccessfulReport(db, contactId) {
   if (!db) return null;
-  const row = await db.prepare(`
-    SELECT * FROM report_versions
-    WHERE contact_id = ? AND is_successful = 1
-    ORDER BY created_at DESC
-    LIMIT 1
-  `).bind(contactId).first();
-  return hydrateReport(row);
+  // Fail-open on D1 schema or outage errors: a missing report_versions
+  // table (common during the migration-not-yet-applied window after a
+  // new binding is wired) or a transient D1 outage must not block the
+  // public /report/{contactId} read — the caller falls through to the
+  // GHL projection, which is Phase 1c's documented safety net.
+  try {
+    const row = await db.prepare(`
+      SELECT * FROM report_versions
+      WHERE contact_id = ? AND is_successful = 1
+      ORDER BY created_at DESC
+      LIMIT 1
+    `).bind(contactId).first();
+    return hydrateReport(row);
+  } catch (err) {
+    console.warn(`[latestSuccessfulReport] D1 query failed for ${contactId}: ${err?.message || err}`);
+    return null;
+  }
 }
 
 /**
@@ -225,10 +235,15 @@ export async function latestSuccessfulReport(db, contactId) {
  */
 export async function latestSubmissionIdForContact(db, contactId) {
   if (!db) return null;
-  const row = await db.prepare(
-    `SELECT id FROM submissions WHERE contact_id = ? ORDER BY created_at DESC LIMIT 1`
-  ).bind(contactId).first();
-  return row?.id || null;
+  try {
+    const row = await db.prepare(
+      `SELECT id FROM submissions WHERE contact_id = ? ORDER BY created_at DESC LIMIT 1`
+    ).bind(contactId).first();
+    return row?.id || null;
+  } catch (err) {
+    console.warn(`[latestSubmissionIdForContact] D1 query failed for ${contactId}: ${err?.message || err}`);
+    return null;
+  }
 }
 
 /**
@@ -248,12 +263,17 @@ export async function reportByVersion(db, contactId, version) {
   if (!db) return null;
   const submissionId = await latestSubmissionIdForContact(db, contactId);
   if (!submissionId) return null;
-  const row = await db.prepare(`
-    SELECT * FROM report_versions
-    WHERE submission_id = ? AND report_version = ? AND is_successful = 1
-    LIMIT 1
-  `).bind(submissionId, Number(version)).first();
-  return hydrateReport(row);
+  try {
+    const row = await db.prepare(`
+      SELECT * FROM report_versions
+      WHERE submission_id = ? AND report_version = ? AND is_successful = 1
+      LIMIT 1
+    `).bind(submissionId, Number(version)).first();
+    return hydrateReport(row);
+  } catch (err) {
+    console.warn(`[reportByVersion] D1 query failed for ${contactId} v${version}: ${err?.message || err}`);
+    return null;
+  }
 }
 
 /**
@@ -267,10 +287,15 @@ export async function reportByVersion(db, contactId, version) {
  */
 export async function reportById(db, reportId) {
   if (!db) return null;
-  const row = await db.prepare(
-    `SELECT * FROM report_versions WHERE id = ? AND is_successful = 1 LIMIT 1`
-  ).bind(reportId).first();
-  return hydrateReport(row);
+  try {
+    const row = await db.prepare(
+      `SELECT * FROM report_versions WHERE id = ? AND is_successful = 1 LIMIT 1`
+    ).bind(reportId).first();
+    return hydrateReport(row);
+  } catch (err) {
+    console.warn(`[reportById] D1 query failed for ${reportId}: ${err?.message || err}`);
+    return null;
+  }
 }
 
 // --- Strategist feedback (Phase 3A) --------------------------------------
