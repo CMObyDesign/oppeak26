@@ -10,7 +10,11 @@ database up.
 |---|---|---|
 | 1a | Schema + migration + data-access module | shipped |
 | 1b | Dual-write from `handleGHLSurveyWebhook` and `handleConsoleRun`, R2 HTML artifact | shipped |
-| **1c** | `/report/{contactId}` reads D1 with GHL fallback; `?v=N` / `?report_id=` history | **shipped (this change)** |
+| 1c | `/report/{contactId}` reads D1 with GHL fallback; `?v=N` / `?report_id=` history | shipped |
+| **2a** | Deterministic normalization — populates `normalized_answers_json` | **shipped (this change)** |
+| 2b | Deterministic derived-metrics engine — populates `derived_metrics_json` | not yet |
+| 2c | Structured findings schema + evidence-backed validation | not yet |
+| 2d | Report renderer consumes structured findings | not yet |
 
 Phase 1c is **safe to ship before the D1 and R2 bindings are wired**.
 The default `/report/{contactId}` read tries D1 first and falls through
@@ -180,12 +184,68 @@ reconstructing a historical report from the owner's current GHL fields
 row's `contact_id` matches the URL path. A crafted URL that points at
 another contact's report returns 404.
 
-## Not in Phase 1
+## Normalization (Phase 2A)
 
-- Normalization answers (`normalized_answers_json`) — Phase 2
-- Derived metrics (`derived_metrics_json`) — Phase 2
-- Structured findings schema inside `diagnostic_json` — Phase 2
+The deterministic normalizer in `worker/src/normalize.js` converts GHL
+custom-field answers into typed values Phase 2B's derived-metrics engine
+can consume. Rules:
+
+- **Deterministic code only** — never a second LLM call.
+- **Preserve the raw.** The whole-answer snapshot still lives in
+  `raw_answers_json`; normalization produces the parallel
+  `normalized_answers_json` entries.
+- **Each GHL field id → stable `question_key`.** If GHL renames the
+  field in the UI, the id stays and the question_key stays. The map
+  is pinned to identity, not label (see `FIELD_NORMALIZERS`).
+- **Ambiguous → `"unknown"`, missing → `null`.** Never fabricate a
+  default. The invented-tax-lien bug (closed by PR #52) is also enforced
+  at the normalizer layer: an explicit denial ("no judgments or liens")
+  keeps `judgments_or_liens: false` even when the sentence contains the
+  word "judgment".
+
+Each entry in `normalized_answers_json` carries:
+
+```json
+{
+  "source_field_id": "GGyFaucTwsIEsrXBHUsy",
+  "question_key": "monthly_debt_service",
+  "raw_question": "How much do you pay every month on servicing your corporate debt?",
+  "raw_answer": "1800",
+  "normalized_value": 1800
+}
+```
+
+Normalized question keys currently in production (bump this list when
+`FIELD_NORMALIZERS` gains an entry):
+
+| question_key | tier | type |
+|---|---|---|
+| `business_type` | free | string |
+| `customer_acquisition_channel` | free | string |
+| `industry` | free | string |
+| `active_debt_summary` | free | `{subtypes[], judgments_or_liens}` |
+| `financial_decision_basis` | free | `bank_balance_heavy` / `actual_numbers` / `mixed` / `unknown` |
+| `monthly_debt_service` | paid_47 | number (USD) |
+| `total_corporate_debt` | paid_47 | number (USD) |
+| `ar_60_plus` | paid_47 | number (USD) |
+| `ar_30_plus` | paid_47 | number (USD) |
+| `tax_returns_status` | paid_47 | `current` / `overdue` / `not_filed` / `on_payment_plan` / `lien` / `unknown` |
+| `has_formal_audit` | paid_47 | boolean |
+| `has_documented_budget` | paid_47 | boolean |
+| `debt_status` | paid_47 | `current` / `stretched` / `delinquent` / `paid_off` / `unknown` |
+| `merchant_processing_last_review` | paid_47 | 6 bucket enum |
+
+Fields deliberately NOT normalized: competitors, bold move, best-margins,
+proprietary process, where losing deals, financial metrics not tracked.
+Those are long-form narrative; they stay in `raw_answers_json` and the
+rubric still reads them as prose.
+
+## Not yet
+
+- Derived metrics (`derived_metrics_json`) — Phase 2B
+- Structured findings schema inside `diagnostic_json` — Phase 2C
+- Renderer that consumes structured findings — Phase 2D
 - Strategist feedback capture — Phase 3
 
-The schema has columns reserved for all four so Phase 2/3 don't require a
-migration.
+The schema has columns reserved for all three storage shapes so Phases
+2/3 don't require a migration.
