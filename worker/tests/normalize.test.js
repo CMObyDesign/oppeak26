@@ -98,6 +98,17 @@ describe("normTaxReturnsStatus", () => {
   it("returns 'unknown' for unclassifiable answers", () => {
     assert.equal(f("complicated story"), "unknown");
   });
+
+  it("maps 'One or both years are not yet filed' (paid-tier production label)", () => {
+    // Previously collided with \bfiled\b and returned "current" — a
+    // tax-compliance red flag silently reversed. The paid_47 survey
+    // ships this exact string (paidTier47Questions.ts).
+    assert.equal(f("One or both years are not yet filed"), "not_filed");
+  });
+
+  it("maps 'Filed but there's an outstanding balance or payment plan'", () => {
+    assert.equal(f("Filed but there's an outstanding balance or payment plan"), "on_payment_plan");
+  });
 });
 
 describe("normDebtStatus", () => {
@@ -147,6 +158,23 @@ describe("normFinancialDecisionBasis", () => {
   it("returns 'unknown' when neither pattern matches", () => {
     assert.equal(f("gut feel"), "unknown");
   });
+
+  // Production labels from freeAssessmentQuestions.ts.
+  it("maps the exact free-tier label 'I run on numbers I have clean financials'", () => {
+    assert.equal(f("I run on numbers I have clean financials"), "actual_numbers");
+  });
+
+  it("maps the exact free-tier label 'Mostly my bank balance'", () => {
+    assert.equal(f("Mostly my bank balance"), "bank_balance_heavy");
+  });
+
+  it("maps the exact free-tier label 'Somewhere in between'", () => {
+    assert.equal(f("Somewhere in between"), "mixed");
+  });
+
+  it("maps the exact free-tier label 'Honestly not sure'", () => {
+    assert.equal(f("Honestly not sure"), "unknown");
+  });
 });
 
 describe("normDebtSummary (compound)", () => {
@@ -183,6 +211,24 @@ describe("normDebtSummary (compound)", () => {
     assert.ok(r.subtypes.includes("credit_card"));
     assert.ok(r.subtypes.includes("vehicle_loan"));
     assert.ok(r.subtypes.includes("merchant_cash_advance"));
+  });
+
+  // Free-tier labels from freeAssessmentQuestions.ts: "Yes" / "No" / "Not sure".
+  // The field asks about judgments, liens, OR corporate debt — a bare
+  // "Yes" affirms ONE of those but gives no detail. Collapsing it to
+  // judgments_or_liens:false would turn a red-flag answer into a clean
+  // denial in the immutable snapshot.
+  it("bare 'No' → {subtypes:[], judgments_or_liens:false} (explicit denial)", () => {
+    assert.deepEqual(f("No"), { subtypes: [], judgments_or_liens: false });
+  });
+
+  it("bare 'Yes' → {subtypes:[], judgments_or_liens:'unknown'} (affirmative but no detail)", () => {
+    assert.deepEqual(f("Yes"), { subtypes: [], judgments_or_liens: "unknown" });
+  });
+
+  it("'Not sure' → judgments_or_liens:'unknown' (ambiguous)", () => {
+    assert.deepEqual(f("Not sure"), { subtypes: [], judgments_or_liens: "unknown" });
+    assert.deepEqual(f("Honestly not sure"), { subtypes: [], judgments_or_liens: "unknown" });
   });
 });
 

@@ -237,6 +237,45 @@ describe("deriveMetrics — integration with Phase 2A normalizer output", () => 
   });
 });
 
+// --- Nonnegative-input discipline (Phase 2D hardening) -----------------
+
+describe("deriveMetrics — negative-input rejection", () => {
+  it("rejects a negative dollar passthrough (GHL typo guard)", () => {
+    // normMoney preserves negatives (someone could type "-5000" into a
+    // GHL money field). We refuse to emit it as a dollar metric —
+    // "-$5,000 A/R 60+" would mislead a customer.
+    const metrics = deriveMetrics({ ar_60_plus: -5000 });
+    assert.equal(get(metrics, "ar_60_plus_amount"), null);
+  });
+
+  it("still emits zero as a dollar passthrough ($0 is a real finding)", () => {
+    const m = get(deriveMetrics({ ar_60_plus: 0 }), "ar_60_plus_amount");
+    assert.equal(m.value, 0);
+    assert.equal(m.unit, "dollars");
+  });
+
+  it("rejects a ratio with a negative numerator", () => {
+    const metrics = deriveMetrics({ ar_60_plus: -5000, monthly_debt_service: 1800 });
+    assert.equal(get(metrics, "ar_60_plus_months_of_debt_service"), null,
+      "A negative numerator would produce -2.78 months — garbage. Reject it.");
+  });
+
+  it("still emits a ratio with a zero numerator (0 months is real)", () => {
+    const m = get(
+      deriveMetrics({ ar_60_plus: 0, monthly_debt_service: 1800 }),
+      "ar_60_plus_months_of_debt_service"
+    );
+    assert.equal(m.value, 0);
+  });
+
+  it("rejects a funnel ratio with a negative count (future count-field guard)", () => {
+    // If a future normalizer somehow emits bookings_per_month = -1,
+    // we refuse to turn it into a conversion rate.
+    const metrics = deriveMetrics({ leads_per_month: 150, bookings_per_month: -1 });
+    assert.equal(get(metrics, "lead_to_booking_rate"), null);
+  });
+});
+
 // --- findMetric ---------------------------------------------------------
 
 describe("findMetric", () => {

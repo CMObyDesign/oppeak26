@@ -13,8 +13,8 @@ database up.
 | 1c | `/report/{contactId}` reads D1 with GHL fallback; `?v=N` / `?report_id=` history | shipped |
 | 2a | Deterministic normalization — populates `normalized_answers_json` | shipped |
 | 2b | Deterministic derived-metrics engine — populates `derived_metrics_json` | shipped |
-| **2c** | Structured findings schema + evidence-backed validation | **shipped (this change)** |
-| 2d | Report renderer consumes structured findings | not yet |
+| 2c | Structured findings schema + evidence-backed validation | shipped |
+| **2d** | Report renderer consumes structured findings | **shipped (this change)** |
 
 Phase 1c is **safe to ship before the D1 and R2 bindings are wired**.
 The default `/report/{contactId}` read tries D1 first and falls through
@@ -361,12 +361,76 @@ exact PR #52 debt-subtype discipline played out at the structural
 layer: a finding that would claim `tax_lien = true` without supporting
 intake is rejected before it reaches the customer.
 
+## Report renderer (Phase 2D)
+
+`buildReportHtml` now consumes `structured_findings` when present and
+renders each one into the existing Critical Gaps visual slot:
+
+- `interpretation` → the top line (title).
+- `recommendation` → the sub-line.
+- `severity` → priority badge (`high` → HIGH red, `medium` → MEDIUM amber,
+  `low` → LOW). The visual slot is identical to the pre-2D prose gap so
+  nothing in the shell page or GHL contract shifts.
+- Each finding renders a **"Based on:"** receipts footer carrying its
+  evidence fields and derived metrics in human-friendly form —
+  `A/R 60+ days: $6,500 · Monthly debt service: $1,800 · Months of debt
+  service in 60+ A/R: 3.61 months`. This is the trust-building
+  traceability the architecture asked for: a reader can see the exact
+  intake + math each finding rests on.
+
+**Fallback discipline.** When `agent.structured_findings` is empty or
+absent, the renderer falls back to `agent.gaps` (prose) unchanged — so
+pre-canonical generations and console runs that didn't produce
+structured output keep working. The opportunities section is unchanged
+in Phase 2D: it continues to render from `agent.opportunities` prose.
+
+**Phase 2D also hardened the Phase 2C validator** against three Codex
+P1 patterns the previous shape of the rules allowed through:
+
+- A compound evidence value (e.g. `active_debt_summary = {subtypes,
+  judgments_or_liens}`) with a cited property that doesn't match the
+  stored object is REJECTED. Previously object-value comparison was
+  skipped entirely — the exact PR #52 debt-subtype bug could have
+  slipped back in via `{judgments_or_liens: true}` on a contact whose
+  stored value was `false`.
+- A numeric evidence value cited as a stringified amount (`"999999"`)
+  is REJECTED. The output schema's quoted placeholder could encourage
+  the model to emit strings; the validator now requires a finite
+  number.
+- A derived-metric citation with a stringified or missing `value` is
+  REJECTED on the same basis.
+
+And the sanitizer `sanitizeStructuredFindings` is now wired into
+**every generation path** (`handleGHLSurveyWebhook`, `handleConsoleRun`,
+and the public assessment POST), not just the webhook. Console runs
+and public POSTs have no normalization context — the sanitizer runs
+with an empty context so every structured finding fails the
+grounded-in-nothing rule and is stripped, keeping unvalidated findings
+out of returned HTML.
+
+### Normalization fixes shipped alongside 2D
+
+Phase 2A missed three production label patterns the renderer would
+have exposed:
+
+- `normTaxReturnsStatus`: `One or both years are not yet filed`
+  (paid-tier survey option) collided with `\bfiled\b` and was
+  returning `current` — now returns `not_filed`.
+- `normFinancialDecisionBasis`: `I run on numbers I have clean
+  financials` and `Somewhere in between` (free-tier survey options)
+  were returning `unknown` — now return `actual_numbers` and `mixed`.
+- `normDebtSummary`: bare `Yes` / `Not sure` (free-tier labels) were
+  being collapsed to `{judgments_or_liens: false}` identical to `No`
+  — now `Yes` and `Not sure` return `{judgments_or_liens: "unknown"}`
+  so an affirmative or ambiguous answer isn't silently converted into
+  a clean denial.
+
 ### Not yet
 
-- Phase 2D: HTML renderer consumes `structured_findings` and renders
-  prose from the structured record. Phase 2C's prose fields
-  (`gaps`, `opportunities`) continue to serve the renderer until then.
-- Phase 3: strategist feedback capture against individual finding_ids.
+- Phase 3: strategist feedback capture against individual `finding_id`s.
+- Phase 1c `/report` read-path hardening (resolve D1 before GHL fetch;
+  stable `?v=N` semantics across submissions; filter `is_successful`
+  on historical reads) — queued as a follow-up PR.
 
-The schema has columns reserved for the storage shapes so Phase 2D+
+The schema has columns reserved for the storage shapes so these follow-ups
 don't require a migration.

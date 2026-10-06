@@ -24,6 +24,7 @@ import {
   validateStructuredFindings,
   buildFactsForPrompt,
 } from "../src/findings.js";
+import { sanitizeStructuredFindings } from "../src/index.js";
 
 // A representative "Liz" context: the normalized + derived view today's
 // paid_47 intake would produce.
@@ -115,6 +116,164 @@ describe("validateStructuredFinding — happy path", () => {
       ctx
     );
     assert.equal(r.ok, true, `expected OK, reasons=${JSON.stringify(r.reasons)}`);
+  });
+});
+
+// --- Codex P1: numeric evidence must be a finite number ---------------
+
+describe("validateStructuredFinding — numeric evidence must be a number", () => {
+  it("REJECTS a stringified numeric evidence value (e.g. '999999' vs 6500)", () => {
+    // The output schema's placeholder shows value in quotes, which could
+    // encourage the model to emit a stringified number. We require a real
+    // finite number — "999999" is not an acceptable citation of 6500.
+    const r = validateStructuredFinding(
+      {
+        ...GOOD_FINDING,
+        evidence: [{ field: "ar_60_plus", value: "999999" }],
+      },
+      LIZ_CTX
+    );
+    assert.equal(r.ok, false);
+    assert.ok(r.reasons.some((x) => x.includes("ar_60_plus") && x.includes("finite number")));
+  });
+
+  it("REJECTS a missing evidence value for a numeric field", () => {
+    const r = validateStructuredFinding(
+      {
+        ...GOOD_FINDING,
+        evidence: [{ field: "ar_60_plus" }], // no value at all
+      },
+      LIZ_CTX
+    );
+    assert.equal(r.ok, false);
+    assert.ok(r.reasons.some((x) => x.includes("finite number")));
+  });
+
+  it("REJECTS a NaN or Infinity evidence value", () => {
+    const r = validateStructuredFinding(
+      { ...GOOD_FINDING, evidence: [{ field: "ar_60_plus", value: Number.NaN }] },
+      LIZ_CTX
+    );
+    assert.equal(r.ok, false);
+  });
+});
+
+// --- Codex P1: compound evidence must match stored properties ----------
+
+describe("validateStructuredFinding — compound evidence", () => {
+  const CTX_WITH_COMPOUND = {
+    normalized: {
+      active_debt_summary: { subtypes: ["equipment_loan"], judgments_or_liens: false },
+    },
+    derivedMetrics: [],
+  };
+
+  it("REJECTS a compound citation that invents judgments_or_liens:true", () => {
+    // The exact PR #52 pattern recreated at the structured-finding
+    // layer: stored says the owner denied judgments/liens; model claims
+    // the opposite in the finding's evidence. Must be rejected.
+    const r = validateStructuredFinding(
+      {
+        ...GOOD_FINDING,
+        evidence: [{
+          field: "active_debt_summary",
+          value: { judgments_or_liens: true },
+        }],
+      },
+      CTX_WITH_COMPOUND
+    );
+    assert.equal(r.ok, false);
+    assert.ok(r.reasons.some((x) => x.includes("judgments_or_liens")));
+  });
+
+  it("REJECTS a compound citation that invents an unreported subtype", () => {
+    const r = validateStructuredFinding(
+      {
+        ...GOOD_FINDING,
+        evidence: [{
+          field: "active_debt_summary",
+          value: { subtypes: ["tax_debt"] },
+        }],
+      },
+      CTX_WITH_COMPOUND
+    );
+    assert.equal(r.ok, false);
+    assert.ok(r.reasons.some((x) => x.includes("tax_debt")));
+  });
+
+  it("accepts a compound citation whose subtypes are a subset of stored", () => {
+    const r = validateStructuredFinding(
+      {
+        finding_id: "debt-001",
+        category: "debt",
+        severity: "medium",
+        evidence: [{ field: "active_debt_summary", value: { subtypes: ["equipment_loan"] } }],
+        derived_metrics: [],
+        interpretation: "Equipment-loan debt, current.",
+        recommendation: "Track monthly service against receivables.",
+      },
+      CTX_WITH_COMPOUND
+    );
+    assert.equal(r.ok, true, `expected OK, reasons=${JSON.stringify(r.reasons)}`);
+  });
+
+  it("accepts a compound field citation with no value echo (whole-object elision)", () => {
+    const r = validateStructuredFinding(
+      {
+        finding_id: "debt-002",
+        category: "debt",
+        severity: "medium",
+        evidence: [{ field: "active_debt_summary" }],
+        derived_metrics: [],
+        interpretation: "Owner reports debt detail — see summary.",
+        recommendation: "Follow up.",
+      },
+      CTX_WITH_COMPOUND
+    );
+    assert.equal(r.ok, true);
+  });
+
+  it("REJECTS a compound citation that references a non-existent property", () => {
+    const r = validateStructuredFinding(
+      {
+        ...GOOD_FINDING,
+        evidence: [{
+          field: "active_debt_summary",
+          value: { in_default: true },
+        }],
+      },
+      CTX_WITH_COMPOUND
+    );
+    assert.equal(r.ok, false);
+    assert.ok(r.reasons.some((x) => x.includes("in_default")));
+  });
+});
+
+// --- Codex P1: derived-metric value must be a finite number ------------
+
+describe("validateStructuredFinding — derived-metric numeric citations", () => {
+  it("REJECTS a stringified derived_metrics.value (e.g. '999999' vs 60000)", () => {
+    const r = validateStructuredFinding(
+      {
+        ...GOOD_FINDING,
+        derived_metrics: [{ metric: "total_debt", value: "999999" }],
+      },
+      LIZ_CTX
+    );
+    assert.equal(r.ok, false);
+    assert.ok(r.reasons.some((x) => x.includes("total_debt") && x.includes("finite number")));
+  });
+
+  it("REJECTS a missing derived_metrics.value", () => {
+    const r = validateStructuredFinding(
+      {
+        ...GOOD_FINDING,
+        derived_metrics: [{ metric: "total_debt" }], // no value at all
+      },
+      LIZ_CTX
+    );
+    assert.equal(r.ok, false);
+    assert.ok(r.reasons.some((x) => x.includes("finite number")));
   });
 });
 
@@ -326,5 +485,80 @@ describe("buildFactsForPrompt", () => {
     assert.ok(b);
     assert.equal(b.derived_metrics.length, 1);
     assert.deepEqual(b.facts, {});
+  });
+});
+
+// --- Codex P2: sanitizeStructuredFindings coverage ----------------------
+
+describe("sanitizeStructuredFindings (shared helper used by every generation path)", () => {
+  it("replaces a non-array structured_findings with [] and logs", () => {
+    const agent = { structured_findings: { finding_id: "x" } }; // object, not array
+    sanitizeStructuredFindings(agent, { normalized: {}, derivedMetrics: [] }, "test");
+    assert.deepEqual(agent.structured_findings, [],
+      "non-array structured_findings must be sanitized to []");
+  });
+
+  it("replaces a stringified structured_findings with []", () => {
+    const agent = { structured_findings: "not an array" };
+    sanitizeStructuredFindings(agent, { normalized: {}, derivedMetrics: [] }, "test");
+    assert.deepEqual(agent.structured_findings, []);
+  });
+
+  it("leaves structured_findings undefined (no-op) when field is absent", () => {
+    const agent = { headline: "x" };
+    sanitizeStructuredFindings(agent, { normalized: {}, derivedMetrics: [] }, "test");
+    assert.equal(agent.structured_findings, undefined,
+      "absent field stays absent — don't add a key the model didn't emit");
+  });
+
+  it("strips every finding when context has no facts (console-run safety)", () => {
+    // Console runs and public POSTs have no normalization context.
+    // Every structured finding evaluated against an empty FACTS object
+    // fails the grounded-in-nothing rule and is stripped — this is the
+    // safe default the Codex P2 asked for.
+    const agent = {
+      structured_findings: [
+        {
+          finding_id: "x", category: "cash_flow", severity: "high",
+          evidence: [{ field: "ar_60_plus", value: 6500 }],
+          derived_metrics: [],
+          interpretation: "x", recommendation: "y",
+        },
+      ],
+    };
+    sanitizeStructuredFindings(agent, { normalized: {}, derivedMetrics: [] }, "test");
+    assert.deepEqual(agent.structured_findings, [],
+      "finding citing ar_60_plus must be stripped when FACTS is empty");
+  });
+
+  it("keeps valid findings and strips invalid ones in the same pass", () => {
+    const ctx = {
+      normalized: { ar_60_plus: 6500, monthly_debt_service: 1800 },
+      derivedMetrics: [{ metric: "ar_60_plus_months_of_debt_service", value: 3.61 }],
+    };
+    const agent = {
+      structured_findings: [
+        {
+          finding_id: "good-001", category: "cash_flow", severity: "high",
+          evidence: [{ field: "ar_60_plus", value: 6500 }],
+          derived_metrics: [],
+          interpretation: "x", recommendation: "y",
+        },
+        {
+          finding_id: "bad-001", category: "cash_flow", severity: "high",
+          evidence: [{ field: "invented_field", value: 1 }],
+          derived_metrics: [],
+          interpretation: "x", recommendation: "y",
+        },
+      ],
+    };
+    sanitizeStructuredFindings(agent, ctx, "test");
+    assert.equal(agent.structured_findings.length, 1);
+    assert.equal(agent.structured_findings[0].finding_id, "good-001");
+  });
+
+  it("is tolerant of a null/undefined agent (no throw)", () => {
+    assert.doesNotThrow(() => sanitizeStructuredFindings(null, { normalized: {}, derivedMetrics: [] }, "test"));
+    assert.doesNotThrow(() => sanitizeStructuredFindings(undefined, { normalized: {}, derivedMetrics: [] }, "test"));
   });
 });

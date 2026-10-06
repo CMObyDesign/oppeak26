@@ -145,18 +145,50 @@ export function validateStructuredFinding(finding, ctx) {
       reasons.push(`evidence[${i}].field "${e.field}" has no value in the normalized intake`);
       continue;
     }
-    // Only verify value-equality for primitives. Compound values
-    // (e.g. active_debt_summary = {subtypes, judgments_or_liens}) are
-    // allowed to be cited without value-matching here — the finding
-    // doesn't need to echo the whole object.
-    if (typeof stored === "number" && typeof e.value === "number") {
-      if (!numericClose(stored, e.value)) {
+    // Numeric fields require a numeric citation. If the stored value is
+    // a number, the model MUST supply a finite number — stringified
+    // amounts like "999999" (which the schema example's quoted
+    // placeholder could encourage) are rejected before the tolerance
+    // check runs. Omitting the value entirely is also rejected.
+    if (typeof stored === "number") {
+      if (typeof e.value !== "number" || !Number.isFinite(e.value)) {
+        reasons.push(`evidence[${i}].value for numeric field "${e.field}" must be a finite number (got ${JSON.stringify(e.value)})`);
+      } else if (!numericClose(stored, e.value)) {
         reasons.push(`evidence[${i}].value ${e.value} does not match normalized ${stored} for field "${e.field}"`);
       }
     } else if (typeof stored === "string" || typeof stored === "boolean") {
       if (e.value !== undefined && e.value !== stored) {
         reasons.push(`evidence[${i}].value ${JSON.stringify(e.value)} does not match normalized ${JSON.stringify(stored)} for field "${e.field}"`);
       }
+    } else if (stored && typeof stored === "object") {
+      // Compound value (e.g. active_debt_summary = {subtypes[], judgments_or_liens}).
+      // When the model cites a compound value, EVERY property it names
+      // must match the stored value's corresponding property. Without
+      // this check a finding could claim judgments_or_liens:true on a
+      // contact whose stored value is false — the exact PR #52 pattern.
+      if (e.value && typeof e.value === "object" && !Array.isArray(e.value)) {
+        for (const [k, v] of Object.entries(e.value)) {
+          const storedProp = stored[k];
+          if (storedProp === undefined) {
+            reasons.push(`evidence[${i}].value.${k} refers to a property not present on normalized "${e.field}"`);
+            continue;
+          }
+          if (Array.isArray(storedProp) && Array.isArray(v)) {
+            // Shallow array comparison, order-insensitive — a subtypes
+            // array citation must be a subset of the stored subtypes.
+            for (const item of v) {
+              if (!storedProp.includes(item)) {
+                reasons.push(`evidence[${i}].value.${k} includes "${item}" which is not in normalized ${JSON.stringify(storedProp)} for field "${e.field}"`);
+              }
+            }
+          } else if (storedProp !== v) {
+            reasons.push(`evidence[${i}].value.${k} ${JSON.stringify(v)} does not match normalized ${JSON.stringify(storedProp)} for field "${e.field}"`);
+          }
+        }
+      }
+      // When e.value is undefined/null/scalar on a compound stored value,
+      // the finding is just citing the field without echoing it —
+      // allowed, matches the "whole object not required" doc.
     }
   }
 
@@ -181,7 +213,12 @@ export function validateStructuredFinding(finding, ctx) {
       reasons.push(`derived_metrics[${i}].metric "${m.metric}" was not computed deterministically — did you invent a ratio?`);
       continue;
     }
-    if (typeof m.value === "number" && !numericClose(stored.value, m.value)) {
+    // Model MUST supply a finite number. Omitted values and stringified
+    // amounts ("999999") skip the tolerance check in the old code and
+    // slip through as "validated" against the real engine value.
+    if (typeof m.value !== "number" || !Number.isFinite(m.value)) {
+      reasons.push(`derived_metrics[${i}].value for "${m.metric}" must be a finite number (got ${JSON.stringify(m.value)})`);
+    } else if (!numericClose(stored.value, m.value)) {
       reasons.push(`derived_metrics[${i}].value ${m.value} does not match computed ${stored.value} for "${m.metric}"`);
     }
   }

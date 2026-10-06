@@ -1289,18 +1289,130 @@ function buildInternalCardBody(agent, signals) {
 
 // Inline-styled HTML report body. Inline styles are essential for email clients
 // (Gmail / Outlook / Apple Mail) which strip <style> blocks.
+// Phase 2D: humanize a Phase 2A question_key for the "Based on:" receipts
+// row on a rendered structured finding. Falls back to a title-case render
+// of the key when it isn't in the table — so a new normalizer entry
+// doesn't need a renderer edit to not-look-terrible.
+const QUESTION_KEY_LABELS = Object.freeze({
+  monthly_debt_service: "Monthly debt service",
+  total_corporate_debt: "Total corporate debt",
+  ar_30_plus: "A/R 30+ days",
+  ar_60_plus: "A/R 60+ days",
+  tax_returns_status: "Tax-return status",
+  has_formal_audit: "Formal financial audit",
+  has_documented_budget: "Documented budget",
+  debt_status: "Debt status",
+  merchant_processing_last_review: "Merchant-processing review",
+  financial_decision_basis: "Decision basis",
+  active_debt_summary: "Active debt",
+  business_type: "Business type",
+  industry: "Industry",
+  customer_acquisition_channel: "Primary channel",
+  leads_per_month: "Leads/month",
+  bookings_per_month: "Bookings/month",
+  shows_per_month: "Shows/month",
+  offers_per_month: "Offers/month",
+  closes_per_month: "Closes/month",
+});
+const DERIVED_METRIC_LABELS = Object.freeze({
+  total_debt: "Total debt",
+  monthly_debt_service_amount: "Monthly debt service",
+  ar_30_plus_amount: "A/R 30+ amount",
+  ar_60_plus_amount: "A/R 60+ amount",
+  ar_30_plus_months_of_debt_service: "Months of debt service in 30+ A/R",
+  ar_60_plus_months_of_debt_service: "Months of debt service in 60+ A/R",
+  lead_to_booking_rate: "Lead → booking rate",
+  booking_to_show_rate: "Booking → show rate",
+  show_to_offer_rate: "Show → offer rate",
+  offer_to_close_rate: "Offer → close rate",
+  lead_to_sale_rate: "Lead → sale rate",
+});
+function labelForQuestionKey(k) {
+  if (QUESTION_KEY_LABELS[k]) return QUESTION_KEY_LABELS[k];
+  return String(k || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+function labelForMetric(m) {
+  if (DERIVED_METRIC_LABELS[m]) return DERIVED_METRIC_LABELS[m];
+  return String(m || "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+// Format a Phase 2A normalized value for display in a receipts row.
+// Numeric money fields are inferred from the question_key name; booleans
+// render as yes/no; strings and compound objects pass through.
+function formatEvidenceValue(field, value) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "boolean") return value ? "yes" : "no";
+  if (typeof value === "number") {
+    // Fields that are inherently dollar amounts render with $ + commas.
+    const isDollar = /debt|ar_|service|amount|revenue|cash|loan|credit/i.test(String(field));
+    if (isDollar) return `$${Math.round(value).toLocaleString("en-US")}`;
+    return String(value);
+  }
+  if (typeof value === "string") return value;
+  // Compound (e.g. active_debt_summary) — render a short list of subtypes.
+  if (value && Array.isArray(value.subtypes)) {
+    return value.subtypes.length ? value.subtypes.join(", ") : "none";
+  }
+  return "";
+}
+// Format a Phase 2B derived metric for display. Units drive formatting:
+// dollars → "$6,500", months → "3.61 months", ratio → "8.1%".
+function formatMetricValue(m) {
+  if (!m || typeof m.value !== "number") return "";
+  if (m.unit === "dollars") return `$${Math.round(m.value).toLocaleString("en-US")}`;
+  if (m.unit === "months")  return `${m.value} months`;
+  if (m.unit === "ratio")   return `${(m.value * 100).toFixed(1)}%`;
+  return String(m.value);
+}
+
 function buildReportHtml(agent) {
   const e = escapeHtml;
   const priColor = (p) =>
     p === "CRITICAL" ? "#b91c1c" :
     p === "HIGH" ? "#d97706" :
     "#92400e";
+  const severityToPriority = (s) => {
+    const low = String(s || "").toLowerCase();
+    if (low === "high")   return { label: "HIGH",   color: "#b91c1c" };
+    if (low === "medium") return { label: "MEDIUM", color: "#d97706" };
+    return                       { label: "LOW",    color: "#92400e" };
+  };
 
   const gapItem = (g) => `
     <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid ${priColor(g.priority)};border-radius:4px;">
       <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:16px;">${e(g.title)}<span style="font-size:10px;font-weight:700;color:${priColor(g.priority)};letter-spacing:1.5px;margin-left:10px;">${e(g.priority)}</span></div>
       <div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:6px;line-height:1.55;">${e(g.impact)}</div>
     </td></tr><tr><td style="height:10px;"></td></tr>`;
+
+  // Phase 2D: render one structured finding into the Critical Gaps slot.
+  // interpretation → the top line (what this means).
+  // recommendation → the sub-line (what to do).
+  // severity → priority badge.
+  // evidence + derived_metrics → the trust-building "Based on:" footer.
+  // The visual slot is identical to a prose gap so the HTML diff vs the
+  // pre-2D renderer is a strict addition at the bottom of each card, not
+  // a layout rewrite.
+  const structuredGapItem = (f) => {
+    const sev = severityToPriority(f.severity);
+    const evidenceParts = (f.evidence || [])
+      .map((ev) => {
+        const v = formatEvidenceValue(ev.field, ev.value);
+        return v ? `${labelForQuestionKey(ev.field)}: ${v}` : null;
+      })
+      .filter(Boolean);
+    const metricParts = (f.derived_metrics || [])
+      .map((m) => (typeof m.value === "number" ? `${labelForMetric(m.metric)}: ${formatMetricValue(m)}` : null))
+      .filter(Boolean);
+    const receipts = [...evidenceParts, ...metricParts].join(" · ");
+    const receiptsHtml = receipts
+      ? `<div style="font-family:Arial,sans-serif;color:#92400e;font-weight:600;font-size:10px;margin-top:10px;letter-spacing:1px;text-transform:uppercase;">Based on: ${e(receipts)}</div>`
+      : "";
+    return `
+    <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid ${sev.color};border-radius:4px;">
+      <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:16px;">${e(f.interpretation)}<span style="font-size:10px;font-weight:700;color:${sev.color};letter-spacing:1.5px;margin-left:10px;">${sev.label}</span></div>
+      <div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:6px;line-height:1.55;">${e(f.recommendation)}</div>
+      ${receiptsHtml}
+    </td></tr><tr><td style="height:10px;"></td></tr>`;
+  };
 
   const oppItem = (o) => `
     <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid #c4a647;border-radius:4px;">
@@ -1309,7 +1421,16 @@ function buildReportHtml(agent) {
       <div style="font-family:Arial,sans-serif;color:#92400e;font-weight:700;font-size:11px;margin-top:8px;letter-spacing:1.5px;text-transform:uppercase;">${e(o.impact)}</div>
     </td></tr><tr><td style="height:10px;"></td></tr>`;
 
-  const gaps = (agent.gaps || []).map(gapItem).join("");
+  // Phase 2D: prefer structured findings when present; fall back to the
+  // prose gaps array for runs where Solomon didn't emit structured output
+  // (console runs without normalization; pre-Phase-2C generations stored
+  // in D1). Both arrays go through the same visual slot — a reader can't
+  // tell the renderer source apart beyond the "Based on:" receipts row
+  // the structured path adds.
+  const structured = Array.isArray(agent.structured_findings) ? agent.structured_findings : [];
+  const gaps = structured.length
+    ? structured.map(structuredGapItem).join("")
+    : (agent.gaps || []).map(gapItem).join("");
   const opps = (agent.opportunities || []).map(oppItem).join("");
   const context = agent.context
     ? `<p style="font-family:Georgia,serif;font-style:italic;color:#6b7280;font-size:15px;line-height:1.6;margin:12px 0 0;">${e(agent.context)}</p>`
@@ -1723,6 +1844,41 @@ function parseAgentJson(text) {
   const end = t.lastIndexOf("}");
   if (start === -1 || end === -1) throw new Error("Agent returned no JSON object");
   return JSON.parse(t.slice(start, end + 1));
+}
+
+// Mutates agent.structured_findings in place: non-arrays are forced to
+// [] (logged); each entry is validated against the deterministic facts
+// and derived metrics; invalid entries are stripped. Call sites: every
+// generation path that writes an agent to canonical storage or the
+// renderer. Without this, a run that has no FACTS context (console runs,
+// catalog-unavailable webhook) could still carry a model-produced
+// `structured_findings` into the stored diagnostic, where Phase 2D's
+// renderer would show it as if it were validated.
+//
+// Pass an empty normalized / derivedMetrics context when none is
+// available — every finding is then evaluated with no facts to cite
+// against. "No evidence that exists" fails the validator's
+// grounded-in-nothing rule, which is the desired safety behavior.
+function sanitizeStructuredFindings(agent, context, logLabel) {
+  if (!agent || typeof agent !== "object") return;
+  const raw = agent.structured_findings;
+  if (raw === undefined || raw === null) return;
+  if (!Array.isArray(raw)) {
+    console.warn(`[${logLabel}] structured_findings is not an array (type=${typeof raw}); replacing with []`);
+    agent.structured_findings = [];
+    return;
+  }
+  const { valid, invalid } = validateStructuredFindings(raw, {
+    normalized: context?.normalized || {},
+    derivedMetrics: context?.derivedMetrics || [],
+  });
+  if (invalid.length) {
+    console.warn(
+      `[${logLabel}] stripped ${invalid.length} invalid structured_findings: ` +
+      invalid.map((x) => `${x.finding?.finding_id || "<no id>"} (${x.reasons.join("; ")})`).join(" | ")
+    );
+  }
+  agent.structured_findings = valid;
 }
 
 // Accept answers as an array [{question, answer}] OR an object { "Q1": "..." }.
@@ -2973,6 +3129,15 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
     agent.opportunityFlags = (agent.opportunityFlags || []).filter(f => f !== "DIGITAL_PRESENCE_OPP");
   }
 
+  // Phase 2C: sanitize any structured_findings even on the console path.
+  // Console runs have no normalization context (no field-id stream), so
+  // the empty-context evaluation here means every structured finding
+  // will fail the grounded-in-nothing rule and be stripped — the safe
+  // default. Prevents a console run from storing an unvalidated finding
+  // in a canonical row (when contactId is set) or showing one in the
+  // returned reportHtml.
+  sanitizeStructuredFindings(agent, { normalized: {}, derivedMetrics: [] }, "handleConsoleRun");
+
   const reportHtml = buildReportHtml(agent);
 
   // Canonical write (Phase 1b). Console runs that target a real contact
@@ -4131,20 +4296,10 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   // (reasons included) and stripped. The prose arrays (gaps,
   // opportunities) are untouched; this layer only polices the
   // structured_findings addition.
-  if (Array.isArray(agent?.structured_findings)) {
-    const flatFacts = factsBundle?.facts || flatNormalized(normalizedAnswers || []);
-    const { valid, invalid } = validateStructuredFindings(agent.structured_findings, {
-      normalized: flatFacts,
-      derivedMetrics: derivedMetrics || [],
-    });
-    if (invalid.length) {
-      console.warn(
-        `[handleGHLSurveyWebhook] stripped ${invalid.length} invalid structured_findings for contact ${contact.id}: ` +
-        invalid.map((x) => `${x.finding?.finding_id || "<no id>"} (${x.reasons.join("; ")})`).join(" | ")
-      );
-    }
-    agent.structured_findings = valid;
-  }
+  sanitizeStructuredFindings(agent, {
+    normalized: factsBundle?.facts || flatNormalized(normalizedAnswers || []),
+    derivedMetrics: derivedMetrics || [],
+  }, `handleGHLSurveyWebhook contact ${contact.id}`);
 
   const reportHtml = buildReportHtml(agent);
 
@@ -5009,6 +5164,14 @@ export default {
       }
     }
 
+    // Phase 2C: sanitize structured_findings on the public assessment
+    // path too. This endpoint receives answers in the body with no GHL
+    // field-id stream, so there's no normalization context — the empty
+    // context causes every structured finding to fail the grounded-in-
+    // nothing rule and be stripped. Prevents public submissions from
+    // emitting unvalidated findings into the returned reportHtml.
+    sanitizeStructuredFindings(agent, { normalized: {}, derivedMetrics: [] }, "public assessment POST");
+
     // TIGHTENED (2026-09-16): paid-tier POSTs require an explicit contactId
     // AND that contactId must already carry the matching paid-entitlement
     // tag. Solomon no longer applies swot_paid_47 / swot_paid_297 or their
@@ -5197,6 +5360,10 @@ export {
   resolveReportHtml,
   fetchArtifactHtml,
   tierLabelOf,
+  // Phase 2D renderer
+  buildReportHtml,
+  // Phase 2C sanitizer
+  sanitizeStructuredFindings,
 };
 
 // Phase 2A: normalization layer. Re-exported from index so tests that
