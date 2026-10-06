@@ -195,7 +195,7 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
           <Activity className="h-5 w-5 text-primary" />
           <h3 className="font-display text-2xl font-bold uppercase tracking-widest">Financial Health Breakdown</h3>
         </div>
-        <SwotQuadrant categoryScores={{}} score={report.path === "strong" ? 25 : report.path === "growth" ? 18 : 10} />
+        <SwotQuadrant categoryScores={{}} score={report.path === "growth" ? 18 : report.path === "needs-attention" ? 10 : 5} />
       </div>
 
       {/* Gaps Section */}
