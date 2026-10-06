@@ -273,6 +273,157 @@ export async function reportById(db, reportId) {
   return hydrateReport(row);
 }
 
+// --- Strategist feedback (Phase 3A) --------------------------------------
+//
+// The 16 approved feedback categories from docs/SOLOMON_ARCHITECTURE.md § 22.
+// Enforced in code rather than CHECK CONSTRAINT so a new category can be
+// added without a schema migration, but any value outside the set is
+// rejected by insertFeedback.
+export const FEEDBACK_TYPES = Object.freeze([
+  "factual_error",
+  "invented_fact",
+  "tier_leakage",
+  "causal_overreach",
+  "severity_overstatement",
+  "severity_understatement",
+  "bad_calculation",
+  "poor_personalization",
+  "weak_opportunity",
+  "generic_language",
+  "incorrect_classification",
+  "financial_terminology",
+  "bad_cta",
+  "missing_context",
+  "great_output",
+  "approved_example",
+]);
+const FEEDBACK_TYPES_SET = new Set(FEEDBACK_TYPES);
+
+/** New UUID for a strategist_feedback row. */
+export function newFeedbackId() {
+  return crypto.randomUUID();
+}
+
+/**
+ * Insert a strategist_feedback row. Feedback is capture-only at
+ * Phase 3A — no automation reads from this table. `approved_for_learning`
+ * is defaulted to 0; a separate human-gated review promotes rows to 1.
+ *
+ * Returns `{ok, id}` on success, or `{ok:false, reason}` for a shape
+ * violation. The handler surfaces 400 on `reason:"invalid_feedback_type"`
+ * or `reason:"missing_report_id"`; everything else is a hard throw.
+ *
+ * @param {D1Database | null} db
+ * @param {{
+ *   id?: string,
+ *   report_id: string,
+ *   submission_id?: string | null,
+ *   contact_id?: string | null,
+ *   finding_id?: string | null,
+ *   feedback_type: string,
+ *   original_output?: string | null,
+ *   strategist_revision?: string | null,
+ *   reason?: string | null,
+ *   candidate_rule?: string | null,
+ *   created_by?: string | null,
+ * }} f
+ */
+export async function insertFeedback(db, f) {
+  if (!f || typeof f !== "object") return { ok: false, reason: "missing_body" };
+  if (!f.report_id || typeof f.report_id !== "string") {
+    return { ok: false, reason: "missing_report_id" };
+  }
+  if (!FEEDBACK_TYPES_SET.has(f.feedback_type)) {
+    return { ok: false, reason: "invalid_feedback_type", feedback_type: f.feedback_type };
+  }
+  if (!db) return { ok: true, skipped: true, reason: "no_db_binding" };
+  const id = f.id || newFeedbackId();
+  const now = Date.now();
+  await db.prepare(`
+    INSERT INTO strategist_feedback (
+      id, report_id, submission_id, contact_id, finding_id,
+      feedback_type, original_output, strategist_revision, reason,
+      candidate_rule, approved_for_learning, approved_by, approved_at,
+      created_by, created_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, NULL, NULL, ?, ?)
+  `).bind(
+    id,
+    f.report_id,
+    f.submission_id || null,
+    f.contact_id || null,
+    f.finding_id || null,
+    f.feedback_type,
+    f.original_output || null,
+    f.strategist_revision || null,
+    f.reason || null,
+    f.candidate_rule || null,
+    f.created_by || null,
+    now,
+  ).run();
+  return { ok: true, id };
+}
+
+/**
+ * Return every feedback row attached to a report, newest first. Used
+ * by the strategist review UI (Phase 3B) to show the audit trail for
+ * one report_id. Each row's JSON fields come back as plain strings
+ * (nothing in this table is JSON-encoded today).
+ *
+ * @param {D1Database | null} db
+ * @param {string} reportId
+ */
+export async function listFeedbackForReport(db, reportId) {
+  if (!db || !reportId) return [];
+  const { results } = await db.prepare(
+    `SELECT * FROM strategist_feedback WHERE report_id = ? ORDER BY created_at DESC`
+  ).bind(reportId).all();
+  return (results || []).map(hydrateFeedback);
+}
+
+/**
+ * Return pending feedback of a given type, newest first. Used by the
+ * rule-promotion review queue (Phase 3C): if the same `feedback_type`
+ * accumulates N rows, surface them for human review toward a candidate
+ * rule. `approved_for_learning = 0` only.
+ *
+ * @param {D1Database | null} db
+ * @param {string} feedbackType
+ * @param {{ limit?: number }} [opts]
+ */
+export async function listPendingFeedbackByType(db, feedbackType, opts = {}) {
+  if (!db || !feedbackType) return [];
+  const requested = Number.isFinite(opts.limit) ? opts.limit : 100;
+  const limit = Math.max(1, Math.min(500, requested));
+  const { results } = await db.prepare(
+    `SELECT * FROM strategist_feedback
+       WHERE feedback_type = ? AND approved_for_learning = 0
+       ORDER BY created_at DESC
+       LIMIT ?`
+  ).bind(feedbackType, limit).all();
+  return (results || []).map(hydrateFeedback);
+}
+
+function hydrateFeedback(row) {
+  if (!row) return null;
+  return {
+    id: row.id,
+    report_id: row.report_id,
+    submission_id: row.submission_id || null,
+    contact_id: row.contact_id || null,
+    finding_id: row.finding_id || null,
+    feedback_type: row.feedback_type,
+    original_output: row.original_output || null,
+    strategist_revision: row.strategist_revision || null,
+    reason: row.reason || null,
+    candidate_rule: row.candidate_rule || null,
+    approved_for_learning: row.approved_for_learning === 1 || row.approved_for_learning === true,
+    approved_by: row.approved_by || null,
+    approved_at: row.approved_at ? Number(row.approved_at) : null,
+    created_by: row.created_by || null,
+    created_at: Number(row.created_at),
+  };
+}
+
 /**
  * Record a GHL writeback attempt. Each call appends a row; the latest row
  * per report_id gives the current sync state.
