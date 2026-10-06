@@ -78,12 +78,29 @@ real (non-dry-run) generation; rendered HTML lands in R2 under
 continue to carry the latest customer-facing projection as before — the
 read path reads D1 first and falls back to GHL (Phase 1c).
 
-Phase 3A-3C endpoints (`POST /feedback`, `GET /feedback`,
-`GET /strategist/report/{reportId}`, `GET /feedback/pending-summary`,
-`GET /feedback/approved`, `PATCH /feedback/{id}`) all become fully
-functional once D1 is wired. Before wiring they already return the
-documented `{skipped:true, reason:"no_db_binding"}` shape so the UI
-degrades gracefully.
+Phase 3A-3C endpoints all become fully functional once D1 is wired.
+Before wiring, most of them already return the documented
+`{skipped:true, reason:"no_db_binding"}` shape so the UI degrades
+gracefully:
+
+- `POST /feedback`
+- `GET /feedback?report_id=…` / `?pending_type=…`
+- `GET /feedback/pending-summary`
+- `PATCH /feedback/{id}`
+
+The one deliberate exception is `GET /strategist/report/{reportId}`,
+which returns **HTTP 503** `{success:false, error:"Strategist review
+requires the D1 binding"}` instead. The strategist review UI loads
+report rows out of D1 — there is no honest fallback for that read,
+and silently returning an empty "ok" would hide the fact that the
+reviewer is looking at nothing. The UI surfaces the 503 as "No
+report with that ID"; the operator fix is to wire D1, not to carry
+the degraded shape.
+
+`GET /feedback/approved?feedback_type=…` is likewise mostly a hard
+D1 dependency (there's nothing to export before any approvals
+exist) but returns the `{skipped:true, feedback:[]}` shape so the
+Phase 3C modal can render an empty state without a toast.
 
 For local development against a sqlite shim:
 
