@@ -58,3 +58,23 @@ bucket_name = "solomonlibrary"
 [[r2_buckets]]
 binding = "SOLOMON_LIBRARY_ARCHIVE"
 bucket_name = "solomon-library-archive"
+
+# D1 — canonical structured store for submissions, report versions, and
+# GHL sync state. See docs/CLOUDFLARE_DATA_MODEL.md for the one-time setup
+# (wrangler d1 create, migration apply, binding wiring). Commented until
+# the DB is provisioned — leaving a placeholder database_id here would
+# break deploy. Phase 1a ships the schema + data-access module; nothing
+# calls into D1 yet, so an un-wired worker still runs fine.
+#
+# To wire D1:
+#   1. wrangler d1 create solomon-canonical
+#   2. Copy the printed database_id below
+#   3. Uncomment the four lines
+#   4. wrangler d1 migrations apply solomon-canonical --remote
+#   5. Deploy
+#
+# [[d1_databases]]
+# binding = "SOLOMON_DB"
+# database_name = "solomon-canonical"
+# database_id = "fill-me-in-from-wrangler-d1-create"
+# migrations_dir = "worker/migrations"
