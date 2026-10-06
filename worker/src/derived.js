@@ -73,11 +73,16 @@ export function deriveMetrics(norm) {
   const out = [];
 
   // Simple passthrough of a known-numeric normalized field as a dollar
-  // metric. Only emits when the input is a finite number — "unknown"
-  // and nulls do nothing.
+  // metric. Only emits when the input is a finite, nonnegative number —
+  // "unknown", null, and negative values do nothing. Negative dollar
+  // amounts are treated as GHL data-entry errors, not legitimate findings
+  // ("-$5,000 of A/R 60+ days" is garbage output that would mislead a
+  // customer). A zero passthrough DOES emit — $0 of A/R is a real
+  // finding, distinct from missing data.
   function pushDollarPassthrough(metricName, questionKey) {
     const v = norm[questionKey];
     if (!isNumber(v)) return;
+    if (v < 0) return;
     out.push({
       metric: metricName,
       value: v,
@@ -88,13 +93,18 @@ export function deriveMetrics(norm) {
 
   // Compute a ratio metric from two numeric normalized inputs.
   //   value = numerator / denominator
-  // Only emits when both inputs are finite numbers AND the denominator
-  // is strictly positive. Division-by-zero is treated as a missing
-  // input, not a surprise — the metric just doesn't appear.
+  // Only emits when both inputs are finite nonnegative numbers AND the
+  // denominator is strictly positive. Division-by-zero is treated as a
+  // missing input, not a surprise. A negative numerator (either a GHL
+  // typo or a future count field that normalized to -1) is rejected —
+  // "-2.78 months of debt service" or "-33% close rate" is garbage.
+  // The numerator is still allowed to be zero: 0 months of A/R aging is
+  // a real, meaningful finding; only negatives are rejected.
   function pushRatio({ metricName, numeratorKey, denominatorKey, unit, decimals }) {
     const num = norm[numeratorKey];
     const den = norm[denominatorKey];
     if (!isNumber(num) || !isNumber(den)) return;
+    if (num < 0) return;
     if (den <= 0) return;
     const value = roundTo(num / den, decimals);
     if (!Number.isFinite(value)) return;

@@ -91,8 +91,11 @@ function normTaxReturnsStatus(raw) {
   const s = String(raw).trim().toLowerCase();
   if (!s) return null;
   // Order matters. Negative-filing patterns must come BEFORE the "filed"
-  // match or "Not filed yet" would collide with `\bfiled\b`.
-  if (/need to file|not filed|unfiled|haven't filed/.test(s)) return "not_filed";
+  // match or "Not filed yet" / "One or both years are not yet filed"
+  // (the actual paid-tier survey option in paidTier47Questions.ts) would
+  // collide with `\bfiled\b` and get classified as "current" — reversing
+  // a tax-compliance red flag into a clean status.
+  if (/need to file|not (yet )?filed|unfiled|haven'?t filed/.test(s)) return "not_filed";
   if (/payment plan|installment/.test(s)) return "on_payment_plan";
   if (/overdue|behind|late/.test(s)) return "overdue";
   if (/lien/.test(s)) return "lien";
@@ -135,11 +138,26 @@ function normFinancialDecisionBasis(raw) {
   if (raw === null || raw === undefined) return null;
   const s = String(raw).trim().toLowerCase();
   if (!s) return null;
+
+  // Explicit production labels first. The free assessment ships four
+  // options (freeAssessmentQuestions.ts):
+  //   "I run on numbers I have clean financials"  → actual_numbers
+  //   "Mostly my bank balance"                     → bank_balance_heavy
+  //   "Somewhere in between"                       → mixed
+  //   "Honestly not sure"                          → unknown
+  // Match each shape explicitly so a label-only answer lands correctly,
+  // then fall through to free-text heuristics for prose entries.
+  if (/\b(somewhere )?in[\s-]*between\b|^mixed$/.test(s)) return "mixed";
+  if (/\b(honestly )?not sure\b|\bunsure\b|\bi'?m not sure\b|\bidk\b/.test(s)) return "unknown";
+
   const mentionsBank = /bank (balance|account)/.test(s);
-  const mentionsNumbers = /actual numbers?|financial statements?|p&l|p and l|real numbers?/.test(s);
+  const mentionsNumbers =
+    /actual numbers?|financial statements?|\bp&l\b|p and l|real numbers?|run on numbers|clean financials|based on (my |the )?numbers|our numbers|using (our|my) numbers/
+      .test(s);
   if (mentionsBank && !mentionsNumbers) return "bank_balance_heavy";
   if (mentionsNumbers && !mentionsBank) return "actual_numbers";
   if (mentionsBank && mentionsNumbers) return "mixed";
+
   // A business operating without a formal budget / audit / statements is
   // de facto bank-balance-heavy. Catches "we don't have", "no", "without".
   const noBudgetSignal = /(don'?t have|no|without)\s+(a\s+)?(formal\s+)?(budget|audit|p&l|financial statement|forecast)/i;
@@ -158,6 +176,23 @@ function normDebtSummary(raw) {
   const s = String(raw).trim();
   if (!s) return null;
   const lower = s.toLowerCase();
+
+  // The free assessment ships this field as a 3-option select:
+  // "Yes" / "No" / "Not sure" (freeAssessmentQuestions.ts). A bare
+  // "yes" affirms SOMETHING in the compound set (judgments OR liens OR
+  // corporate debt) but gives no detail — collapsing it to "false"
+  // would turn an affirmative red-flag answer into a clean denial in
+  // the immutable snapshot. "Not sure" is ambiguous and must stay
+  // "unknown" too; only an explicit "No" sets judgments_or_liens: false.
+  const bareShortAnswer = s.length <= 20 &&
+    !/\b(loan|credit|lien|judgment|debt|mca|vendor|tax|accountant|processing|balance)\b/.test(lower);
+  if (bareShortAnswer) {
+    if (/^no\b/.test(lower)) return { subtypes: [], judgments_or_liens: false };
+    if (/^yes\b/.test(lower)) return { subtypes: [], judgments_or_liens: "unknown" };
+    if (/^(honestly )?not sure\b|^unsure\b|^i'?m not sure\b/.test(lower)) {
+      return { subtypes: [], judgments_or_liens: "unknown" };
+    }
+  }
 
   // Explicit denial of judgments/liens. Catches "no judgments or liens",
   // "no judgments, no liens", "no tax liens", etc. We check this first
