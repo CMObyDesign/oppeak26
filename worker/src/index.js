@@ -1596,6 +1596,24 @@ async function buildReportPage(reportBody, tierLabel, contactName, tier, env, co
   const isPending = Boolean(opts.isPending);
   const applyToken = contactId ? await mintApplyToken(contactId, env) : null;
   const e = escapeHtml;
+
+  // Per-tier page header — the product ladder reads intentionally when
+  // each tier announces itself in its own words rather than every tier
+  // being titled "YOUR REPORT · READY" + "your diagnostic is back."
+  //
+  // Free tier is deliberately NOT called a "diagnostic" so the $47
+  // "Full Diagnostic" tier doesn't sound like merely "more of the same."
+  const firstName = (contactName || "").split(" ")[0] || contactName || "there";
+  const PAGE_HEADER = {
+    free:     { eyebrow: "◆ YOUR BUSINESS HEALTH REPORT · READY",
+                hello:   `${e(firstName)}, your <em>assessment</em> is back.` },
+    paid_47:  { eyebrow: "◆ YOUR FULL DIAGNOSTIC · READY",
+                hello:   `${e(firstName)}, your <em>full financial picture</em> is ready.` },
+    paid_297: { eyebrow: "◆ YOUR BUSINESS HEALTH ANALYSIS · READY",
+                hello:   `${e(firstName)}, your <em>analysis</em> is ready for review.` },
+  };
+  const headerBlock = PAGE_HEADER[tier] || PAGE_HEADER.free;
+
   const paymentLink47 = (env && env.PAYMENT_LINK_47) || CONFIG.PAYMENT_LINK_47;
   const paymentLink297 = (env && env.PAYMENT_LINK_297) || CONFIG.PAYMENT_LINK_297;
   const bookingLink47 = (env && env.BOOKING_LINK_47) || CONFIG.BOOKING_LINK_47;
@@ -1724,38 +1742,47 @@ async function buildReportPage(reportBody, tierLabel, contactName, tier, env, co
         </script>` : "";
     cta = `
       <div class="cta-panel">
-        <span class="upgrade-chip">↑ UPGRADE · BUSINESS ANALYSIS</span>
-        <p class="eyebrow gold">FROM SURFACE READ TO FULL DIAGNOSIS</p>
-        <h2>Your free report shows what's wrong.<br><em>The $47 version shows what to do about it.</em></h2>
-        <p class="sub">Full 8–12 page report · Strategist brief · 30-minute session with a real fractional CFO. All delivered same day.</p>
+        <span class="upgrade-chip">↑ FULL DIAGNOSTIC · $47</span>
+        <p class="eyebrow gold">FROM SIGNALS TO THE FULL PICTURE</p>
+        <h2>You know what deserves attention.<br><em>Now find out what's actually driving it.</em></h2>
+        <p class="sub">Your Full Diagnostic goes deeper into cash flow, debt, profitability, receivables, financial visibility, and growth capacity. Then a CFO by Design strategist reviews the findings with you and helps identify what deserves action first.</p>
+        <p class="sub" style="font-size:14px;color:var(--ink-dim);margin-top:-16px;">Full financial diagnostic · prioritized findings · financial tools · live 30-minute strategist review</p>
 ${couponRow}
         <a class="btn btn-primary" id="upgrade-cta" target="_top" href="${paymentLink47}" data-payment-href="${paymentLink47}" data-beta-href="${upgrade47Href}">
-          <span id="upgrade-label">Upgrade to Full Diagnostic — $47</span>
+          <span id="upgrade-label">Get My Full Diagnostic + Strategy Review — $47</span>
           <span class="arrow">→</span>
         </a>
-        <p class="micro" id="upgrade-micro">One-time payment. No subscription. No follow-up sales calls unless you book one.</p>
+        <p class="micro" id="upgrade-micro">One-time payment · No subscription · Includes your live strategist review</p>
       </div>`;
   } else if (tier === "paid_47") {
-    // "Keep going" opens a sales/story page for the Deep Dive (env-configurable).
-    // The sales page's own CTA fires payment → survey. If DEEP_DIVE_SALES_URL is
-    // unset, "keep going" falls through to the payment link directly (current
-    // behavior). This lets Liz build a persuasive interstitial without a code
-    // change — just set the env var to the funnel page URL.
+    // The paid_47 CTA leads with the INCLUDED strategist review that the
+    // customer already paid for. The $297 Business Health Analysis link
+    // is subordinated below — a next-tier reveal, not a competing primary.
+    //
+    // Rationale: the low-ticket $47 purchase should flow into its
+    // included consultation first; stacking a $297 offer in front of
+    // the included call makes the $47 feel like a paid sales funnel.
+    // The strategist is the right person to introduce the next tier
+    // contextually ("based on what we uncovered, here's where I'd go
+    // next") — the report page should not pre-empt that conversation.
     const deepDiveSalesHref = (env && env.DEEP_DIVE_SALES_URL) || upgrade297Href;
     cta = `
       <div class="cta-panel">
-        <span class="upgrade-chip">↑ UPGRADE · BUSINESS HEALTH ANALYSIS</span>
-        <p class="eyebrow gold">FROM DIAGNOSIS TO EXECUTION</p>
-        <h2>You have the diagnosis.<br><em>Now let's build the intervention.</em></h2>
-        <p class="sub">Two ways forward. Pick whichever fits how you work. The Business Health Analysis gives you a full-team read of your numbers, a 50-minute session with a real CFO, and a written 90-day plan you can act on Monday. Book the strategy call first if you'd rather talk it through before committing.</p>
+        <span class="upgrade-chip">◆ YOUR NEXT STEP · INCLUDED</span>
+        <p class="eyebrow gold">LIVE STRATEGIST REVIEW</p>
+        <h2>You have the findings.<br><em>Now let's decide what deserves action first.</em></h2>
+        <p class="sub">Your CFO by Design strategist will walk through the diagnostic with you, clarify the most important findings, and help you identify the first financial move worth addressing.</p>
 
-        <div style="display:flex; flex-wrap:wrap; gap:14px; margin:24px 0 12px; justify-content:center;">
-          <a class="btn btn-primary" target="_top" href="${deepDiveSalesHref}" style="flex:1 1 220px;">Keep the momentum <span class="arrow">→</span></a>
-          <a class="btn btn-secondary" target="_top" href="${bookingLink47}" style="flex:1 1 220px;">Book my 30-min strategy call</a>
+        <a class="btn btn-primary" target="_top" href="${bookingLink47}" style="margin:12px 0 8px;">
+          <span>Book My Included Strategy Review</span>
+          <span class="arrow">→</span>
+        </a>
+        <p class="micro">30 minutes · Included with your Full Diagnostic</p>
+
+        <div style="margin-top:36px; padding-top:28px; border-top:1px solid var(--line);">
+          <p class="sub" style="font-size:14px;color:var(--ink-mute);margin:0 0 14px;">Ready for a deeper team review and written 90-day plan?</p>
+          <a class="btn btn-secondary" target="_top" href="${deepDiveSalesHref}">Explore the Business Health Analysis <span class="arrow">→</span></a>
         </div>
-
-        <p class="micro" style="margin-top:8px;">◆ $297, one time · full-team read + 50-min session + written 90-day plan</p>
-        <p class="micro" style="margin-top:16px;color:#6b7280;font-style:italic;">Not sure which? Book the call — it's included in what you already paid.</p>
       </div>`;
   } else if (tier === "paid_297") {
     cta = `
@@ -1875,6 +1902,11 @@ ${couponRow}
   }
   .btn-primary { background:var(--gold-bright); color:#0a0e14; border-color:var(--gold-bright); }
   .btn-primary:hover { background:#f8d363; transform:translateY(-1px); }
+  .btn-secondary {
+    background:transparent; color:var(--ink-mute); border-color:var(--line);
+    font-weight:500;
+  }
+  .btn-secondary:hover { color:var(--gold); border-color:var(--gold); background:rgba(212,181,101,0.04); }
   .btn .arrow { font-size:18px; line-height:1; }
 
   .footer { text-align:center; padding:36px 24px 30px; margin-top:48px; border-top:1px solid rgba(255,255,255,0.05); font-family:var(--mono); font-size:11px; letter-spacing:0.22em; text-transform:uppercase; color:var(--ink-dim); }
@@ -1892,10 +1924,10 @@ ${couponRow}
 
   <section class="hello">
     <div class="wrap">
-      <p class="eyebrow">${isPending ? "◆ SOLOMON IS DIAGNOSING · GENERATING YOUR REPORT" : "◆ YOUR REPORT · READY"}</p>
+      <p class="eyebrow">${isPending ? "◆ SOLOMON IS DIAGNOSING · GENERATING YOUR REPORT" : headerBlock.eyebrow}</p>
       <h1>${isPending
-        ? `${e(contactName.split(' ')[0] || contactName)}, your <em>diagnostic</em> is on the way.`
-        : `${e(contactName.split(' ')[0] || contactName)}, your <em>diagnostic</em> is back.`}</h1>
+        ? `${e(firstName)}, your <em>diagnostic</em> is on the way.`
+        : headerBlock.hello}</h1>
     </div>
   </section>
 
@@ -5741,6 +5773,7 @@ export {
   tierLabelOf,
   // Phase 2D renderer
   buildReportHtml,
+  buildReportPage,
   // Phase 2C sanitizer
   sanitizeStructuredFindings,
 };
