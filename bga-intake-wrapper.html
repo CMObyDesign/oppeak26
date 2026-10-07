@@ -290,12 +290,51 @@
     -->
     <div class="survey-card" id="cfobd-survey-mount">
       <iframe
+        id="cfobd-bga-survey"
         src="https://my.cfobydesign.com/widget/survey/REPLACE_WITH_PAID_297_INTAKE_SURVEY"
         title="Business Growth Analysis intake"
         loading="lazy"
         allow="clipboard-write"
       ></iframe>
     </div>
+
+    <script>
+      /*
+       * Forward the paid-contact id from the outer /bga-intake URL into the
+       * survey iframe's query string. Codex P1 on #80 flagged that without
+       * this, the hardcoded iframe src carries no contact identifier, so the
+       * survey submission can't update the paid_297 contact that downstream
+       * fulfillment expects — the browser does not auto-propagate the outer
+       * page's query string to child iframes.
+       *
+       * This script accepts either `contactId` (what AuditConfirmed.tsx and
+       * the intake-pickup emails pass) or `contact_id` (legacy / HL default)
+       * from the outer URL, and appends `contact_id=<id>` to the iframe src
+       * because the GHL survey widget reads that key. If the GHL survey
+       * configuration uses a different parameter name, change it below AND
+       * in the HL survey "pre-fill" settings.
+       *
+       * Defense-in-depth: if the outer URL has no contact id (someone pasted
+       * /bga-intake into a new tab, say), we leave the iframe src alone —
+       * the survey will then post without an id and the server-side
+       * verification follow-up (documented in the file header) is the right
+       * place to catch that case; silently guessing would be worse than
+       * letting the submission surface the gap.
+       */
+      (function () {
+        try {
+          var params = new URLSearchParams(window.location.search);
+          var cid = params.get("contactId") || params.get("contact_id");
+          if (!cid) return;
+          var frame = document.getElementById("cfobd-bga-survey");
+          if (!frame) return;
+          var sep = frame.src.indexOf("?") >= 0 ? "&" : "?";
+          frame.src = frame.src + sep + "contact_id=" + encodeURIComponent(cid);
+        } catch (e) {
+          /* best-effort — the survey still loads, just without the id. */
+        }
+      })();
+    </script>
 
     <div class="footer">
       Trouble with the intake, or realized you need to send a file separately?
