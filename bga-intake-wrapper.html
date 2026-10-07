@@ -39,17 +39,35 @@
        this page that mentions a price. This page must present as fulfillment,
        not sales.
 
-  SERVER-SIDE VERIFICATION (follow-up — NOT in the first ship):
-    This wrapper trusts whoever lands here via the ?contactId param. The HL
-    automation only emails the URL to contacts with swot_paid_297, so the
-    normal path never leaks it. For defense in depth, a follow-up PR should:
-      - Add a worker endpoint, e.g. GET /verify-bga-access?contactId=X, that
-        checks whether the contact has the swot_paid_297 tag.
-      - Add a small <script> here that calls that endpoint on page load; on
-        a non-200 response, replace the intake UI with a message that this
-        intake is for Business Growth Analysis customers only and link to
-        the sales page.
-    Documented explicitly in the AuditConfirmed.tsx file header too.
+  SERVER-SIDE VERIFICATION (implemented):
+    This wrapper calls GET /verify-bga-access?contactId=<id> on the Worker
+    at swot-engine.cfobydesign.workers.dev on page load. The Worker fetches
+    the contact from GHL server-side using its own credentials and checks
+    for the exact `swot_paid_297` tag. The wrapper renders the intake only
+    on an authorized response; every other outcome (missing contactId,
+    unknown/unpaid contact, GHL unreachable) renders a generic
+    "we couldn't verify your access" message. The intake iframe is never
+    initialized before verification completes — src is set from a
+    data-src attribute at reveal time.
+
+    Response contract on the Worker side (see worker/src/index.js
+    handleVerifyBgaAccess):
+      200 { authorized: true }                paid + known contact
+      403 { authorized: false }               unknown / unpaid / rejected
+      400 { authorized: false, error: ... }   missing or malformed contactId
+      503 { authorized: false }               GHL unreachable or errored
+
+    403 covers both "contact doesn't exist" and "contact exists but not
+    paid" so a probe cannot tell them apart. All responses carry
+    Cache-Control: no-store, and CORS is narrowed to the configured
+    BGA_INTAKE_ORIGIN (defaults to https://success.cfobydesign.com).
+
+    This is a tag-based gate, not an unguessable token. A paid contact's
+    id, once leaked, still lets anyone with it reach the intake. If link
+    security needs to be stronger, the next step is an expiring signed
+    access token tied to the contact — out of scope here.
+
+    Tests pin the contract: worker/tests/verify_bga_access.test.js.
 
   ─── COPY FROM HERE ───
 -->
@@ -190,15 +208,81 @@
     max-width: 580px;
   }
   .cfobd-bga .footer a { color: #d4b565; text-decoration: underline; }
+
+  /* Three-state access gate. #cfobd-bga-intake is hidden by default
+     and only revealed after /verify-bga-access confirms the viewer's
+     swot_paid_297 tag. If the verification fails for any reason,
+     #cfobd-bga-denied is shown instead. The intake must not even
+     briefly render before verification completes — hence the inline
+     `hidden` attribute AND the display:none fallback. */
+  .cfobd-bga .state-card {
+    text-align: center;
+    max-width: 580px;
+    margin: 24px auto 0;
+    padding: 32px 24px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+  }
+  .cfobd-bga .state-card h1 {
+    font-size: clamp(24px, 3.5vw, 32px);
+    margin: 0 0 14px;
+  }
+  .cfobd-bga .state-card .lede { font-size: 15px; }
+  .cfobd-bga .spinner {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 3px solid rgba(212, 181, 101, 0.22);
+    border-top-color: #d4b565;
+    margin: 0 auto 20px;
+    animation: cfobd-spin 0.9s linear infinite;
+  }
+  @keyframes cfobd-spin { to { transform: rotate(360deg); } }
+  [hidden] { display: none !important; }
 </style>
 
 <section class="cfobd-bga">
   <div class="wrap">
 
-    <div class="header">
+    <div style="text-align:center;">
       <img class="logo"
            src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png"
            alt="CFO By Design">
+    </div>
+
+    <!-- STATE 1: Verifying access. Visible on page load. Hidden by
+         the script once verification resolves (either direction). -->
+    <div id="cfobd-bga-verifying" class="state-card">
+      <div class="spinner" aria-hidden="true"></div>
+      <h1>Checking your access…</h1>
+      <p class="lede">One moment while we confirm your Business Growth Analysis before loading the intake.</p>
+    </div>
+
+    <!-- STATE 2: Denied / verification failed. Shown when
+         /verify-bga-access returns anything other than 200
+         {authorized:true}, including missing contactId, GHL
+         unreachable, 403, or network error. Deliberately generic so
+         a probe cannot tell "contact doesn't exist" from "contact
+         exists but unpaid". -->
+    <div id="cfobd-bga-denied" class="state-card" hidden>
+      <p class="eyebrow">Access check</p>
+      <h1>We couldn&rsquo;t verify your access right now.</h1>
+      <p class="lede">
+        Please refresh the page, or use the Complete My BGA Intake link
+        from your Business Growth Analysis confirmation email. If the
+        problem persists, email
+        <a href="mailto:consulting@cfobydesign.com" style="color:#d4b565;text-decoration:underline;">consulting@cfobydesign.com</a>
+        and a strategist will help.
+      </p>
+    </div>
+
+    <!-- STATE 3: Authorized intake. Hidden by default. Revealed only
+         when /verify-bga-access returns 200 {authorized:true}. The
+         iframe below has NO src attribute until the script sets it —
+         we don't want an unauthorized visitor's browser to fetch the
+         survey URL or fire its analytics before verification. -->
+    <div id="cfobd-bga-intake" hidden>
+
+    <div class="header">
       <div class="confirmed">
         <span class="dot"></span>
         <span>Payment confirmed · Business Growth Analysis</span>
@@ -287,54 +371,21 @@
       intake survey URL (NOT the Deep Dive pre-payment survey — those are
       now separate). Confirm the survey's POST-SUBMIT action routes to the
       financials-upload trigger link, NOT to a checkout.
+
+      Note the data-src attribute (NOT src). The verification script
+      below only promotes data-src to src after the server confirms the
+      viewer's swot_paid_297 tag — so an unauthorized visitor's browser
+      never fetches the survey URL at all.
     -->
     <div class="survey-card" id="cfobd-survey-mount">
       <iframe
         id="cfobd-bga-survey"
-        src="https://my.cfobydesign.com/widget/survey/REPLACE_WITH_PAID_297_INTAKE_SURVEY"
+        data-src="https://my.cfobydesign.com/widget/survey/REPLACE_WITH_PAID_297_INTAKE_SURVEY"
         title="Business Growth Analysis intake"
         loading="lazy"
         allow="clipboard-write"
       ></iframe>
     </div>
-
-    <script>
-      /*
-       * Forward the paid-contact id from the outer /bga-intake URL into the
-       * survey iframe's query string. Codex P1 on #80 flagged that without
-       * this, the hardcoded iframe src carries no contact identifier, so the
-       * survey submission can't update the paid_297 contact that downstream
-       * fulfillment expects — the browser does not auto-propagate the outer
-       * page's query string to child iframes.
-       *
-       * This script accepts either `contactId` (what AuditConfirmed.tsx and
-       * the intake-pickup emails pass) or `contact_id` (legacy / HL default)
-       * from the outer URL, and appends `contact_id=<id>` to the iframe src
-       * because the GHL survey widget reads that key. If the GHL survey
-       * configuration uses a different parameter name, change it below AND
-       * in the HL survey "pre-fill" settings.
-       *
-       * Defense-in-depth: if the outer URL has no contact id (someone pasted
-       * /bga-intake into a new tab, say), we leave the iframe src alone —
-       * the survey will then post without an id and the server-side
-       * verification follow-up (documented in the file header) is the right
-       * place to catch that case; silently guessing would be worse than
-       * letting the submission surface the gap.
-       */
-      (function () {
-        try {
-          var params = new URLSearchParams(window.location.search);
-          var cid = params.get("contactId") || params.get("contact_id");
-          if (!cid) return;
-          var frame = document.getElementById("cfobd-bga-survey");
-          if (!frame) return;
-          var sep = frame.src.indexOf("?") >= 0 ? "&" : "?";
-          frame.src = frame.src + sep + "contact_id=" + encodeURIComponent(cid);
-        } catch (e) {
-          /* best-effort — the survey still loads, just without the id. */
-        }
-      })();
-    </script>
 
     <div class="footer">
       Trouble with the intake, or realized you need to send a file separately?
@@ -342,6 +393,106 @@
       &mdash; a strategist will get back to you the same day.
     </div>
 
+    </div><!-- /#cfobd-bga-intake -->
+
   </div>
 </section>
+
+<script>
+  /*
+   * BGA intake access gate.
+   *
+   * On page load, call GET /verify-bga-access?contactId=<id> on the
+   * Worker and only reveal the intake div if the server returns
+   * { authorized: true }. Every other outcome (missing contactId,
+   * 403 unknown/unpaid, 503 fail-closed, network error) resolves to
+   * the generic "we couldn't verify your access" state.
+   *
+   * The intake iframe starts with data-src (not src), so an
+   * unauthorized visitor's browser never fetches the GHL survey URL.
+   * On authorization, this script promotes data-src to src AND
+   * appends contact_id=<id> to the iframe query string (the forwarding
+   * fix Codex caught on PR #80 — the browser does not propagate the
+   * outer page's query string to child iframes automatically).
+   *
+   * Config:
+   *   - Worker base defaults to swot-engine.cfobydesign.workers.dev.
+   *     Set window.CFOBD_WORKER_BASE before this script runs in GHL
+   *     to override (e.g., staging).
+   *   - The script accepts either `contactId` or `contact_id` from
+   *     the outer URL. AuditConfirmed.tsx and the intake-pickup
+   *     emails use `contactId`; HL default is `contact_id`.
+   */
+  (function () {
+    var WORKER_BASE =
+      (typeof window !== "undefined" && window.CFOBD_WORKER_BASE) ||
+      "https://swot-engine.cfobydesign.workers.dev";
+
+    var verifying = document.getElementById("cfobd-bga-verifying");
+    var denied = document.getElementById("cfobd-bga-denied");
+    var intake = document.getElementById("cfobd-bga-intake");
+
+    function showDenied() {
+      if (verifying) verifying.hidden = true;
+      if (intake) intake.hidden = true;
+      if (denied) denied.hidden = false;
+    }
+
+    function showIntake(cid) {
+      try {
+        var frame = document.getElementById("cfobd-bga-survey");
+        if (frame) {
+          var base = frame.getAttribute("data-src") || "";
+          if (base) {
+            var sep = base.indexOf("?") >= 0 ? "&" : "?";
+            frame.src = base + sep + "contact_id=" + encodeURIComponent(cid);
+          }
+        }
+      } catch (e) {
+        /* if we can't set the iframe src, better to deny than reveal. */
+        showDenied();
+        return;
+      }
+      if (verifying) verifying.hidden = true;
+      if (denied) denied.hidden = true;
+      if (intake) intake.hidden = false;
+    }
+
+    var cid = "";
+    try {
+      var params = new URLSearchParams(window.location.search);
+      cid = params.get("contactId") || params.get("contact_id") || "";
+    } catch (e) {
+      /* URLSearchParams unavailable — fail closed. */
+      showDenied();
+      return;
+    }
+    if (!cid) {
+      showDenied();
+      return;
+    }
+
+    fetch(WORKER_BASE + "/verify-bga-access?contactId=" + encodeURIComponent(cid), {
+      method: "GET",
+      credentials: "omit",
+      mode: "cors",
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          showDenied();
+          return;
+        }
+        return res.json().then(function (body) {
+          if (body && body.authorized === true) {
+            showIntake(cid);
+          } else {
+            showDenied();
+          }
+        });
+      })
+      .catch(function () {
+        showDenied();
+      });
+  })();
+</script>
 <!-- ─── COPY UP TO HERE ─── -->
