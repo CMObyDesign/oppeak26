@@ -4921,7 +4921,7 @@ async function handlePaymentStatusWebhook(request, env, ctx) {
 // but anyone who guesses or shares another paid contact's id has the
 // same key.
 //
-// Contract (per the hardening ticket):
+// Contract:
 //   - Takes contactId from the query string. Never trusts tags or
 //     payment state supplied by the browser.
 //   - Fetches the contact from GHL server-side with the Worker's
@@ -4929,21 +4929,32 @@ async function handlePaymentStatusWebhook(request, env, ctx) {
 //   - Checks for the EXACT tag `swot_paid_297` (lower-case match).
 //   - Response bodies are deliberately boring so a probe can't tell
 //     "contact exists but unpaid" from "contact does not exist":
-//       paid + known contact → 200 { authorized: true }
+//       paid + known contact →
+//         200 { authorized: true, surveyUrl: "..." }
 //       unknown / unpaid / rejected → 403 { authorized: false }
 //       missing or malformed contactId → 400 { authorized: false, error }
 //       GHL unavailable / errored → 503 { authorized: false }
 //       no GHL_API_KEY configured → 503 { authorized: false }
+//       no BGA_INTAKE_SURVEY_URL configured → 503 (can't produce the
+//                                              URL to hand out, fail closed)
 //   - Cache-Control: no-store so an authorized response can't be
 //     cached and reused by a browser or proxy for a later request.
 //   - CORS is narrow — only the configured BGA_INTAKE_ORIGIN (default
 //     https://success.cfobydesign.com) can read the response. Other
 //     callers see the response blocked by the browser.
 //
-// This endpoint is NOT a signed access token; a paid contact's id,
-// once leaked, still lets anyone who has it reach the intake. The
-// stronger version is an expiring signed token tied to the contact —
-// out of scope for this ticket.
+// Codex P1 on #83: the survey URL is handed out ONLY in the authorized
+// response. The wrapper HTML carries no survey URL at all — not in src,
+// not in data-src — so an unauthorized visitor who view-sources the
+// page never sees the URL. The URL lives in env.BGA_INTAKE_SURVEY_URL
+// on the Worker side and is only emitted when the tag check passes.
+//
+// This endpoint is still NOT a signed access token: a paid contact can
+// read the URL out of the response, save it, and share it. The
+// stronger version is a short-lived signed token the GHL survey
+// validates server-side — out of scope here. The URL leaving the
+// server-side-only sources closes the lower bar (unauthorized visitors
+// can't grab the URL from HTML view-source).
 
 const BGA_PAID_TAG = "swot_paid_297";
 
@@ -4970,6 +4981,18 @@ async function handleVerifyBgaAccess(request, env, url) {
   // actually checking state server-side.
   if (!env.GHL_API_KEY) {
     console.warn("[/verify-bga-access] GHL_API_KEY unset — failing closed");
+    return respond(503, { authorized: false });
+  }
+
+  // No survey URL configured → fail closed. Even if the viewer is
+  // genuinely paid, we won't invent a URL to hand them, and we won't
+  // leak that this is the config problem — generic 503 like every
+  // other upstream failure.
+  const surveyUrl = (env && env.BGA_INTAKE_SURVEY_URL) || "";
+  if (!surveyUrl) {
+    console.warn(
+      "[/verify-bga-access] BGA_INTAKE_SURVEY_URL unset — failing closed",
+    );
     return respond(503, { authorized: false });
   }
 
@@ -5026,7 +5049,7 @@ async function handleVerifyBgaAccess(request, env, url) {
     return respond(403, { authorized: false });
   }
 
-  return respond(200, { authorized: true });
+  return respond(200, { authorized: true, surveyUrl });
 }
 
 // ----- end /verify-bga-access -----
