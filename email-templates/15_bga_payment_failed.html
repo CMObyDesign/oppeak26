@@ -37,7 +37,7 @@
           <tr>
             <td class="card-td" style="padding:28px 32px;font-family:Georgia,serif;color:#1a1a1a;font-size:16px;line-height:1.7;">
 
-              <p style="margin:0 0 16px;">Hi {{#if contact.first_name}}{{contact.first_name}}{{else}}there{{/if}},</p>
+              <p style="margin:0 0 16px;">Hi {{contact.first_name}},</p>
 
               <p style="margin:0 0 20px;">Quick heads-up: your payment for the Business Growth Analysis did not go through.</p>
 
@@ -46,7 +46,7 @@
               <p style="margin:0 0 24px;"><strong>Use the button below to retry the payment.</strong> If the card still gives you trouble, email <a href="mailto:support@cfobydesign.com" style="color:#1a1a1a;">support@cfobydesign.com</a> or text us at <strong>352-717-9635</strong> and we will help.</p>
 
               <div style="margin:20px 0;text-align:center;">
-                <a class="btn-primary" href="{{#if contact.swot_retry_payment_url}}{{contact.swot_retry_payment_url}}{{else}}https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0{{/if}}" style="display:inline-block;padding:16px 32px;background:#c4a647;color:#ffffff;font-family:Arial,sans-serif;font-weight:700;text-decoration:none;border-radius:6px;font-size:15px;letter-spacing:1px;">RETRY PAYMENT</a>
+                <a class="btn-primary" href="{{contact.swot_retry_payment_url}}" style="display:inline-block;padding:16px 32px;background:#c4a647;color:#ffffff;font-family:Arial,sans-serif;font-weight:700;text-decoration:none;border-radius:6px;font-size:15px;letter-spacing:1px;">RETRY PAYMENT</a>
               </div>
 
               <p style="margin:20px 0 0;color:#6b7280;font-size:13px;text-align:center;font-style:italic;">

@@ -282,7 +282,7 @@
 </div>
 
 <footer>
-  Source-of-truth templates live at <code>email-templates/</code> in the repo. This preview folder is a copy so Cloudflare Pages can serve renderable HTML. When you edit a template in <code>email-templates/</code>, run <code>cp email-templates/*.html app/public/email-preview/</code> before pushing so the preview stays in sync. All greetings use Handlebars <code>{{#if contact.first_name}}…{{/if}}</code> — never Liquid pipe filters, which the HL template parser rejects.
+  Source-of-truth templates live at <code>email-templates/</code> in the repo. This preview folder is a copy so Cloudflare Pages can serve renderable HTML. When you edit a template in <code>email-templates/</code>, run <code>cp email-templates/*.html app/public/email-preview/</code> before pushing so the preview stays in sync. All greetings use a bare <code>{{contact.first_name}}</code>: HighLevel supports neither Liquid pipe fallbacks nor Handlebars <code>{{#if}}</code> blocks on merge fields, so fallback must happen upstream (require <code>first_name</code> on opt-in, or set a workflow customValue default). See <code>email-templates/README.md</code>.
 </footer>
 
 </body>

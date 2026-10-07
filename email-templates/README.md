@@ -93,15 +93,35 @@ audit/refund/dispute history.
 
 ## Conventions applied across all templates
 
-- **First-name fallback (Handlebars, not Liquid):** every greeting uses
-  `{{#if contact.first_name}}{{contact.first_name}}{{else}}there{{/if}}`
-  so contacts without a first name don't render "Hi ," or leave the merge
-  token visible. HighLevel's template parser rejects Liquid pipe filters
-  (`{{contact.first_name | fallback:"there"}}` returns
-  `BadRequestException: Parse error`) — do not reintroduce them. The same
-  Handlebars conditional applies to any other fallback use, including
-  the retry URL in `07_payment_failed_retry.html` and
-  `15_bga_payment_failed.html`.
+- **First-name merge field — no inline fallback.** Every greeting uses a
+  bare `{{contact.first_name}}` with no fallback syntax. HighLevel does
+  NOT support inline fallback on merge fields: Liquid pipe filters
+  (`{{contact.first_name | fallback:"there"}}`) return
+  `BadRequestException: Parse error`, and Handlebars block helpers
+  (`{{#if contact.first_name}}…{{/if}}`) are not a documented construct
+  for merge fields either. HL's own docs recommend configuring
+  conditional content blocks in the email editor UI, which cannot be
+  expressed in exported HTML.
+- **Fallback belongs upstream, not in the HTML.** Prevent empty greetings
+  in HL by one of:
+  1. Requiring `first_name` on the opt-in form (strongest).
+  2. Setting a workflow-level customValue with a default
+     (e.g. `greeting_name = {{contact.first_name}}` with a workflow step
+     that sets it to "there" when the contact has no first_name) and
+     referencing that custom value in the email instead.
+  3. Running a one-time workflow that back-fills `first_name = "there"`
+     for every contact where it's empty.
+  Without one of these, a contact with no first name will see "Hi ," in
+  their greeting. That is accepted as the fallback behavior rather than
+  risking template rejection or literal `{{#if}}` text in the inbox.
+- **Retry-URL merge field:** `07_payment_failed_retry.html` and
+  `15_bga_payment_failed.html` reference `{{contact.swot_retry_payment_url}}`
+  bare. The worker's `/payment-status` endpoint writes this field on
+  every failure event, so the HL retry workflow should only fire after
+  that write — if it fires without the field populated, the button lands
+  on an empty URL. (A future upstream fix: have the worker write a
+  stable product-link fallback into the same field, so the retry button
+  is always valid.)
 - **CTA link styles:** stripped the extra semicolons (`text-decoration:underline;;`) — one
   semicolon per declaration. Outlook `mso-style-textfill-fill-color` fallback kept.
 - **Booking + payment links:** hardcoded to the current LC Payments and Calendar widget IDs
