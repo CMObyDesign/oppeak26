@@ -4815,11 +4815,52 @@ async function handlePaymentStatusWebhook(request, env, ctx) {
   const failureTag = tier === "paid_297" ? "swot_payment_failed_297" : "swot_payment_failed_47";
   const tagToApply = isSuccess ? successTag : failureTag;
 
-  ctx.waitUntil(
-    addGHLTag(contactId, [tagToApply], env).catch((err) =>
-      console.warn(`[/payment-status] tag apply failed (${tagToApply}):`, err?.message),
-    ),
-  );
+  if (isSuccess) {
+    ctx.waitUntil(
+      addGHLTag(contactId, [tagToApply], env).catch((err) =>
+        console.warn(`[/payment-status] tag apply failed (${tagToApply}):`, err?.message),
+      ),
+    );
+  } else {
+    // Codex P1 on #78: the retry email in HL fires on the failure tag and
+    // reads {{contact.swot_retry_payment_url}} for its retry button. The
+    // README previously claimed this handler wrote that field; it didn't,
+    // so after moving the email templates off the inline Handlebars
+    // fallback (which HL doesn't actually support — see
+    // email-templates/README.md), the retry button rendered an empty href.
+    //
+    // Fix: on failure, write a tier-specific retry URL to
+    // swot_retry_payment_url FIRST, then apply the failure tag so the
+    // workflow HL fires on the tag always sees a populated field. If the
+    // field write errors, apply the tag anyway — a broken retry button
+    // is still better than suppressing the retry email entirely, and the
+    // audit log + contact note already captured the failure.
+    const retryUrl =
+      tier === "paid_297"
+        ? ((env && env.PAYMENT_LINK_297) || CONFIG.PAYMENT_LINK_297)
+        : ((env && env.PAYMENT_LINK_47) || CONFIG.PAYMENT_LINK_47);
+    ctx.waitUntil(
+      updateGHLContact(
+        contactId,
+        [{ key: "swot_retry_payment_url", field_value: retryUrl }],
+        env,
+      )
+        .catch((err) =>
+          console.warn(
+            `[/payment-status] swot_retry_payment_url write failed:`,
+            err?.message,
+          ),
+        )
+        .then(() =>
+          addGHLTag(contactId, [tagToApply], env).catch((err) =>
+            console.warn(
+              `[/payment-status] tag apply failed (${tagToApply}):`,
+              err?.message,
+            ),
+          ),
+        ),
+    );
+  }
 
   // Also post a contact note so the payment event shows up in the human-
   // readable audit trail on the contact card (less digging than R2).

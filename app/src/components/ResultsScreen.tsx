@@ -176,7 +176,10 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
             <h3 className="font-display text-2xl font-bold uppercase tracking-wider">The Gap</h3>
           </div>
           <p className="text-lg text-muted-foreground leading-relaxed">
-            Your free assessment was just the surface read. The full diagnostic goes seventeen questions deeper, across the categories that actually decide your funding: cash flow, debt load, credit access, profit margin, and whether anyone is in your corner on strategy. You cannot fix what you cannot see, and right now you are seeing a fraction of the board.
+            Your Business Health Check identified the signals. The Full Diagnostic goes deeper into the numbers behind them, including cash flow, debt, profitability, receivables, financial visibility, and growth capacity.
+          </p>
+          <p className="text-base text-foreground font-medium italic leading-relaxed">
+            The goal is not more information. It is knowing what deserves attention first and why.
           </p>
         </div>
       </div>
@@ -190,7 +193,7 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
               For over fifteen years, Miguel Hernandez and his team sat across from business owners making million dollar decisions off their bank balance instead of their real numbers. Owners who needed more than a bookkeeper. People who needed someone who understood corporate finance, mergers and acquisitions, debt strategy, and how to actually get funded. The team could only help so many at a time, and that never sat right with them.
             </p>
             <p>
-              So they built something. They took the way the team reads a business, the questions they ask, the patterns they watch for, refined across more than 2,400 companies, and put it into an assistant. It runs your full diagnostic in minutes using the exact logic the team uses with their highest-value clients. That is what powers your report.
+              So they built something. They took the questions the team asks, the patterns they look for, and the financial framework Miguel has refined over years of working with business owners, and built those principles into Solomon. It runs your full diagnostic in minutes using the exact logic the team uses with their highest-value clients. That is what powers your report.
             </p>
             <p className="text-foreground font-medium italic">
               A report is not a relationship. The assistant shows you what is happening. The team shows you what to do about it. That is why your $47 includes time with a real strategist, not just a download.
@@ -208,9 +211,11 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
         <SwotQuadrant categoryScores={{}} score={report.path === "growth" ? 18 : report.path === "needs-attention" ? 10 : 5} />
       </div>
 
-      {/* Gaps Section */}
+      {/* Gaps Section — generic alarm language removed; the per-card
+          severity/priority already communicates how serious each item is.
+          Severity is not tone (brand rule). */}
       <div className="space-y-8 py-12 border-t border-white/5">
-        <h3 className="font-display text-3xl font-bold text-center">CRITICAL GAPS IDENTIFIED</h3>
+        <h3 className="font-display text-3xl font-bold text-center">What Deserves Your Attention</h3>
         <div className="grid gap-4">
           {report.gaps.map((gap, i) => (
             <GapCard key={i} title={gap.title} impact={gap.impact} priority={gap.priority} />
@@ -228,51 +233,57 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
         </div>
       </div>
 
-      {/* What You Get Section */}
+      {/* What You Get Section — components sold plainly, no invented
+          dollar values. The old "$150 / $197 / $39 / $59 / was $484"
+          framing read like an internet-marketing bundle, which the brand
+          doc says not to do unless each item is independently sold at
+          those prices. Standardized 30-minute strategist review (not
+          20-minute) across the whole funnel. */}
       {report.tier === "free" && (
         <div className="max-w-4xl mx-auto space-y-12 py-16 border-y border-white/5">
           <div className="text-center space-y-4">
             <h3 className="font-display text-4xl font-bold">What You Get</h3>
-            <p className="text-muted-foreground uppercase tracking-widest text-sm">Everything you need to move from bank-balance guessing to CFO-level strategy</p>
+            <p className="text-muted-foreground uppercase tracking-widest text-sm">The $47 Full Diagnostic</p>
           </div>
 
           <div className="grid gap-4">
             {[
-              { title: "Full diagnostic report, scored across every category that decides your funding and growth", value: "$150", icon: BarChart3 },
-              { title: "A 20-minute live call with a CFO by Design strategist to walk your results", value: "$197", icon: Users },
-              { title: "Break-Even Calculator, the one number most owners cannot name", value: "$39", icon: Calculator },
-              { title: "12-Month Cash Flow Forecast, so low-cash months never surprise you", value: "$39", icon: Calendar },
-              { title: "KPI Dashboard Pack, three dashboards that put your whole business on one screen", value: "$59", icon: Activity },
+              { title: "Full Financial Diagnostic across cash flow, debt, profitability, receivables, financial visibility, and growth capacity", icon: BarChart3 },
+              { title: "Prioritized findings — what deserves attention first, and why", icon: Target },
+              { title: "Break-Even Calculator — the one number most owners cannot name", icon: Calculator },
+              { title: "12-Month Cash-Flow Forecast — so low-cash months never surprise you", icon: Calendar },
+              { title: "KPI Dashboard tools — three dashboards that put your whole business on one screen", icon: Activity },
+              { title: "30-minute live strategist review with a CFO By Design strategist to walk the findings", icon: Users },
             ].map((item, i) => (
-              <div key={i} className="flex items-center justify-between p-6 rounded-2xl bg-secondary/20 border border-white/5 group hover:border-primary/30 transition-all">
-                <div className="flex items-center gap-4">
-                  <div className="p-3 rounded-xl bg-primary/10 text-primary">
-                    <item.icon className="h-6 w-6" />
-                  </div>
-                  <span className="text-lg font-medium">{item.title}</span>
+              <div key={i} className="flex items-center gap-4 p-6 rounded-2xl bg-secondary/20 border border-white/5 group hover:border-primary/30 transition-all">
+                <div className="p-3 rounded-xl bg-primary/10 text-primary shrink-0">
+                  <item.icon className="h-6 w-6" />
                 </div>
-                <span className="text-muted-foreground font-mono font-bold group-hover:text-primary transition-colors">{item.value}</span>
+                <span className="text-lg font-medium">{item.title}</span>
               </div>
             ))}
           </div>
 
           <div className="text-center pt-8">
             <div className="inline-flex flex-col items-center">
-              <span className="text-muted-foreground line-through text-xl font-mono mb-2">Total value $484</span>
-              <span className="text-5xl font-display font-bold text-foreground">Today, $47</span>
+              <span className="text-5xl font-display font-bold text-foreground">$47 one time</span>
+              <span className="text-xs text-muted-foreground uppercase tracking-widest mt-2 font-mono">No subscription · Includes your live strategist review</span>
             </div>
           </div>
         </div>
       )}
 
-      {/* Proof Section */}
+      {/* Proof Section — removed the "2,400+ businesses analyzed" and
+          "$50M+ funding secured" numbers. The brand doc prohibits
+          invented or unverified counts, and neither number has public
+          documentation we could cite. "Fifteen years" is kept because
+          Miguel's background supports it. */}
       <div className="max-w-4xl mx-auto py-12">
-        <div className="grid md:grid-cols-4 gap-8 text-center">
+        <div className="grid md:grid-cols-3 gap-8 text-center">
           {[
-            { label: "Fifteen years", sub: "Deep experience" },
-            { label: "2,400+", sub: "Businesses analyzed" },
-            { label: "$50M+", sub: "Funding secured" },
-            { label: "Expertise", sub: "M&A, Debt, Capital" },
+            { label: "Fifteen years", sub: "Miguel's experience" },
+            { label: "Integrated", sub: "Cash flow, debt, margins, growth" },
+            { label: "Expertise", sub: "CFO strategy, M&A, debt, capital" },
           ].map((stat, i) => (
             <div key={i} className="space-y-2">
               <div className="text-2xl font-bold text-primary font-display">{stat.label}</div>
@@ -377,18 +388,10 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
               )}
             </div>
           )}
-          {!isBeta && (
-            <Button
-              onClick={() => {
-                console.log("[Analytics] SWOT_DEEP_DIVE_CLICK");
-                navigateExternal(PAYMENT_LINK_297);
-              }}
-              variant="ghost"
-              className="w-full text-sm text-muted-foreground hover:text-foreground mt-4"
-            >
-              Want a full manual audit with a senior strategist? Learn about the Deep Dive — $150 (was $297)
-            </Button>
-          )}
+          {/* No ghost Deep Dive upsell on the free results page. The
+              $297 Business Growth Analysis is the OTO AFTER the $47
+              purchase (served by /upsell), not a parallel CTA on the
+              free results. Showing both here undermines the $47 ask. */}
         </div>
       ) : (
         <div className="text-center space-y-6 py-10 max-w-2xl mx-auto">
@@ -426,14 +429,14 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
               variant="ghost"
               className="w-full text-sm text-muted-foreground hover:text-foreground"
             >
-              Want a full manual audit with a senior strategist? Learn about the Deep Dive — $150 (was $297)
+              Explore the Business Growth Analysis — $297 →
             </Button>
           )}
         </div>
       )}
 
       <footer className="mt-20 py-12 border-t border-border/50 text-center">
-        <p className="text-xs text-muted-foreground uppercase tracking-[0.4em]">2,400+ businesses analyzed — you're in good company</p>
+        <p className="text-xs text-muted-foreground uppercase tracking-[0.4em]">Built on Miguel Hernandez&apos;s financial framework · CFO By Design</p>
       </footer>
     </div>
   );

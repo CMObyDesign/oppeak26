@@ -7,33 +7,32 @@ import { BOOKING_LINK_297 } from "@/lib/ghl-config";
 
 // Post-$297 (BGA) purchase confirmation.
 //
-// Hierarchy: completing the BGA intake is the next step, not booking the
-// 50-minute session. The team cannot build Part 2 until the financials are
-// in, so putting booking first would schedule sessions ahead of the
-// information the session needs. The intake survey is the one HL survey
-// that collects the deeper narrative AND the financial-document upload
-// (the same URL referenced by the deep-dive intake-pickup emails); its
-// completion is what unlocks fulfillment, so it is the only primary CTA
-// here. Booking stays visible as the "already done your intake?" affordance.
+// Primary CTA routes to the dedicated /bga-intake page on
+// success.cfobydesign.com (NOT /deeper-analysis — that URL is the
+// pre-$150-payment Deep Dive interstitial; routing a paid customer there
+// asks them to pay again. The wrapper for the new page lives in this
+// repo at bga-intake-wrapper.html at the root, to be pasted into GHL's
+// funnel builder as a one-time setup step).
 //
-// Two prior defects fixed in this version:
-//   - The old copy promised "delivery in 48 hours" calculated from
-//     purchase time. BGA fulfillment cannot start from purchase alone —
-//     Part 2 is built from the uploaded financials — so the timeline
-//     promise was wrong whenever intake was slow.
-//   - The analytics event hardcoded `amount: 297`. This same route sells
-//     the $150 immediate-action rate too; the hardcode mis-attributed
-//     revenue. localStorage is not trusted either (client-side,
-//     mutable). amount is now null and the verified payment webhook on
-//     the worker side is the authoritative revenue source.
-const BGA_INTAKE_URL = "https://success.cfobydesign.com/deeper-analysis";
+// Verification note (follow-up, not shipped here): /bga-intake currently
+// trusts whoever lands via ?contactId. The HL automation only emails this
+// URL to swot_paid_297 contacts, so the normal path never leaks it. A
+// follow-up PR should add a worker endpoint (e.g. GET
+// /verify-bga-access?contactId=X) that checks the swot_paid_297 tag, and
+// a small <script> block in bga-intake-wrapper.html that calls it on
+// page load and swaps the intake UI for a "paid customers only" message
+// on a non-200 response. The user said "where practical" when deciding
+// Option A; we deferred this to keep the first ship small and purely
+// additive.
+
+const BGA_INTAKE_URL = "https://success.cfobydesign.com/bga-intake";
 
 const AuditConfirmed = () => {
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get("session_id");
-  // HL redirects to this page typically include contact_id in some form.
-  // Pass it through to the intake survey so the deeper-analysis form picks
-  // up the same contact rather than starting a new one.
+  // HL redirects to this page typically include contact_id. We forward it
+  // onto both the intake URL and the booking widget so the intake survey
+  // picks up the right contact and the BGA calendar prefills.
   const contactId =
     searchParams.get("contactId") || searchParams.get("contact_id") || "";
   const intakeUrl = contactId
@@ -57,9 +56,10 @@ const AuditConfirmed = () => {
         // either way.
       }
     }
-    // Analytics: log purchase completion with the sessionId only. The real
-    // amount comes from the verified payment webhook on the worker side —
-    // this client-side event is attribution context, not revenue of record.
+    // Analytics: log purchase completion with the sessionId only. The
+    // real amount comes from the verified payment webhook on the worker
+    // side — this client-side event is attribution context, not revenue
+    // of record. (Codex P2 on #78 — see /payment-status handler.)
     console.log("[Analytics] purchase_completed", {
       sessionId,
       product: "paid_297",
@@ -85,9 +85,9 @@ const AuditConfirmed = () => {
             Your Business Growth Analysis is started.
           </h1>
           <p className="text-xl text-muted-foreground leading-relaxed">
-            We received your purchase. Now we need the financial picture behind
-            the diagnosis so the CFO By Design team can build your Growth Plan
-            from the actual numbers.
+            We received your purchase. Now we need the financial picture
+            behind the diagnosis so the CFO By Design team can build your
+            Growth Plan from the actual numbers.
           </p>
         </div>
 
@@ -108,7 +108,11 @@ const AuditConfirmed = () => {
           </p>
         </div>
 
-        {/* Secondary — booking, subordinated. */}
+        {/* Secondary — booking. The ideal order is intake first (so the
+             strategist has the real numbers before the call), with booking
+             scheduled afterward. The booking button is kept visible as a
+             convenience for buyers who prefer to put a time on the
+             calendar now and complete the intake separately. */}
         <div className="pt-4 border-t border-white/5 space-y-3">
           <p className="text-sm text-muted-foreground">
             Already completed your intake?
