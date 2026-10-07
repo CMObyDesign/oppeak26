@@ -28,18 +28,18 @@ Mapped to the funnel email numbering in
 | `01_free_report_delivery.html` | **E1** · Health Check delivery | 02. SWOT Free Report — `swot_report_ready_free` | `{{contact.swot_free_report}}` |
 | `08_health_check_followup_bank_balance.html` | **E2** · "Numbers or bank balance?" (24h follow-up) | Free follow-up #1 (fires 24h after E1 if `swot_paid_47` not applied) | — |
 | `12_health_check_followup_signals.html` | **E3** · Signals vs. diagnosis (2–3 day follow-up) | Free follow-up #2 (fires 2–3 days after E2 if `swot_paid_47` not applied) | — |
-| `07_payment_failed_retry.html` | **E4** · $47 payment failed (tier-generic) | 08. SWOT Payment Failed Retry — `swot_payment_failed_47` | — (retry URL: `{{contact.swot_retry_payment_url}}`) |
-| `02_partial_swot_delivery.html` | **E5** · Full Diagnostic delivery | 03b. SWOT $47 Report Delivery — `swot_report_ready_paid_47` | `{{contact.swot_full_report}}` |
+| `07_payment_failed_retry.html` | **E4** · $47 Full Diagnostic payment failed | 08a. SWOT Payment Failed Retry (paid_47) — `swot_payment_failed_47` | — (retry URL: `{{contact.swot_retry_payment_url}}` — worker populates with `PAYMENT_LINK_47` before applying the failure tag) |
+| `02_partial_swot_delivery.html` | **E5** · Full Diagnostic delivery | 03b. SWOT $47 Report Delivery — `swot_report_ready_paid_47` | `{{contact.swot_full_report}}` · **No BGA upsell** — the OTO is served at `/upsell` right after $47 checkout; this delivery email focuses only on getting the buyer to use the included 30-minute strategist review |
 | `13_full_diagnostic_consult_not_booked.html` | **E6** · $47 consultation not booked | Fires 1 day after E5 if 30-min appt not booked; optional 2nd fire at 3 days | — |
 | `03_deep_dive_part1.html` | **E7** · BGA Part 1 ready | 04b. SWOT $297 Part 1 Delivery — `swot_report_ready_paid_297` | `{{contact.business_playbook}}` |
 | `14_bga_financials_missing.html` | **E8** · BGA financials missing | Fires 1 day after E7 if financials not uploaded; optional 2nd fire at 3 days | — |
 | `06_financials_upload_received.html` | **E9** · Financials received | 06. Financial Upload Received — `swot_financials_uploaded` | — |
 | `04_deep_dive_part2.html` | **E10** · Business Growth Plan delivery (Part 2) | 04c. SWOT $297 Part 2 Delivery — `swot_growth_plan_ready` (manual) | `{{contact.swot_growth_plan}}` |
-| `15_bga_payment_failed.html` | **E11** · BGA payment failed | Fires on `swot_payment_failed_297` | — (retry URL: `{{contact.swot_retry_payment_url}}`) |
-| `05_marketing_audit.html` | (addon) · Marketing Audit delivery | 04d. SWOT $297 Marketing Audit Delivery — `swot_marketing_audit_ready` (manual) | `{{contact.swot_marketing_audit}}` |
-| `09_deep_dive_intake_pickup_1.html` | BGA intake pickup #1 (post-$297 purchase) | Fires after `swot_paid_297` if intake incomplete | — |
-| `10_deep_dive_intake_pickup_2.html` | BGA intake pickup #2 | Follow-up to 09 | — |
-| `11_deep_dive_intake_pickup_3.html` | BGA intake pickup #3 | Final pickup — offers 1:1 call to finish | — |
+| `15_bga_payment_failed.html` | **E11** · BGA payment failed | 08b. SWOT Payment Failed Retry (paid_297) — `swot_payment_failed_297` | — (retry URL: `{{contact.swot_retry_payment_url}}` — worker populates with `PAYMENT_LINK_297` before applying the failure tag) |
+| `05_marketing_audit.html` | (manual add-on, review before launch) · Marketing Audit delivery | 04d. SWOT $297 Marketing Audit Delivery — `swot_marketing_audit_ready` (**only when Spark manually tags**) | `{{contact.swot_marketing_audit}}` — see file header: disable the workflow if the add-on is retired |
+| `09_deep_dive_intake_pickup_1.html` | BGA welcome / immediate post-paid intake prompt | Fires immediately on `swot_paid_297` — **this is the buyer's first opportunity to receive the `/bga-intake` link**, not a recovery reminder | — |
+| `10_deep_dive_intake_pickup_2.html` | BGA intake recovery reminder #1 | ~24h after 09 if `swot_bga_intake_complete` not yet applied | — |
+| `11_deep_dive_intake_pickup_3.html` | BGA intake recovery reminder #2 (final) | ~72h after 09 if still incomplete. Option 2 points at `mailto:consulting@cfobydesign.com` — **NOT** at the 50-minute BGA calendar (the strategy session is more valuable after the intake and financials are in) | — |
 
 ### Product-name conventions pinned
 
