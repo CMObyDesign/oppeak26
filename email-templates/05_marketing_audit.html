@@ -1,3 +1,26 @@
+<!--
+  MANUAL BGA ADD-ON — status: review before launch.
+
+  This template is NOT part of the standard BGA fulfillment sequence
+  (Business Health Check -> $47 Full Diagnostic -> $297 BGA -> Premium
+  CFO Bundle). It fires only when the Spark marketing team manually
+  tags a contact with `swot_marketing_audit_ready` and populates
+  {{contact.swot_marketing_audit}} on the contact record.
+
+  Before launch:
+    1. Confirm with Liz / the Spark marketing team whether the
+       Marketing Audit is still being delivered as a BGA add-on.
+    2. If YES, keep this template and the "04d. SWOT $297 Marketing
+       Audit Delivery" HL workflow enabled; the primary CTA
+       (BOOKING_LINK_297) is correct because recipients are paid_297
+       customers.
+    3. If NO, disable the HL workflow so the template stays dormant.
+       Do NOT leave an unused workflow enabled — a stray fire would
+       send someone to the 50-minute BGA calendar without the usual
+       pre-call fulfillment steps.
+
+  Trigger / contract remains documented in email-templates/README.md.
+-->
 <!DOCTYPE html>
 <html>
 <head>
