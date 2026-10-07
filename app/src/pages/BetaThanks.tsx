@@ -86,8 +86,9 @@ const BetaThanks = () => {
           <div>
             <h4 className="font-bold">Check your inbox</h4>
             <p className="text-sm text-muted-foreground">
-              We'll email you a full report with your diagnostic path,
-              opportunity flags, and next steps.
+              We'll email your personalized Business Health Check with the
+              strongest signals we found, the opportunities worth looking at,
+              and your next step.
             </p>
           </div>
         </div>
@@ -96,11 +97,12 @@ const BetaThanks = () => {
           <div className="flex items-center gap-2 justify-center">
             <Sparkles className="h-4 w-4 text-primary" />
             <p className="text-xs uppercase tracking-[0.3em] font-mono text-primary">
-              Beta Access
+              Beta Access · $47 Full Diagnostic
             </p>
           </div>
           <p className="text-lg text-muted-foreground text-center">
-            Enter your beta code to unlock the mid-tier analysis.
+            Enter your beta code to unlock the same $47 Full Diagnostic — same
+            product, same strategist review, parallel access path.
           </p>
           <div className="flex flex-col sm:flex-row gap-3 items-stretch">
             <Input
