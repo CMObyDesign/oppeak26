@@ -32,7 +32,7 @@ export const LandingScreen = ({ onStart }: { onStart: () => void }) => {
             animate={{ opacity: 1, y: 0 }}
             className="font-mono text-xs md:text-sm uppercase tracking-[0.4em] text-accent font-bold"
           >
-            FREE BUSINESS HEALTH ANALYSIS
+            FREE BUSINESS HEALTH CHECK
           </motion.p>
           <motion.h2
             initial={{ opacity: 0, y: 15 }}
@@ -50,7 +50,7 @@ export const LandingScreen = ({ onStart }: { onStart: () => void }) => {
             transition={{ delay: 0.2 }}
             className="text-base md:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed"
           >
-            Answer 11 questions. Get a personalized report that reveals the exact financial gaps keeping your business from its next funding round or revenue breakthrough.
+            Answer 11 questions. Get a personalized Business Health Check showing the financial signals, gaps, and opportunities worth a closer look.
           </motion.p>
         </div>
 
@@ -67,7 +67,7 @@ export const LandingScreen = ({ onStart }: { onStart: () => void }) => {
             >
               Analyze My Business Now →
             </Button>
-            <p className="text-xs md:text-sm text-muted-foreground font-medium">No signup required. Takes 5 minutes.</p>
+            <p className="text-xs md:text-sm text-muted-foreground font-medium">No payment required. Takes about 5 minutes.</p>
           </div>
           
           <div className="flex items-center gap-6">
