@@ -3,7 +3,10 @@
 // Pins the structural changes landed in the r3.0 rubric rewrite so
 // a future accidental revert is caught at CI time, not in prod:
 //
-//   - RUBRIC_VERSION bumped to r3.0, PROMPT_VERSION to p2.1.
+//   - RUBRIC_VERSION bumped to r3.0, PROMPT_VERSION to p2.2 (p2.2
+//     added to let `writeCanonicalRecord`-stored provenance tell
+//     Deep-Dive-era paid_297 reports apart from Business-Growth-
+//     Analysis-era paid_297 reports; Codex P2 on #76).
 //   - ASSESSMENT_RUBRIC carries the new EVIDENCE HIERARCHY block.
 //   - ASSESSMENT_RUBRIC carries the "SEVERITY IS NOT TONE" block.
 //   - ASSESSMENT_RUBRIC qualifies Miguel's "drown" phrase as internal
@@ -32,8 +35,8 @@ describe("Rubric v3 — version bumps", () => {
     assert.equal(RUBRIC_VERSION, "r3.0");
   });
 
-  it("PROMPT_VERSION is p2.1", () => {
-    assert.equal(PROMPT_VERSION, "p2.1");
+  it("PROMPT_VERSION is p2.2 (bumped from p2.1 when TIER_GUIDE.paid_297 was rewritten for BGA)", () => {
+    assert.equal(PROMPT_VERSION, "p2.2");
   });
 });
 

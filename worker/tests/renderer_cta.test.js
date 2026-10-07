@@ -146,12 +146,32 @@ describe("Paid_47 CTA — included review is PRIMARY, Business Health Analysis i
   });
 });
 
-// --- Paid_297 CTA (unchanged) -----------------------------------
+// --- Paid_297 CTA (BGA rename) ----------------------------------
+//
+// With the Business Growth Analysis rename, the paid_297 report must
+// read as one product everywhere: the eyebrow uses "BGA SESSION" and
+// the heading says "Business Growth Plan". The booking calendar is
+// unchanged (same widget id, since booking is a stable integration
+// identifier). Codex P2 on #76 flagged the mixed naming — this pins
+// the fix so the regression can't come back.
 
-describe("Paid_297 CTA — terminal booking surface", () => {
-  it("still embeds the 297 booking calendar", async () => {
+describe("Paid_297 CTA — terminal booking surface (Business Growth Analysis rename)", () => {
+  it("eyebrow calls it the BGA session, not the Deep Dive", async () => {
     const html = await render("paid_297");
-    assert.match(html, /FINAL STEP · BOOK YOUR DEEP DIVE/);
+    assert.match(html, /FINAL STEP · BOOK YOUR BGA SESSION/);
+    assert.doesNotMatch(html, /BOOK YOUR DEEP DIVE/,
+      "Deep Dive is the retired name — must not appear in paid_297 CTA");
+  });
+
+  it("heading reads 'Business Growth Plan is ready', not 'Business Playbook'", async () => {
+    const html = await render("paid_297");
+    assert.match(html, /Your Business Growth Plan is .*ready/);
+    assert.doesNotMatch(html, /Your Business Playbook is/,
+      "Business Playbook is the retired customer-facing name on paid_297");
+  });
+
+  it("still embeds the 297 booking calendar (stable integration identifier)", async () => {
+    const html = await render("paid_297");
     assert.ok(html.includes(BOOKING_LINK_297), "297 tier embeds the 297 booking link");
   });
 });

@@ -5,7 +5,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="format-detection" content="telephone=no, address=no, date=no, email=no">
-  <title>Your CFO by Design Business Health Report</title>
+  <title>Your Business Health Check is ready</title>
   <style>
     @media only screen and (max-width:600px) {
       .wrap-td { padding: 16px 8px !important; }
@@ -21,6 +21,9 @@
   </style>
 </head>
 <body style="margin:0;padding:0;background:#fafaf7;font-family:Georgia,serif;">
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#fafaf7;">
+    Your answers surfaced a few signals worth a closer look. Start with the report.
+  </div>
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#fafaf7;">
     <tr>
       <td class="wrap-td" align="center" style="padding:24px 12px;">
@@ -28,7 +31,7 @@
 
           <tr>
             <td class="card-td" style="padding:28px 32px;background:#0f0f0f;border-radius:12px 12px 0 0;text-align:center;">
-              <img class="logo" src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png" alt="CFO by Design" width="200" style="display:block;margin:0 auto;width:200px;max-width:200px;height:auto;border:0;">
+              <img class="logo" src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png" alt="CFO By Design" width="200" style="display:block;margin:0 auto;width:200px;max-width:200px;height:auto;border:0;">
               <div style="font-family:Arial,sans-serif;color:#9ca3af;font-size:11px;letter-spacing:2.5px;margin-top:10px;">STRATEGY MATTERS · YOUR BUSINESS MATTERS</div>
             </td>
           </tr>
@@ -36,38 +39,38 @@
           <tr>
             <td class="card-td" style="padding:28px 32px;font-family:Georgia,serif;color:#1a1a1a;font-size:16px;line-height:1.7;">
 
-              <p style="margin:0 0 16px;">Hi {{contact.first_name | fallback:"there"}},</p>
+              <p style="margin:0 0 16px;">Hi {{#if contact.first_name}}{{contact.first_name}}{{else}}there{{/if}},</p>
 
               <p style="margin:0 0 20px;">{{contact.swot_email_blurb}}</p>
 
-              <p style="margin:0 0 16px;">Your personalized business health report is below — every line written from the specific answers you shared, not a template.</p>
+              <p style="margin:0 0 16px;">Your Business Health Check is ready. Every finding is based on the answers you gave us, not a generic template.</p>
 
-              <p style="margin:0 0 24px;font-style:italic;color:#6b7280;">Read the full report, then book a 30-minute strategy session if anything in here surprises you. That's where we map the path from where you are to where you want to be.</p>
+              <p style="margin:0 0 20px;">Read the report first. Pay attention to the places where the numbers, cash flow, debt, receivables, or growth plans do not quite line up. Those are the signals worth looking at more closely.</p>
 
               <div class="report-box" style="margin:20px 0 28px;padding:20px;background:#fafaf7;border:1px solid #e5e7eb;border-radius:8px;">
                 {{contact.swot_free_report}}
               </div>
 
               <div style="margin:20px 0 8px;text-align:center;">
-                <a class="btn-secondary" href="{{contact.swot_report_path}}" style="display:inline-block;padding:12px 24px;background:#1a1a1a;color:#ffffff;font-family:Arial,sans-serif;font-weight:600;font-size:13px;text-decoration:none;border-radius:6px;">🔗 View Report Online</a>
+                <a class="btn-primary" href="{{contact.swot_report_path}}" style="display:inline-block;padding:16px 32px;background:#c4a647;color:#ffffff;font-family:Arial,sans-serif;font-weight:700;text-decoration:none;border-radius:6px;font-size:15px;letter-spacing:1px;">VIEW MY BUSINESS HEALTH CHECK</a>
               </div>
-              <p style="text-align:center;font-family:Arial,sans-serif;color:#9ca3af;font-size:12px;line-height:1.5;margin:0 0 24px;">
+              <p style="text-align:center;font-family:Arial,sans-serif;color:#9ca3af;font-size:12px;line-height:1.5;margin:0 0 28px;">
                 Opens a clean version in your browser — easier to share with your bookkeeper or CPA.<br>
                 To save as PDF: open the report online, then press ⌘P (Mac) or Ctrl+P (Windows).
               </p>
 
-              <p style="margin:0 0 12px;"><strong>Your next move:</strong> book a 30-minute strategy session. We'll walk through the report together, focus on the single most urgent gap, and you'll leave with a concrete plan for the next 30 days.</p>
-
-              <div style="margin:20px 0;text-align:center;">
-                <a class="btn-primary" href="https://my.cfobydesign.com/widget/booking/D3yNZNFtqIYsChkOgQc9" style="display:inline-block;padding:16px 32px;background:#c4a647;color:#ffffff;font-family:Arial,sans-serif;font-weight:700;text-decoration:none;border-radius:6px;font-size:15px;letter-spacing:1px;">BOOK MY 30-MIN STRATEGY SESSION</a>
+              <!-- ============ $47 FULL DIAGNOSTIC — THE PAID NEXT STEP ============ -->
+              <div style="margin:28px 0 12px;padding:22px;background:#fdf8f0;border:2px solid #c4a647;border-radius:8px;">
+                <div style="font-family:Arial,sans-serif;font-weight:700;color:#92400e;font-size:11px;letter-spacing:2px;margin-bottom:10px;">FROM SIGNALS TO THE FULL PICTURE</div>
+                <p style="margin:0 0 12px;font-family:Georgia,serif;font-size:17px;font-weight:700;color:#1a1a1a;">The Health Check shows where to look. The Full Diagnostic connects the pieces.</p>
+                <p style="margin:0 0 16px;color:#374151;font-size:14px;line-height:1.6;">The $47 Full Diagnostic goes deeper into cash flow, debt, profitability, receivables, financial visibility, and growth capacity. It also includes a 30-minute live review with a CFO By Design strategist.</p>
+                <div style="text-align:center;">
+                  <a class="btn-primary" href="https://my.cfobydesign.com/payment-link/6a0db7aa1a6dcdeebb53b641" style="display:inline-block;padding:14px 28px;background:#c4a647;color:#ffffff;font-family:Arial,sans-serif;font-weight:700;text-decoration:none;border-radius:6px;font-size:14px;letter-spacing:1px;">GET MY FULL DIAGNOSTIC — $47</a>
+                </div>
+                <p style="margin:12px 0 0;text-align:center;font-family:Arial,sans-serif;color:#9ca3af;font-size:11px;">One-time payment · No subscription · Includes your live strategist review</p>
               </div>
 
-              <p style="margin:28px 0 0;color:#6b7280;font-size:14px;text-align:center;">
-                Want the full diagnostic with a written report and strategist brief?
-                <a href="https://my.cfobydesign.com/payment-link/6a0db7aa1a6dcdeebb53b641" style="color:#1a1a1a;text-decoration:underline;font-weight:600;mso-style-textfill-fill-color:#1a1a1a;"><!--[if mso]><font color="#1a1a1a"><![endif]-->Upgrade to the $47 Full Diagnostic →<!--[if mso]></font><![endif]--></a>
-              </p>
-
-              <p style="margin:16px 0 0;color:#6b7280;font-size:13px;text-align:center;">
+              <p style="margin:20px 0 0;color:#6b7280;font-size:14px;text-align:center;">
                 Questions about anything in the report? Reply to this email — we read every response.
               </p>
 

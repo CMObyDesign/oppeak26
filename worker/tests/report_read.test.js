@@ -101,8 +101,8 @@ const D1_REPORT_FIXTURE = {
 // --- tierLabelOf ---------------------------------------------------------
 
 describe("tierLabelOf", () => {
-  it("maps paid_297 to Business Playbook", () => {
-    assert.equal(tierLabelOf("paid_297"), "Business Playbook");
+  it("maps paid_297 to Business Growth Analysis (not the retired Business Playbook)", () => {
+    assert.equal(tierLabelOf("paid_297"), "Business Growth Analysis");
   });
   it("maps paid_47 to Full Diagnostic", () => {
     assert.equal(tierLabelOf("paid_47"), "Full Diagnostic");
