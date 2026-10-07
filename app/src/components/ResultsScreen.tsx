@@ -25,11 +25,21 @@ interface ResultsScreenProps {
   onCtaClick: () => void;
 }
 
+// Styling per customer-facing classification. Rubric v3 narrowed the
+// enum to {rehab, needs-attention, growth}; the legacy "urgent" and
+// "strong" keys are retained so pre-v3 reports stored in D1 still
+// render correctly. "needs-attention" uses the accent token (amber on
+// this palette) — distinct from destructive (red) for rehab and
+// primary (green) for growth, and visually consistent with the
+// SEVERITY IS NOT TONE discipline (a non-legal stress bucket should
+// not look like an emergency).
 const PATH_STYLE: Record<string, { score: string; badge: string }> = {
-  rehab:  { score: "text-destructive", badge: "bg-destructive/10 border-destructive/20 text-destructive" },
-  urgent: { score: "text-destructive", badge: "bg-destructive/10 border-destructive/20 text-destructive" },
-  growth: { score: "text-primary",     badge: "bg-primary/10 border-primary/20 text-primary" },
-  strong: { score: "text-accent",      badge: "bg-accent/10 border-accent/20 text-accent" },
+  rehab:             { score: "text-destructive", badge: "bg-destructive/10 border-destructive/20 text-destructive" },
+  "needs-attention": { score: "text-accent",      badge: "bg-accent/10 border-accent/20 text-accent" },
+  growth:            { score: "text-primary",     badge: "bg-primary/10 border-primary/20 text-primary" },
+  // Legacy — pre-v3 historical reports stored in D1.
+  urgent:            { score: "text-destructive", badge: "bg-destructive/10 border-destructive/20 text-destructive" },
+  strong:            { score: "text-primary",     badge: "bg-primary/10 border-primary/20 text-primary" },
 };
 
 export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: ResultsScreenProps) => {

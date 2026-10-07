@@ -16,7 +16,13 @@ export interface AgentOpportunity {
 export interface AgentReport {
   success: boolean;
   tier: string;
-  path: "rehab" | "urgent" | "growth" | "strong";
+  // Customer-facing classification. Rubric v3 narrowed this from five
+  // values ("rehab" | "urgent" | "needs-attention" | "growth" | "strong")
+  // to three: "urgent" folds into "needs-attention," and "strong" folds
+  // into "growth" (see docs/SOLOMON_ARCHITECTURE.md). The legacy strings
+  // are kept in the union so a historical report rendered client-side
+  // still parses — generators no longer emit them.
+  path: "rehab" | "needs-attention" | "growth" | "urgent" | "strong";
   badge: string;
   headline: string;
   opener: string;
