@@ -24,48 +24,84 @@
     - email-templates/11_deep_dive_intake_pickup_3.html
     - app/public/email-preview/ copies of the above three
 
-  SETUP STEPS (GHL funnel builder — one-time):
-    1. Create a new funnel page at success.cfobydesign.com/bga-intake.
-    2. Add a Custom Code / HTML block, paste EVERYTHING between the two
-       markers below ("COPY FROM HERE" / "COPY UP TO HERE").
-    3. In the survey iframe mount, replace REPLACE_WITH_PAID_297_INTAKE_SURVEY
-       with the real paid_297 fulfillment-intake survey URL (NOT the
-       pre-payment Deep Dive survey — those are now separate).
-    4. In the GHL post-submit action for that survey, route the submitter to
-       the financials-upload trigger link (NOT to a checkout). The upload
-       trigger-link id lives in email-templates/09_deep_dive_intake_pickup_1.html
-       as {{trigger_link.tD3BJjCv167YbZChSObD}}.
-    5. Confirm there is no funnel-wide script, countdown or sticky bar on
-       this page that mentions a price. This page must present as fulfillment,
-       not sales.
+  SETUP STEPS (one-time):
+    1. Cloudflare → Workers → swot-engine → Settings → Variables: set
+       BGA_INTAKE_SURVEY_URL to the real paid_297 fulfillment-intake
+       survey URL (NOT the Deep Dive pre-payment survey — those are
+       separate). The URL lives server-side only and is handed out
+       only in authorized /verify-bga-access responses, so it must
+       NOT be pasted into this HTML. Without this var the gate fails
+       closed (503) and the wrapper shows denied for everyone.
+    2. In GHL funnel builder: create a new funnel page at
+       success.cfobydesign.com/bga-intake.
+    3. Add a Custom Code / HTML block to that page, paste EVERYTHING
+       between the two markers below ("COPY FROM HERE" / "COPY UP TO
+       HERE"). No URL replacement needed here — the URL comes from
+       the Worker response at page-load time.
+    4. In the GHL post-submit action for the paid_297 intake survey,
+       route the submitter to the financials-upload trigger link
+       (NOT to a checkout). The upload trigger-link id lives in
+       email-templates/09_deep_dive_intake_pickup_1.html as
+       {{trigger_link.tD3BJjCv167YbZChSObD}}.
+    5. Confirm there is no funnel-wide script, countdown or sticky
+       bar on this page that mentions a price. This page must present
+       as fulfillment, not sales.
 
   SERVER-SIDE VERIFICATION (implemented):
     This wrapper calls GET /verify-bga-access?contactId=<id> on the Worker
-    at swot-engine.cfobydesign.workers.dev on page load. The Worker fetches
-    the contact from GHL server-side using its own credentials and checks
-    for the exact `swot_paid_297` tag. The wrapper renders the intake only
-    on an authorized response; every other outcome (missing contactId,
-    unknown/unpaid contact, GHL unreachable) renders a generic
-    "we couldn't verify your access" message. The intake iframe is never
-    initialized before verification completes — src is set from a
-    data-src attribute at reveal time.
+    at swot-engine.cfobydesign.workers.dev on page load. The Worker
+    fetches the contact from GHL server-side using its own credentials
+    and checks for the exact `swot_paid_297` tag. The wrapper renders
+    the intake only on an authorized response.
+
+    THE SURVEY URL IS NOT IN THIS HTML (Codex P1 on #83):
+    The GHL survey URL lives server-side only, in env.BGA_INTAKE_SURVEY_URL
+    on the Worker. It is handed out to the wrapper ONLY in the response
+    body of a successful authorization. This HTML carries no survey URL
+    at all — not in src, not in data-src, not in a comment — so an
+    unauthorized visitor who view-sources the page never sees it. The
+    earlier approach of parking the URL in a data-src attribute looked
+    protective but was really only "no auto-fetch"; this fix is the
+    real one.
+
+    SETUP STEP added on the Worker side: set the Cloudflare env variable
+    BGA_INTAKE_SURVEY_URL to the real paid_297 fulfillment-intake survey
+    URL (NOT the Deep Dive pre-payment survey). Without it the endpoint
+    fails closed (503) and the wrapper shows denied — intentional, so a
+    misconfig never silently falls back to an unprotected URL.
 
     Response contract on the Worker side (see worker/src/index.js
     handleVerifyBgaAccess):
-      200 { authorized: true }                paid + known contact
-      403 { authorized: false }               unknown / unpaid / rejected
-      400 { authorized: false, error: ... }   missing or malformed contactId
-      503 { authorized: false }               GHL unreachable or errored
+      200 { authorized: true, surveyUrl: "..." }  paid + known contact
+      403 { authorized: false }                   unknown / unpaid / rejected
+      400 { authorized: false, error: ... }       missing or malformed contactId
+      503 { authorized: false }                   GHL unreachable or errored
+                                                  OR no BGA_INTAKE_SURVEY_URL
+                                                  OR no GHL_API_KEY
 
     403 covers both "contact doesn't exist" and "contact exists but not
     paid" so a probe cannot tell them apart. All responses carry
     Cache-Control: no-store, and CORS is narrowed to the configured
     BGA_INTAKE_ORIGIN (defaults to https://success.cfobydesign.com).
 
-    This is a tag-based gate, not an unguessable token. A paid contact's
-    id, once leaked, still lets anyone with it reach the intake. If link
-    security needs to be stronger, the next step is an expiring signed
-    access token tied to the contact — out of scope here.
+    POST-PURCHASE RACE RETRIES (Codex P2 on #83):
+    /payment-status applies swot_paid_297 asynchronously via
+    ctx.waitUntil, so a buyer who clicks the AuditConfirmed CTA
+    immediately after Stripe redirect may hit this gate before the tag
+    has propagated to GHL. To avoid false denies on that race, the
+    verify call retries up to twice (after 1500ms and 3000ms) on 403
+    and 503 before showing denied — total worst-case wait ~5s, within
+    the window the tag normally lands. During retries we show a
+    "finalizing your purchase..." message so the buyer sees progress
+    rather than a flash of "denied → authorized".
+
+    This is still a tag-based gate, not an unguessable token. A paid
+    contact can read the surveyUrl out of the response, save it, and
+    share it. The stronger version is a short-lived signed token the
+    GHL survey validates server-side — out of scope here. What
+    these PRs close is the lower bar: unauthorized visitors cannot
+    scrape the URL from HTML view-source, and newly paid buyers are
+    not falsely denied by the tag-propagation race.
 
     Tests pin the contract: worker/tests/verify_bga_access.test.js.
 
@@ -366,21 +402,16 @@
     <p class="divider">Begin intake</p>
 
     <!--
-      Survey iframe mount. In GHL funnel builder, replace
-      REPLACE_WITH_PAID_297_INTAKE_SURVEY with the paid_297 fulfillment-
-      intake survey URL (NOT the Deep Dive pre-payment survey — those are
-      now separate). Confirm the survey's POST-SUBMIT action routes to the
-      financials-upload trigger link, NOT to a checkout.
-
-      Note the data-src attribute (NOT src). The verification script
-      below only promotes data-src to src after the server confirms the
-      viewer's swot_paid_297 tag — so an unauthorized visitor's browser
-      never fetches the survey URL at all.
+      Survey iframe mount. The iframe has NO src and NO data-src — the
+      survey URL lives server-side (Worker env BGA_INTAKE_SURVEY_URL)
+      and is handed to the client only in a successful
+      /verify-bga-access response (Codex P1 on #83). The verification
+      script below sets iframe.src from the response body, with the
+      authorized viewer's contact_id appended as a query param.
     -->
     <div class="survey-card" id="cfobd-survey-mount">
       <iframe
         id="cfobd-bga-survey"
-        data-src="https://my.cfobydesign.com/widget/survey/REPLACE_WITH_PAID_297_INTAKE_SURVEY"
         title="Business Growth Analysis intake"
         loading="lazy"
         allow="clipboard-write"
@@ -404,16 +435,26 @@
    *
    * On page load, call GET /verify-bga-access?contactId=<id> on the
    * Worker and only reveal the intake div if the server returns
-   * { authorized: true }. Every other outcome (missing contactId,
-   * 403 unknown/unpaid, 503 fail-closed, network error) resolves to
-   * the generic "we couldn't verify your access" state.
+   * { authorized: true, surveyUrl: "..." }. The surveyUrl is read
+   * out of the response body — this HTML carries no survey URL at
+   * all, so an unauthorized visitor who view-sources the page never
+   * sees it (Codex P1 on #83).
    *
-   * The intake iframe starts with data-src (not src), so an
-   * unauthorized visitor's browser never fetches the GHL survey URL.
-   * On authorization, this script promotes data-src to src AND
-   * appends contact_id=<id> to the iframe query string (the forwarding
-   * fix Codex caught on PR #80 — the browser does not propagate the
-   * outer page's query string to child iframes automatically).
+   * On authorized, this script sets iframe.src = surveyUrl + the
+   * authorized viewer's contact_id (the forwarding fix Codex caught
+   * on PR #80 — the browser does not propagate the outer page's
+   * query string to child iframes automatically).
+   *
+   * Codex P2 on #83 — post-purchase race:
+   * /payment-status applies swot_paid_297 asynchronously via
+   * ctx.waitUntil, so a buyer who clicks the AuditConfirmed CTA
+   * before that tag has landed on the GHL contact would get a
+   * single 403 and be stuck on "denied" even though they just paid.
+   * Fix: on a 403 or 503 response, retry up to twice with a short
+   * backoff (1500ms, 3000ms) before showing denied. Total wait
+   * ~5s worst-case, within the window the tag normally propagates.
+   * During retries we leave the "Checking your access…" state
+   * visible so the buyer sees progress, not a flash of denial.
    *
    * Config:
    *   - Worker base defaults to swot-engine.cfobydesign.workers.dev.
@@ -428,6 +469,12 @@
       (typeof window !== "undefined" && window.CFOBD_WORKER_BASE) ||
       "https://swot-engine.cfobydesign.workers.dev";
 
+    // Backoff schedule for the post-payment race. First attempt is
+    // immediate (not delayed). Keep this short — the whole point is
+    // "the tag will land within a couple seconds"; waiting longer
+    // than ~5s makes an unauthorized visitor stare at a spinner.
+    var RETRY_DELAYS_MS = [1500, 3000];
+
     var verifying = document.getElementById("cfobd-bga-verifying");
     var denied = document.getElementById("cfobd-bga-denied");
     var intake = document.getElementById("cfobd-bga-intake");
@@ -438,18 +485,22 @@
       if (denied) denied.hidden = false;
     }
 
-    function showIntake(cid) {
+    function showIntake(cid, surveyUrl) {
       try {
-        var frame = document.getElementById("cfobd-bga-survey");
-        if (frame) {
-          var base = frame.getAttribute("data-src") || "";
-          if (base) {
-            var sep = base.indexOf("?") >= 0 ? "&" : "?";
-            frame.src = base + sep + "contact_id=" + encodeURIComponent(cid);
-          }
+        if (!surveyUrl || typeof surveyUrl !== "string") {
+          // Authorized response must carry a surveyUrl — if it doesn't,
+          // treat it as a server misconfig and deny, don't reveal.
+          showDenied();
+          return;
         }
+        var frame = document.getElementById("cfobd-bga-survey");
+        if (!frame) {
+          showDenied();
+          return;
+        }
+        var sep = surveyUrl.indexOf("?") >= 0 ? "&" : "?";
+        frame.src = surveyUrl + sep + "contact_id=" + encodeURIComponent(cid);
       } catch (e) {
-        /* if we can't set the iframe src, better to deny than reveal. */
         showDenied();
         return;
       }
@@ -472,27 +523,61 @@
       return;
     }
 
-    fetch(WORKER_BASE + "/verify-bga-access?contactId=" + encodeURIComponent(cid), {
-      method: "GET",
-      credentials: "omit",
-      mode: "cors",
-    })
-      .then(function (res) {
-        if (!res.ok) {
-          showDenied();
+    // Attempt a single verify call. Returns a Promise that resolves to
+    // { outcome: "authorized" | "retry" | "denied", surveyUrl? }.
+    // "retry" is only returned for the two statuses where the
+    // post-payment race could resolve favorably on a later call:
+    // 403 (tag not yet on the contact) and 503 (GHL momentarily
+    // unreachable). Everything else resolves to "denied".
+    function attempt() {
+      return fetch(
+        WORKER_BASE + "/verify-bga-access?contactId=" + encodeURIComponent(cid),
+        { method: "GET", credentials: "omit", mode: "cors" },
+      )
+        .then(function (res) {
+          if (res.ok) {
+            return res.json().then(
+              function (body) {
+                if (body && body.authorized === true) {
+                  return { outcome: "authorized", surveyUrl: body.surveyUrl };
+                }
+                return { outcome: "denied" };
+              },
+              function () {
+                return { outcome: "denied" };
+              },
+            );
+          }
+          if (res.status === 403 || res.status === 503) {
+            return { outcome: "retry" };
+          }
+          return { outcome: "denied" };
+        })
+        .catch(function () {
+          // Network error / CORS failure — also a candidate for the
+          // race (GHL may be momentarily unreachable); allow retry.
+          return { outcome: "retry" };
+        });
+    }
+
+    function runWithRetries(attemptsLeft) {
+      attempt().then(function (result) {
+        if (result.outcome === "authorized") {
+          showIntake(cid, result.surveyUrl);
           return;
         }
-        return res.json().then(function (body) {
-          if (body && body.authorized === true) {
-            showIntake(cid);
-          } else {
-            showDenied();
-          }
-        });
-      })
-      .catch(function () {
+        if (result.outcome === "retry" && attemptsLeft > 0) {
+          var delay = RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - attemptsLeft];
+          setTimeout(function () {
+            runWithRetries(attemptsLeft - 1);
+          }, delay);
+          return;
+        }
         showDenied();
       });
+    }
+
+    runWithRetries(RETRY_DELAYS_MS.length);
   })();
 </script>
 <!-- ─── COPY UP TO HERE ─── -->

@@ -27,16 +27,19 @@ function get(path) {
   return new Request("https://example.com" + path, { method: "GET" });
 }
 
+const TEST_SURVEY_URL = "https://my.cfobydesign.com/widget/survey/test-paid-297";
+
 function makeEnv(overrides = {}) {
   return {
     GHL_API_KEY: "test-ghl-key",
     GHL_LOCATION_ID: "test-loc",
+    BGA_INTAKE_SURVEY_URL: TEST_SURVEY_URL,
     ...overrides,
   };
 }
 
 describe("GET /verify-bga-access — the four pinned cases", () => {
-  it("paid_297 contact + valid contactId → 200 { authorized: true }", async () => {
+  it("paid_297 contact + valid contactId → 200 { authorized: true, surveyUrl }", async () => {
     const cap = captureFetch((url) => {
       if (url.includes("/contacts/paid-1")) {
         return new Response(
@@ -57,6 +60,14 @@ describe("GET /verify-bga-access — the four pinned cases", () => {
       assert.equal(res.status, 200);
       const body = await res.json();
       assert.equal(body.authorized, true);
+      // Codex P1 on #83: the authorized response must include the
+      // surveyUrl so the wrapper HTML never ships the URL to
+      // unauthorized visitors.
+      assert.equal(
+        body.surveyUrl,
+        TEST_SURVEY_URL,
+        "authorized response must include the surveyUrl from env.BGA_INTAKE_SURVEY_URL",
+      );
       assert.equal(
         res.headers.get("Cache-Control"),
         "no-store",
@@ -67,7 +78,7 @@ describe("GET /verify-bga-access — the four pinned cases", () => {
     }
   });
 
-  it("contact without swot_paid_297 → 403 { authorized: false } (don't leak which tag was missing)", async () => {
+  it("contact without swot_paid_297 → 403 { authorized: false } (don't leak which tag was missing OR the surveyUrl)", async () => {
     const cap = captureFetch(() =>
       new Response(
         JSON.stringify({
@@ -91,6 +102,13 @@ describe("GET /verify-bga-access — the four pinned cases", () => {
       assert.ok(
         !("tag" in body) && !("reason" in body) && !("error" in body),
         `403 body must be minimal, got: ${JSON.stringify(body)}`,
+      );
+      // Codex P1 on #83: the surveyUrl must NEVER appear on a non-200
+      // response. The whole point of moving the URL into the response
+      // body is that only authorized viewers get it.
+      assert.ok(
+        !("surveyUrl" in body),
+        `403 body must NOT include surveyUrl, got: ${JSON.stringify(body)}`,
       );
     } finally {
       cap.restore();
@@ -181,6 +199,79 @@ describe("GET /verify-bga-access — safety cases", () => {
       assert.equal(body.authorized, false);
     } finally {
       cap.restore();
+    }
+  });
+
+  it("no BGA_INTAKE_SURVEY_URL configured → 503 fail closed (Codex P1 on #83 — never hand out a URL that doesn't exist, and never pretend to authorize)", async () => {
+    // Even a paid contact — the handler must not authorize because
+    // there's no URL to hand out. We fail closed BEFORE calling GHL
+    // so the test asserts that too: if the handler tries to call GHL
+    // without a configured survey URL it would hit this stub and
+    // throw, failing the test loudly.
+    const cap = captureFetch(() => {
+      throw new Error("should not call GHL when no BGA_INTAKE_SURVEY_URL");
+    });
+    try {
+      const res = await worker.fetch(
+        get("/verify-bga-access?contactId=paid-but-no-url"),
+        makeEnv({ BGA_INTAKE_SURVEY_URL: "" }),
+        {},
+      );
+      assert.equal(res.status, 503);
+      const body = await res.json();
+      assert.equal(body.authorized, false);
+      assert.ok(!("surveyUrl" in body), "503 body must not include surveyUrl");
+    } finally {
+      cap.restore();
+    }
+  });
+
+  it("surveyUrl appears ONLY on 200 responses — not on 400, 403, or 503", async () => {
+    // 400 (missing contactId) — no fetch call.
+    {
+      const res = await worker.fetch(get("/verify-bga-access"), makeEnv(), {});
+      assert.equal(res.status, 400);
+      const body = await res.json();
+      assert.ok(!("surveyUrl" in body), "400 must not include surveyUrl");
+    }
+
+    // 403 (contact exists, no tag).
+    {
+      const cap = captureFetch(() =>
+        new Response(
+          JSON.stringify({ contact: { id: "x", tags: [] } }),
+          { status: 200 },
+        ),
+      );
+      try {
+        const res = await worker.fetch(
+          get("/verify-bga-access?contactId=x"),
+          makeEnv(),
+          {},
+        );
+        assert.equal(res.status, 403);
+        const body = await res.json();
+        assert.ok(!("surveyUrl" in body), "403 must not include surveyUrl");
+      } finally {
+        cap.restore();
+      }
+    }
+
+    // 503 (GHL returned 500).
+    {
+      const cap = captureFetch(() => new Response("", { status: 500 }));
+      try {
+        const res = await worker.fetch(
+          get("/verify-bga-access?contactId=x"),
+          makeEnv(),
+          {},
+        );
+        assert.equal(res.status, 503);
+        const body = await res.json();
+        assert.ok(!("surveyUrl" in body), "503 must not include surveyUrl");
+      } finally {
+        cap.restore();
+      }
     }
   });
 

@@ -17,20 +17,27 @@ import { BOOKING_LINK_297 } from "@/lib/ghl-config";
 // Server-side verification (implemented): /bga-intake calls
 // GET /verify-bga-access?contactId=<id> on the Worker, which fetches
 // the contact from GHL server-side and confirms the exact
-// `swot_paid_297` tag before the wrapper reveals the intake. Any
-// other outcome (missing contactId, unknown/unpaid contact, GHL
-// unavailable) renders a generic "we couldn't verify your access"
-// message and never exposes the intake survey URL. The intake iframe
-// is loaded from a `data-src` and only promoted to `src` on an
-// authorized response — so an unauthorized visitor's browser never
-// fetches the GHL survey URL at all. See worker/src/index.js
-// handleVerifyBgaAccess and tests at worker/tests/verify_bga_access.
+// `swot_paid_297` tag before the wrapper reveals the intake. On
+// authorized, the Worker returns the survey URL in the response body
+// (sourced from env.BGA_INTAKE_SURVEY_URL — not from the wrapper
+// HTML) so an unauthorized visitor who view-sources the page never
+// sees the URL. Codex P1 on #83.
 //
-// This gate is tag-based, not an unguessable token: a paid contact's
-// id, if shared, still lets anyone who holds it reach the intake.
-// Making the link itself unguessable / expiring is a separate
-// hardening step (expiring signed access token) and is out of scope
-// here.
+// The wrapper retries on 403 / 503 up to twice (1500ms, 3000ms)
+// before showing denied. This covers the post-purchase race:
+// /payment-status applies swot_paid_297 via ctx.waitUntil, so a
+// buyer who clicks the CTA on this page immediately after Stripe
+// redirect may hit the gate before the tag lands on the GHL
+// contact. Codex P2 on #83.
+//
+// See worker/src/index.js handleVerifyBgaAccess and tests at
+// worker/tests/verify_bga_access.test.js.
+//
+// This gate is tag-based, not an unguessable token: a paid contact
+// can read the surveyUrl out of the response and share it. Making
+// the link unguessable / expiring is a separate hardening step
+// (signed access token the GHL survey validates server-side), out
+// of scope.
 
 const BGA_INTAKE_URL = "https://success.cfobydesign.com/bga-intake";
 
