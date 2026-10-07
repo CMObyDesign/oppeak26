@@ -2,6 +2,17 @@ name = "swot-engine"
 main = "worker/src/index.js"
 compatibility_date = "2024-01-01"
 
+# Preserve dashboard-set plain-text variables across deploys. The repo is
+# public and auto-deploys the Worker on every push via Workers Builds, so
+# dashboard-only variables (BGA_INTAKE_SURVEY_URL is the current case —
+# the paid_297 fulfillment survey URL that the /verify-bga-access gate
+# hands to authorized viewers) must survive subsequent deploys that
+# never declare them here. Wrangler's default (keep_vars = false) would
+# wipe them on the next unrelated push and silently break the gate for
+# every paid customer (Codex P1 on #84). Secrets are preserved
+# independently and are not affected by this setting.
+keep_vars = true
+
 [vars]
 # Non-sensitive defaults - safe to commit. Production can override these
 # in Cloudflare Worker environment variables without code changes.
