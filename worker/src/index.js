@@ -1609,7 +1609,7 @@ async function buildReportPage(reportBody, tierLabel, contactName, tier, env, co
                 hello:   `${e(firstName)}, your <em>assessment</em> is back.` },
     paid_47:  { eyebrow: "◆ YOUR FULL DIAGNOSTIC · READY",
                 hello:   `${e(firstName)}, your <em>full financial picture</em> is ready.` },
-    paid_297: { eyebrow: "◆ YOUR BUSINESS HEALTH ANALYSIS · READY",
+    paid_297: { eyebrow: "◆ YOUR BUSINESS GROWTH ANALYSIS · READY",
                 hello:   `${e(firstName)}, your <em>analysis</em> is ready for review.` },
   };
   const headerBlock = PAGE_HEADER[tier] || PAGE_HEADER.free;
@@ -1756,7 +1756,7 @@ ${couponRow}
       </div>`;
   } else if (tier === "paid_47") {
     // The paid_47 CTA leads with the INCLUDED strategist review that the
-    // customer already paid for. The $297 Business Health Analysis link
+    // customer already paid for. The $297 Business Growth Analysis link
     // is subordinated below — a next-tier reveal, not a competing primary.
     //
     // Rationale: the low-ticket $47 purchase should flow into its
@@ -1781,7 +1781,7 @@ ${couponRow}
 
         <div style="margin-top:36px; padding-top:28px; border-top:1px solid var(--line);">
           <p class="sub" style="font-size:14px;color:var(--ink-mute);margin:0 0 14px;">Ready for a deeper team review and written 90-day plan?</p>
-          <a class="btn btn-secondary" target="_top" href="${deepDiveSalesHref}">Explore the Business Health Analysis <span class="arrow">→</span></a>
+          <a class="btn btn-secondary" target="_top" href="${deepDiveSalesHref}">Explore the Business Growth Analysis <span class="arrow">→</span></a>
         </div>
       </div>`;
   } else if (tier === "paid_297") {

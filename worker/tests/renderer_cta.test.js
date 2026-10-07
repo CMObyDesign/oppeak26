@@ -122,11 +122,18 @@ describe("Paid_47 CTA — included review is PRIMARY, Business Health Analysis i
     assert.match(primary[0], /Book My Included Strategy Review/);
   });
 
-  it("the Business Health Analysis link is a secondary, subordinated below a divider", async () => {
+  it("the Business Growth Analysis link is a secondary, subordinated below a divider", async () => {
     const html = await render("paid_47");
     const secondary = html.match(/<a[^>]*class="btn btn-secondary"[^>]*>[\s\S]*?<\/a>/);
     assert.ok(secondary, "paid_47 must have a secondary button for the $297 upsell");
-    assert.match(secondary[0], /Explore the Business Health Analysis/);
+    assert.match(secondary[0], /Explore the Business Growth Analysis/);
+    // The $297 product is "Business Growth Analysis" (BGA) per the brand
+    // doc — not "Business Health Analysis," which was the pre-brand-doc
+    // naming. If this string regresses, the public ladder breaks:
+    //   Free: Business Health Check
+    //   $47:  Full Diagnostic
+    //   $297: Business Growth Analysis
+    assert.doesNotMatch(secondary[0], /Business Health Analysis/);
     // The subordinated block carries a 'Ready for a deeper team review' lead-in.
     assert.match(html, /Ready for a deeper team review and written 90-day plan/);
   });
@@ -166,10 +173,12 @@ describe("Per-tier page header — product ladder reads intentionally", () => {
     assert.match(html, /your <em>full financial picture<\/em> is ready/);
   });
 
-  it("paid_297 uses 'YOUR BUSINESS HEALTH ANALYSIS · READY' / 'analysis is ready for review'", async () => {
+  it("paid_297 uses 'YOUR BUSINESS GROWTH ANALYSIS · READY' / 'analysis is ready for review'", async () => {
     const html = await render("paid_297");
-    assert.match(html, /◆ YOUR BUSINESS HEALTH ANALYSIS · READY/);
+    assert.match(html, /◆ YOUR BUSINESS GROWTH ANALYSIS · READY/);
     assert.match(html, /your <em>analysis<\/em> is ready for review/);
+    // Pin the brand-doc canonical name.
+    assert.doesNotMatch(html, /YOUR BUSINESS HEALTH ANALYSIS/);
   });
 
   it("pending state still shows the generating eyebrow regardless of tier", async () => {
