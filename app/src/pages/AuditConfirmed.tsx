@@ -14,16 +14,23 @@ import { BOOKING_LINK_297 } from "@/lib/ghl-config";
 // repo at bga-intake-wrapper.html at the root, to be pasted into GHL's
 // funnel builder as a one-time setup step).
 //
-// Verification note (follow-up, not shipped here): /bga-intake currently
-// trusts whoever lands via ?contactId. The HL automation only emails this
-// URL to swot_paid_297 contacts, so the normal path never leaks it. A
-// follow-up PR should add a worker endpoint (e.g. GET
-// /verify-bga-access?contactId=X) that checks the swot_paid_297 tag, and
-// a small <script> block in bga-intake-wrapper.html that calls it on
-// page load and swaps the intake UI for a "paid customers only" message
-// on a non-200 response. The user said "where practical" when deciding
-// Option A; we deferred this to keep the first ship small and purely
-// additive.
+// Server-side verification (implemented): /bga-intake calls
+// GET /verify-bga-access?contactId=<id> on the Worker, which fetches
+// the contact from GHL server-side and confirms the exact
+// `swot_paid_297` tag before the wrapper reveals the intake. Any
+// other outcome (missing contactId, unknown/unpaid contact, GHL
+// unavailable) renders a generic "we couldn't verify your access"
+// message and never exposes the intake survey URL. The intake iframe
+// is loaded from a `data-src` and only promoted to `src` on an
+// authorized response — so an unauthorized visitor's browser never
+// fetches the GHL survey URL at all. See worker/src/index.js
+// handleVerifyBgaAccess and tests at worker/tests/verify_bga_access.
+//
+// This gate is tag-based, not an unguessable token: a paid contact's
+// id, if shared, still lets anyone who holds it reach the intake.
+// Making the link itself unguessable / expiring is a separate
+// hardening step (expiring signed access token) and is out of scope
+// here.
 
 const BGA_INTAKE_URL = "https://success.cfobydesign.com/bga-intake";
 

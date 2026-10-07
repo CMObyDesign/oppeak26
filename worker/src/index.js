@@ -4911,6 +4911,126 @@ async function handlePaymentStatusWebhook(request, env, ctx) {
 
 // ----- end payment-status webhook -----
 
+// ----- GET /verify-bga-access — BGA intake access gate -----
+//
+// Server-side authorization for success.cfobydesign.com/bga-intake. The
+// wrapper there is a static HL funnel page that we never want to render
+// its intake survey unless the viewer actually purchased the Business
+// Growth Analysis. Without this check the only barrier is the fact that
+// HL emails the URL only to paid contacts — fine for the common path,
+// but anyone who guesses or shares another paid contact's id has the
+// same key.
+//
+// Contract (per the hardening ticket):
+//   - Takes contactId from the query string. Never trusts tags or
+//     payment state supplied by the browser.
+//   - Fetches the contact from GHL server-side with the Worker's
+//     configured credentials.
+//   - Checks for the EXACT tag `swot_paid_297` (lower-case match).
+//   - Response bodies are deliberately boring so a probe can't tell
+//     "contact exists but unpaid" from "contact does not exist":
+//       paid + known contact → 200 { authorized: true }
+//       unknown / unpaid / rejected → 403 { authorized: false }
+//       missing or malformed contactId → 400 { authorized: false, error }
+//       GHL unavailable / errored → 503 { authorized: false }
+//       no GHL_API_KEY configured → 503 { authorized: false }
+//   - Cache-Control: no-store so an authorized response can't be
+//     cached and reused by a browser or proxy for a later request.
+//   - CORS is narrow — only the configured BGA_INTAKE_ORIGIN (default
+//     https://success.cfobydesign.com) can read the response. Other
+//     callers see the response blocked by the browser.
+//
+// This endpoint is NOT a signed access token; a paid contact's id,
+// once leaked, still lets anyone who has it reach the intake. The
+// stronger version is an expiring signed token tied to the contact —
+// out of scope for this ticket.
+
+const BGA_PAID_TAG = "swot_paid_297";
+
+async function handleVerifyBgaAccess(request, env, url) {
+  const intakeOrigin =
+    (env && env.BGA_INTAKE_ORIGIN) || "https://success.cfobydesign.com";
+  const respond = (status, body) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: {
+        "Content-Type": "application/json",
+        "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": intakeOrigin,
+        "Vary": "Origin",
+      },
+    });
+
+  const contactId = (url.searchParams.get("contactId") || "").trim();
+  if (!contactId) {
+    return respond(400, { authorized: false, error: "contactId required" });
+  }
+
+  // No GHL credentials wired → fail closed. We never authorize without
+  // actually checking state server-side.
+  if (!env.GHL_API_KEY) {
+    console.warn("[/verify-bga-access] GHL_API_KEY unset — failing closed");
+    return respond(503, { authorized: false });
+  }
+
+  // Fetch the contact directly so we can tell "not found" (403) from
+  // "GHL unreachable / errored" (503). The shared fetchGHLContact helper
+  // intentionally buckets both to null for its own callers, which is the
+  // wrong trade-off for an authorization endpoint.
+  let res;
+  try {
+    res = await fetch(
+      `${CONFIG.GHL_API_BASE}/contacts/${encodeURIComponent(contactId)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${env.GHL_API_KEY}`,
+          Version: "2021-07-28",
+        },
+      },
+    );
+  } catch (err) {
+    console.warn("[/verify-bga-access] GHL fetch threw:", err?.message);
+    return respond(503, { authorized: false });
+  }
+
+  // Unknown contact → treat as rejected without leaking existence. An
+  // attacker enumerating ids should not get 404-vs-403 as an oracle.
+  if (res.status === 404) {
+    return respond(403, { authorized: false });
+  }
+  // Anything else non-2xx (401 bad credential, 429 rate limit, 5xx
+  // outage) → fail closed. Do not authorize on a partial-state read.
+  if (!res.ok) {
+    console.warn(
+      `[/verify-bga-access] GHL returned ${res.status} for contactId=${contactId}`,
+    );
+    return respond(503, { authorized: false });
+  }
+
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    return respond(503, { authorized: false });
+  }
+  const contact = data && data.contact;
+  if (!contact) {
+    // 2xx with no contact body — unexpected shape, fail closed.
+    return respond(503, { authorized: false });
+  }
+
+  // Case-insensitive EXACT match. The contact's tags array is already
+  // the shape the rest of the Worker uses (see line 4454 and 4950).
+  const tags = (contact.tags || []).map((t) => String(t).toLowerCase());
+  if (!tags.includes(BGA_PAID_TAG)) {
+    return respond(403, { authorized: false });
+  }
+
+  return respond(200, { authorized: true });
+}
+
+// ----- end /verify-bga-access -----
+
 // ----- Reset contact tags (testing / lifecycle reset) -----
 // POST /reset-contact-tags
 //   Body: { contactId, keep?: [tag, tag], onlyPrefixed?: true (default) }
@@ -5469,6 +5589,15 @@ export default {
           length: typeof s === "string" ? s.length : 0,
           hint: "Accepted as either 'x-webhook-secret: <secret>' or 'Authorization: Bearer <secret>' — use whichever your webhook client (GHL uses Bearer) supports. If configured is false, add WEBHOOK_SECRET in Cloudflare → Workers → swot-engine → Settings → Variables and redeploy.",
         });
+      }
+      // GET /verify-bga-access?contactId=X — authorization gate for the
+      // /bga-intake wrapper on success.cfobydesign.com. Checks the GHL
+      // contact's swot_paid_297 tag server-side. See
+      // handleVerifyBgaAccess for the full contract (what each status
+      // code means, why 403 covers both "unknown contact" and "unpaid
+      // contact", and why GHL outages fail closed as 503).
+      if (path === "/verify-bga-access") {
+        return handleVerifyBgaAccess(request, env, url);
       }
       return json({ success: false, error: "Not found" }, 404);
     }
