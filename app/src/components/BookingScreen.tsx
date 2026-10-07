@@ -3,28 +3,45 @@ import { motion, AnimatePresence } from "framer-motion";
 import { BookingCalendar } from "./BookingCalendar";
 import { Lock, Check, ArrowLeft } from "lucide-react";
 
+// Rubric v3 narrowed the customer-facing classification to {rehab,
+// needs-attention, growth}. Legacy "urgent" and "strong" are kept in
+// the union so pre-v3 historical reports still render — new reports
+// never emit them.
+type PathClassification =
+  | "rehab"
+  | "needs-attention"
+  | "growth"
+  | "urgent"
+  | "strong";
+
 interface BookingScreenProps {
   score: number;
-  path: "urgent" | "growth" | "strong";
+  path: PathClassification;
   onBack: () => void;
 }
 
 export const BookingScreen = ({ score, path, onBack }: BookingScreenProps) => {
-  const headlines = {
-    urgent: "Reserve Your Strategy Session",
-    growth: "Claim Your Free Action Plan",
-    strong: "Schedule Your CFO Strategy Call",
+  const headlines: Record<PathClassification, string> = {
+    rehab:             "Reserve Your Stabilization Session",
+    "needs-attention": "Reserve Your Strategy Session",
+    growth:            "Claim Your Free Action Plan",
+    // Legacy — pre-v3 reports.
+    urgent:            "Reserve Your Strategy Session",
+    strong:            "Schedule Your CFO Strategy Call",
   };
 
-  const badgeStyles = 
-    path === "urgent" ? "bg-destructive/10 border-destructive/20 text-destructive" : 
-    path === "growth" ? "bg-primary/10 border-primary/20 text-primary" : 
-    "bg-accent/10 border-accent/20 text-accent";
+  const badgeStyles =
+    path === "rehab" || path === "urgent" ? "bg-destructive/10 border-destructive/20 text-destructive" :
+    path === "needs-attention" ? "bg-accent/10 border-accent/20 text-accent" :
+    "bg-primary/10 border-primary/20 text-primary";
 
-  const badgeLabels = {
-    urgent: "IMMEDIATE ACTION REQUIRED",
-    growth: "GROWTH STAGE",
-    strong: "HIGH PERFORMER",
+  const badgeLabels: Record<PathClassification, string> = {
+    rehab:             "STABILIZE BEFORE GROWTH",
+    "needs-attention": "SIGNALS TO ADDRESS",
+    growth:            "GROWTH STAGE",
+    // Legacy — pre-v3 reports.
+    urgent:            "IMMEDIATE ACTION REQUIRED",
+    strong:            "HIGH PERFORMER",
   };
 
   return (

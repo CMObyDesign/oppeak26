@@ -105,8 +105,13 @@ describe("Rubric v3 — TIER_GUIDE content", () => {
     assert.match(TIER_GUIDE.paid_47, /growth, needs-attention, or rehab/);
   });
 
-  it("paid_297 emphasizes prioritization over more findings", () => {
-    assert.match(TIER_GUIDE.paid_297, /Prioritize the findings rather than merely adding more/);
+  it("paid_297 is named Business Growth Analysis (BGA), not Deep Dive, and emphasizes 90-day growth planning", () => {
+    assert.match(TIER_GUIDE.paid_297, /BUSINESS GROWTH ANALYSIS \(BGA\)/);
+    assert.match(TIER_GUIDE.paid_297, /90-day growth plan/);
+    assert.match(TIER_GUIDE.paid_297, /what deserves action first/);
+    // The public product name is now "Business Growth Analysis," not
+    // "Deep Dive." The internal tier identifier `paid_297` stays.
+    assert.doesNotMatch(TIER_GUIDE.paid_297, /^\$297 DEEP DIVE/m);
     assert.match(TIER_GUIDE.paid_297, /growth, needs-attention, or rehab/);
   });
 });

@@ -411,9 +411,14 @@ export async function insertFeedback(db, f) {
  */
 export async function listFeedbackForReport(db, reportId) {
   if (!db || !reportId) return [];
-  const { results } = await db.prepare(
+  // Tag D1-query failures so the strategist route can distinguish them
+  // from a successful "no row" ([]) and return 503 instead of 500.
+  // Codex P2 on PR #73: a transient D1 outage affecting only the
+  // feedback table would previously throw untagged through the
+  // call-site catch and 500 instead of returning the documented 503.
+  const { results } = await runD1Query(() => db.prepare(
     `SELECT * FROM strategist_feedback WHERE report_id = ? ORDER BY created_at DESC`
-  ).bind(reportId).all();
+  ).bind(reportId).all());
   return (results || []).map(hydrateFeedback);
 }
 

@@ -617,19 +617,17 @@ Requirements:
 
 Customer-facing classification may ONLY be: growth, needs-attention, or rehab.`,
 
-  paid_297: `$297 DEEP DIVE: produce a senior-strategist-level analysis grounded in the owner's complete narrative, facts, and derived metrics.
+  paid_297: `$297 BUSINESS GROWTH ANALYSIS (BGA): senior-level strategic analysis that turns the Full Diagnostic into a prioritized 90-day growth plan.
 
-Go deeper than the $47 diagnostic by connecting findings to strategic decisions, implementation constraints, and the consequences of different paths.
+Use the owner's complete narrative, verified facts, and deterministic metrics to connect the financial findings to growth decisions, capital needs, operating constraints, and execution priorities.
 
-Produce 3 primary gaps and 2 opportunities.
+This tier should go beyond diagnosis. It should clarify:
+- what deserves action first,
+- why it matters now,
+- what the owner should accomplish over the next 90 days,
+- what still requires strategist judgment.
 
-Requirements:
-- Prioritize the findings rather than merely adding more findings.
-- Reference exact facts, narrative answers, and derived metrics.
-- Identify what is established, what is inferred, and what still requires human judgment.
-- Quantify financial impact only when supported by deterministic data.
-- Never conflate debt categories or manufacture distress.
-- Give the strategist clear issues to probe and decisions that require human judgment.
+Do not manufacture financial impact, distress, or certainty unsupported by the evidence.
 
 Customer-facing classification may ONLY be: growth, needs-attention, or rehab.`,
 };
@@ -2637,6 +2635,40 @@ function tierLabelOf(tier) {
   return "SWOT Diagnostic";
 }
 
+/**
+ * Emit the GHL path-signal tags for a given customer-facing path value.
+ *
+ * The rubric v3 rewrite (PR #75) narrowed the customer-facing path enum
+ * from five values ("rehab" | "urgent" | "needs-attention" | "growth" |
+ * "strong") to three ("rehab" | "needs-attention" | "growth"). Live GHL
+ * workflows, however, trigger on the pre-v3 tag set:
+ *   swot_path_rehab, swot_path_urgent, swot_path_growth, swot_path_strong
+ *
+ * Emitting only `swot_path_needs-attention` would break every HL
+ * automation bound to `swot_path_urgent`, which is the historical bucket
+ * now folded into needs-attention. Emitting only legacy tags would hide
+ * the new classification from analytics.
+ *
+ * The compat strategy (Codex P1 on #75): emit BOTH tags — the new
+ * canonical tag AND a legacy-mapped tag — so existing HL workflows keep
+ * firing and new analytics on `needs-attention` work too. When HL
+ * workflows have been migrated to listen for the new tag, the legacy
+ * emission can be removed in a follow-up.
+ *
+ * Mapping (customer-facing path → legacy tag it collapses):
+ *   rehab           → swot_path_rehab           (unchanged)
+ *   needs-attention → swot_path_urgent          (needs-attention folds in urgent)
+ *   growth          → swot_path_growth          (unchanged; growth folds in strong)
+ */
+function pathTags(path) {
+  const normalized = String(path || "").toLowerCase();
+  if (!normalized) return [];
+  const tags = [`swot_path_${normalized}`];
+  // Legacy-mapped tag for backwards compat with pre-v3 HL workflows.
+  if (normalized === "needs-attention") tags.push("swot_path_urgent");
+  return tags;
+}
+
 async function fetchArtifactHtml(env, r2Key) {
   if (!r2Key || !env?.SOLOMON_REPORTS) return null;
   try {
@@ -4617,7 +4649,7 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
       : `swot_report_ready_${tier.replace(/^paid_/, "")}`;
   const lifecycleTags = [
     tierTag,
-    `swot_path_${(agent.path || "").toLowerCase()}`,
+    ...pathTags(agent.path),
     ...(agent.opportunityFlags || []).map((f) => String(f).toLowerCase()),
   ].filter(Boolean);
 
@@ -5694,7 +5726,7 @@ export default {
       const writebackSignalTag = isPaidTier ? "swot_playbook_written" : null;
       const lifecycleTags = [
         tierTag,
-        `swot_path_${(agent.path || "").toLowerCase()}`,
+        ...pathTags(agent.path),
         ...(agent.opportunityFlags || []).map((f) => String(f).toLowerCase()),
       ].filter(Boolean);
 
@@ -5774,6 +5806,8 @@ export {
   // Phase 2D renderer
   buildReportHtml,
   buildReportPage,
+  // GHL integration adapters (Codex P1 on #75)
+  pathTags,
   // Phase 2C sanitizer
   sanitizeStructuredFindings,
 };

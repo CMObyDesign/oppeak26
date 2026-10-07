@@ -13,9 +13,21 @@ import { OFFERS } from "@/lib/offerTiming";
 import { PAYMENT_LINK_297 } from "@/lib/ghl-config";
 import { navigateExternal } from "@/lib/navigate-external";
 
+// Rubric v3 narrowed the customer-facing classification to {rehab,
+// needs-attention, growth}. Legacy strings ("urgent," "strong") stay
+// in the union so pre-v3 reports stored in D1 still parse — new
+// generations never emit them.
+type PathClassification =
+  | "rehab"
+  | "needs-attention"
+  | "growth"
+  // Legacy — pre-v3 historical reports only.
+  | "urgent"
+  | "strong";
+
 interface PurchaseGateScreenProps {
   score: number;
-  path: "urgent" | "growth" | "strong" | "rehab";
+  path: PathClassification;
   onBack: () => void;
 }
 
@@ -33,27 +45,33 @@ export const PurchaseGateScreen = ({ score, path, onBack }: PurchaseGateScreenPr
 
   const getBadgeColor = () => {
     switch (path) {
+      case "rehab":
       case "urgent": return "bg-destructive/20 text-destructive border-destructive/20";
-      case "growth": return "bg-primary/20 text-primary border-primary/20";
-      case "strong": return "bg-accent/20 text-accent border-accent/20";
+      case "needs-attention": return "bg-accent/20 text-accent border-accent/20";
+      case "growth":
+      case "strong": return "bg-primary/20 text-primary border-primary/20";
       default: return "bg-muted text-muted-foreground";
     }
   };
 
   const getPathLabel = () => {
     switch (path) {
+      case "rehab":
       case "urgent": return "CRITICAL EXPOSURE";
-      case "growth": return "HIDDEN LIABILITY";
-      case "strong": return "UNTAPPED CAPACITY";
+      case "needs-attention": return "SIGNALS TO ADDRESS";
+      case "growth":
+      case "strong": return "HIDDEN LIABILITY";
       default: return "ANALYSIS COMPLETE";
     }
   };
 
   const getHeadline = () => {
     switch (path) {
+      case "rehab":
       case "urgent": return "Claim Your Deep Dive Audit";
-      case "growth": return "Get Your Deep Dive Audit";
-      case "strong": return "Unlock Your Deep Dive Audit";
+      case "needs-attention": return "Get Your Deep Dive Audit";
+      case "growth":
+      case "strong": return "Get Your Deep Dive Audit";
       default: return "Get Your Deep Dive Audit";
     }
   };

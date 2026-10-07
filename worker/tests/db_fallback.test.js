@@ -148,6 +148,45 @@ describe("GET /strategist/report/{reportId} — distinguishes D1 error from no-r
     );
     assert.equal(res.status, 404);
   });
+
+  it("returns 503 when reportById succeeds but listFeedbackForReport throws (Codex P2 on #73)", async () => {
+    // Mock: reportById's .first() returns a row; listFeedbackForReport's
+    // .all() throws. Before the fix, listFeedbackForReport threw an
+    // untagged error and the call-site catch rethrew it as an
+    // unhandled 500 instead of returning the documented 503.
+    const partialDb = {
+      prepare(sql) {
+        return {
+          bind() { return this; },
+          async first() {
+            return {
+              id: "rep_1", submission_id: "sub_1", contact_id: "c1",
+              tier: "free", report_version: 1, diagnostic_json: null,
+              strategist_brief_json: null, is_successful: 1,
+              created_at: 1700000000000,
+            };
+          },
+          async all() {
+            // Only the feedback-table query fails; report lookup succeeded.
+            if (/strategist_feedback/i.test(sql)) throw new Error("D1: feedback table transient outage");
+            return { results: [] };
+          },
+          async run() { return { success: true }; },
+        };
+      },
+    };
+    const env = { CONSOLE_PASSWORD: PW, SOLOMON_DB: partialDb };
+    const res = await worker.fetch(
+      new Request("https://example.com/strategist/report/rep_1", {
+        method: "GET",
+        headers: { "x-console-password": PW },
+      }),
+      env, {},
+    );
+    assert.equal(res.status, 503, "feedback D1 outage must surface as 503, not 500");
+    const body = await res.json();
+    assert.match(body.error, /temporarily unavailable/i);
+  });
 });
 
 // --- hydration errors propagate — call-site catches do NOT swallow them -
