@@ -1,0 +1,308 @@
+<!--
+  Paste-in HTML block for success.cfobydesign.com/bga-intake
+  (the dedicated post-paid Business Growth Analysis fulfillment page).
+
+  PURPOSE: fulfillment ONLY. This page is reached AFTER a paid_297 purchase
+  has already been completed. It must NEVER display a price, a checkout CTA,
+  or any suggestion that the viewer owes additional payment. If the viewer
+  is confused and clicks away, the primary action we want them to take is
+  completing the intake survey so the CFO By Design team can prepare their
+  Business Growth Plan.
+
+  WHY A NEW PAGE: /deeper-analysis was built for the pre-payment Deep Dive
+  flow (see deep-dive-preview-wrapper.html and lines 203-213 of
+  deeper-analysis-wrapper.html — the submit redirects to a $150 checkout and
+  the page copy says "Step 2: Secure your seat — $150"). Routing a paid_297
+  contact to /deeper-analysis would ask them to pay again. This page replaces
+  that routing for all paid_297 fulfillment traffic. /deeper-analysis stays
+  isolated from paid_297 fulfillment.
+
+  WHERE IT IS LINKED FROM (as of the oppeak26 PR that lands this page):
+    - app/src/pages/AuditConfirmed.tsx (post-purchase confirmation primary CTA)
+    - email-templates/09_deep_dive_intake_pickup_1.html
+    - email-templates/10_deep_dive_intake_pickup_2.html
+    - email-templates/11_deep_dive_intake_pickup_3.html
+    - app/public/email-preview/ copies of the above three
+
+  SETUP STEPS (GHL funnel builder — one-time):
+    1. Create a new funnel page at success.cfobydesign.com/bga-intake.
+    2. Add a Custom Code / HTML block, paste EVERYTHING between the two
+       markers below ("COPY FROM HERE" / "COPY UP TO HERE").
+    3. In the survey iframe mount, replace REPLACE_WITH_PAID_297_INTAKE_SURVEY
+       with the real paid_297 fulfillment-intake survey URL (NOT the
+       pre-payment Deep Dive survey — those are now separate).
+    4. In the GHL post-submit action for that survey, route the submitter to
+       the financials-upload trigger link (NOT to a checkout). The upload
+       trigger-link id lives in email-templates/09_deep_dive_intake_pickup_1.html
+       as {{trigger_link.tD3BJjCv167YbZChSObD}}.
+    5. Confirm there is no funnel-wide script, countdown or sticky bar on
+       this page that mentions a price. This page must present as fulfillment,
+       not sales.
+
+  SERVER-SIDE VERIFICATION (follow-up — NOT in the first ship):
+    This wrapper trusts whoever lands here via the ?contactId param. The HL
+    automation only emails the URL to contacts with swot_paid_297, so the
+    normal path never leaks it. For defense in depth, a follow-up PR should:
+      - Add a worker endpoint, e.g. GET /verify-bga-access?contactId=X, that
+        checks whether the contact has the swot_paid_297 tag.
+      - Add a small <script> here that calls that endpoint on page load; on
+        a non-200 response, replace the intake UI with a message that this
+        intake is for Business Growth Analysis customers only and link to
+        the sales page.
+    Documented explicitly in the AuditConfirmed.tsx file header too.
+
+  ─── COPY FROM HERE ───
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  /* Scope everything under .cfobd-bga to avoid clashing with GHL styles */
+  .cfobd-bga, .cfobd-bga * { box-sizing: border-box; }
+  .cfobd-bga {
+    background: linear-gradient(180deg, #0a0e14 0%, #12181f 100%);
+    color: #f2ecdf;
+    font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    padding: 56px 20px 32px;
+    min-height: 100vh;
+  }
+  .cfobd-bga .wrap { max-width: 920px; margin: 0 auto; }
+  .cfobd-bga .header { text-align: center; margin-bottom: 44px; }
+  .cfobd-bga .logo {
+    height: 68px; width: auto; object-fit: contain;
+    filter: brightness(1.5);
+    margin: 0 auto 30px;
+    display: block;
+  }
+  .cfobd-bga .eyebrow {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
+    color: #d4b565; margin: 0 0 18px;
+  }
+  .cfobd-bga h1 {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-weight: 700; font-size: clamp(30px, 4.5vw, 46px);
+    line-height: 1.12; margin: 0 0 20px; color: #f2ecdf;
+  }
+  .cfobd-bga h1 em { color: #d4b565; font-style: italic; font-weight: 500; }
+  .cfobd-bga .lede {
+    font-size: 18px; line-height: 1.6; color: #a8b0bd;
+    max-width: 660px; margin: 0 auto;
+  }
+
+  .cfobd-bga .confirmed {
+    display: inline-flex; align-items: center; gap: 10px;
+    background: rgba(74, 164, 102, 0.1);
+    border: 1px solid rgba(74, 164, 102, 0.3);
+    border-radius: 999px;
+    padding: 8px 18px;
+    margin: 0 0 26px;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: #7fd19d;
+  }
+  .cfobd-bga .confirmed .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #7fd19d; display: inline-block;
+  }
+
+  .cfobd-bga .trust-row {
+    display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px; margin: 36px 0 44px;
+  }
+  @media (max-width: 640px) { .cfobd-bga .trust-row { grid-template-columns: 1fr; } }
+  .cfobd-bga .trust-cell {
+    background: rgba(212, 181, 101, 0.06);
+    border: 1px solid rgba(212, 181, 101, 0.18);
+    border-radius: 10px;
+    padding: 18px 16px;
+    text-align: center;
+  }
+  .cfobd-bga .trust-cell .num {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 22px; color: #d4b565; font-weight: 600; line-height: 1.1;
+    margin-bottom: 6px; display: block;
+  }
+  .cfobd-bga .trust-cell .lbl {
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 10px; letter-spacing: 0.22em; text-transform: uppercase;
+    color: #a8b0bd;
+  }
+
+  .cfobd-bga .plan-card {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    padding: 28px 30px;
+    margin: 0 0 40px;
+  }
+  .cfobd-bga .plan-title {
+    font-family: 'Playfair Display', Georgia, serif;
+    font-size: 20px; font-weight: 600; color: #f2ecdf;
+    margin: 0 0 18px;
+  }
+  .cfobd-bga .plan-list {
+    list-style: none; padding: 0; margin: 0;
+    display: grid; gap: 14px;
+  }
+  .cfobd-bga .plan-list li {
+    display: grid; grid-template-columns: 36px 1fr; gap: 14px; align-items: start;
+  }
+  .cfobd-bga .plan-list .step {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 32px; height: 32px; border-radius: 50%;
+    background: #d4b565; color: #0a0e14;
+    font-weight: 700; font-size: 15px; font-family: 'DM Sans', sans-serif;
+  }
+  .cfobd-bga .plan-list .step-title {
+    font-weight: 600; color: #f2ecdf; margin: 0 0 4px;
+    font-size: 16px;
+  }
+  .cfobd-bga .plan-list .step-body {
+    color: #a8b0bd; font-size: 14px; line-height: 1.55; margin: 0;
+  }
+
+  .cfobd-bga .divider {
+    text-align: center;
+    font-family: ui-monospace, Menlo, monospace;
+    font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
+    color: #d4b565;
+    margin: 36px 0 20px;
+  }
+
+  .cfobd-bga .survey-card {
+    background: #fafaf7;
+    border-radius: 12px;
+    overflow: hidden;
+    min-height: 820px;
+  }
+  .cfobd-bga .survey-card iframe {
+    width: 100%; min-height: 820px; border: 0; display: block;
+  }
+
+  .cfobd-bga .footer {
+    text-align: center;
+    color: #a8b0bd;
+    font-size: 13px;
+    line-height: 1.6;
+    margin: 40px auto 0;
+    max-width: 580px;
+  }
+  .cfobd-bga .footer a { color: #d4b565; text-decoration: underline; }
+</style>
+
+<section class="cfobd-bga">
+  <div class="wrap">
+
+    <div class="header">
+      <img class="logo"
+           src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png"
+           alt="CFO By Design">
+      <div class="confirmed">
+        <span class="dot"></span>
+        <span>Payment confirmed · Business Growth Analysis</span>
+      </div>
+      <p class="eyebrow">Fulfillment intake · No payment required</p>
+      <h1>Let's build your <em>Business Growth Plan</em> from the real numbers.</h1>
+      <p class="lede">
+        Thank you for purchasing the Business Growth Analysis. This intake collects
+        the deeper narrative and your financial documents. The CFO By Design team
+        uses it to build your Growth Plan from your actual numbers, so the
+        50-minute strategy session starts where the real decisions get made.
+      </p>
+    </div>
+
+    <div class="trust-row">
+      <div class="trust-cell">
+        <span class="num">Team</span>
+        <span class="lbl">CFO By Design review</span>
+      </div>
+      <div class="trust-cell">
+        <span class="num">90-day</span>
+        <span class="lbl">Written Business Growth Plan</span>
+      </div>
+      <div class="trust-cell">
+        <span class="num">50 min</span>
+        <span class="lbl">Live strategy session</span>
+      </div>
+    </div>
+
+    <div class="plan-card">
+      <p class="plan-title">What happens next</p>
+      <ol class="plan-list">
+        <li>
+          <span class="step">1</span>
+          <div>
+            <div class="step-title">Answer the intake below</div>
+            <p class="step-body">
+              A deeper set of questions than the Full Diagnostic — how you price,
+              what delivery actually costs you, where cash goes when things tighten,
+              and the decisions you're weighing over the next 90 days. Takes about
+              10&ndash;15 focused minutes.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="step">2</span>
+          <div>
+            <div class="step-title">Upload the financials you have</div>
+            <p class="step-body">
+              P&amp;L / income statement, balance sheet, AR aging if available, and
+              the most recent two years of business tax returns if available. Upload
+              what you have &mdash; missing visibility is useful information too.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="step">3</span>
+          <div>
+            <div class="step-title">CFO By Design team builds your Growth Plan</div>
+            <p class="step-body">
+              Prepared from your intake and your actual financials, organized around
+              the next 90 days, 6 months, and 12 months. Delivered to your inbox
+              before your strategy session.
+            </p>
+          </div>
+        </li>
+        <li>
+          <span class="step">4</span>
+          <div>
+            <div class="step-title">50-minute Business Growth Analysis session</div>
+            <p class="step-body">
+              Walk the plan with your strategist. Pressure-test assumptions,
+              prioritize the next moves, and get the &quot;but how?&quot; questions
+              answered.
+            </p>
+          </div>
+        </li>
+      </ol>
+    </div>
+
+    <p class="divider">Begin intake</p>
+
+    <!--
+      Survey iframe mount. In GHL funnel builder, replace
+      REPLACE_WITH_PAID_297_INTAKE_SURVEY with the paid_297 fulfillment-
+      intake survey URL (NOT the Deep Dive pre-payment survey — those are
+      now separate). Confirm the survey's POST-SUBMIT action routes to the
+      financials-upload trigger link, NOT to a checkout.
+    -->
+    <div class="survey-card" id="cfobd-survey-mount">
+      <iframe
+        src="https://my.cfobydesign.com/widget/survey/REPLACE_WITH_PAID_297_INTAKE_SURVEY"
+        title="Business Growth Analysis intake"
+        loading="lazy"
+        allow="clipboard-write"
+      ></iframe>
+    </div>
+
+    <div class="footer">
+      Trouble with the intake, or realized you need to send a file separately?
+      Email <a href="mailto:consulting@cfobydesign.com">consulting@cfobydesign.com</a>
+      &mdash; a strategist will get back to you the same day.
+    </div>
+
+  </div>
+</section>
+<!-- ─── COPY UP TO HERE ─── -->
