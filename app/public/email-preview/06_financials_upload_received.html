@@ -5,7 +5,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="format-detection" content="telephone=no, address=no, date=no, email=no">
-  <title>We've got your financials — Part 2 is in the queue</title>
+  <title>We have your financials. Your Growth Plan is next.</title>
   <style>
     @media only screen and (max-width:600px) {
       .wrap-td { padding: 16px 8px !important; }
@@ -35,32 +35,35 @@
           <tr>
             <td class="card-td" style="padding:28px 32px;font-family:Georgia,serif;color:#1a1a1a;font-size:16px;line-height:1.7;">
 
-              <p style="margin:0 0 16px;">Hi {{contact.first_name | fallback:"there"}},</p>
+              <p style="margin:0 0 16px;">Hi {{#if contact.first_name}}{{contact.first_name}}{{else}}there{{/if}},</p>
 
-              <p style="margin:0 0 20px;">We received your financials — thank you. Everything is in the queue for Miguel to review.</p>
+              <p style="margin:0 0 20px;">We received your financials. Thank you.</p>
+
+              <p style="margin:0 0 20px;">Now the CFO By Design team can review the file against what surfaced in Part 1 and build the Business Growth Plan from the actual numbers.</p>
 
               <div style="margin:20px 0 28px;padding:20px;background:#fafaf7;border:1px solid #e5e7eb;border-radius:8px;">
                 <p style="margin:0 0 10px;font-family:Arial,sans-serif;font-weight:700;color:#374151;font-size:11px;letter-spacing:2px;">WHAT HAPPENS NEXT</p>
                 <ol style="margin:0;padding-left:22px;color:#374151;font-size:14px;line-height:1.7;">
-                  <li style="margin-bottom:8px;">Miguel reviews your file line by line — usually within one business day.</li>
-                  <li style="margin-bottom:8px;">He writes your Part 2 Business Growth Plan tailored to what he sees.</li>
-                  <li style="margin-bottom:8px;">Part 2 lands in your inbox — typically within 48 hours of your upload.</li>
-                  <li style="margin-bottom:0;">You review, then we walk through it together on the 50-minute session.</li>
+                  <li style="margin-bottom:8px;">We review the financials alongside your intake and diagnostic.</li>
+                  <li style="margin-bottom:8px;">We identify the highest-priority 90-day moves.</li>
+                  <li style="margin-bottom:8px;">We map the 6-month and 12-month trajectory behind them.</li>
+                  <li style="margin-bottom:8px;">Your completed plan is delivered to you.</li>
+                  <li style="margin-bottom:0;">We work through it together in your 50-minute strategy session.</li>
                 </ol>
               </div>
 
-              <p style="margin:0 0 12px;"><strong>Have you locked in your 50-minute session yet?</strong> Book now so we have a date on the calendar when Part 2 lands.</p>
+              <p style="margin:0 0 12px;"><strong>If you have not booked the session yet, lock in the time now.</strong></p>
 
               <div style="margin:20px 0;text-align:center;">
-                <a class="btn-primary" href="https://my.cfobydesign.com/widget/booking/VGdN6KoFBtbdnSvHKHTh" style="display:inline-block;padding:16px 32px;background:#c4a647;color:#ffffff;font-family:Arial,sans-serif;font-weight:700;text-decoration:none;border-radius:6px;font-size:15px;letter-spacing:1px;">BOOK MY 50-MIN DEEP DIVE SESSION</a>
+                <a class="btn-primary" href="https://my.cfobydesign.com/widget/booking/VGdN6KoFBtbdnSvHKHTh" style="display:inline-block;padding:16px 32px;background:#c4a647;color:#ffffff;font-family:Arial,sans-serif;font-weight:700;text-decoration:none;border-radius:6px;font-size:15px;letter-spacing:1px;">BOOK MY 50-MIN BGA SESSION</a>
               </div>
 
               <p style="margin:24px 0 0;color:#6b7280;font-size:14px;">
-                Realized you forgot something in the upload? Reply to this email with the missing file and we'll add it to your intake.
+                If you realize you forgot a file, reply to this email or send it to <a href="mailto:consulting@cfobydesign.com" style="color:#1a1a1a;">consulting@cfobydesign.com</a>.
               </p>
 
               <p style="margin:16px 0 0;color:#6b7280;font-size:13px;text-align:center;">
-                Questions in the meantime? Reply — Liz reads every response.
+                Questions in the meantime? Reply — we read every response.
               </p>
 
             </td>

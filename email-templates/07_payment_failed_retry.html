@@ -5,7 +5,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="format-detection" content="telephone=no, address=no, date=no, email=no">
-  <title>Quick fix — your payment didn't go through</title>
+  <title>Quick fix — your payment did not go through</title>
   <style>
     @media only screen and (max-width:600px) {
       .wrap-td { padding: 16px 8px !important; }
@@ -20,6 +20,9 @@
   </style>
 </head>
 <body style="margin:0;padding:0;background:#fafaf7;font-family:Georgia,serif;">
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#fafaf7;">
+    Your answers are safe. Retry the payment and pick up where you left off.
+  </div>
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#fafaf7;">
     <tr>
       <td class="wrap-td" align="center" style="padding:24px 12px;">
@@ -27,7 +30,7 @@
 
           <tr>
             <td class="card-td" style="padding:28px 32px;background:#0f0f0f;border-radius:12px 12px 0 0;text-align:center;">
-              <img class="logo" src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png" alt="CFO by Design" width="200" style="display:block;margin:0 auto;width:200px;max-width:200px;height:auto;border:0;">
+              <img class="logo" src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png" alt="CFO By Design" width="200" style="display:block;margin:0 auto;width:200px;max-width:200px;height:auto;border:0;">
               <div style="font-family:Arial,sans-serif;color:#9ca3af;font-size:11px;letter-spacing:2.5px;margin-top:10px;">STRATEGY MATTERS · YOUR BUSINESS MATTERS</div>
             </td>
           </tr>
@@ -35,32 +38,34 @@
           <tr>
             <td class="card-td" style="padding:28px 32px;font-family:Georgia,serif;color:#1a1a1a;font-size:16px;line-height:1.7;">
 
-              <p style="margin:0 0 16px;">Hi {{contact.first_name | fallback:"there"}},</p>
+              <p style="margin:0 0 16px;">Hi {{#if contact.first_name}}{{contact.first_name}}{{else}}there{{/if}},</p>
 
-              <p style="margin:0 0 20px;">Quick heads-up — your payment for the CFO by Design assessment didn't go through. This is almost always a card issue (expired, wrong ZIP, or the bank flagged it), and it's a two-minute fix.</p>
+              <p style="margin:0 0 20px;">Quick heads-up: your payment did not go through.</p>
+
+              <p style="margin:0 0 20px;">This is usually a card-detail or bank-authorization issue. Your assessment answers are safe. Nothing was lost.</p>
 
               <div style="margin:20px 0 28px;padding:20px;background:#fef3c7;border-left:4px solid #c4a647;border-radius:4px;">
                 <p style="margin:0 0 6px;font-family:Arial,sans-serif;font-weight:700;color:#78350f;font-size:11px;letter-spacing:2px;">MOST COMMON CAUSES</p>
                 <ul style="margin:0;padding-left:22px;color:#374151;font-size:14px;line-height:1.6;">
                   <li style="margin-bottom:6px;">Card expired or replaced recently</li>
-                  <li style="margin-bottom:6px;">Billing ZIP doesn't match what's on file with your bank</li>
+                  <li style="margin-bottom:6px;">Billing ZIP does not match what is on file with your bank</li>
                   <li style="margin-bottom:6px;">Bank flagged the charge as unusual — a quick call to your bank clears it</li>
                   <li style="margin-bottom:0;">Insufficient funds on a debit card</li>
                 </ul>
               </div>
 
-              <p style="margin:0 0 12px;"><strong>Retry when you're ready</strong> — use the button below to pull up the payment page and try again with a different card or update the details on the same one.</p>
+              <p style="margin:0 0 12px;"><strong>Use the button below to retry with the same card or a different one.</strong></p>
 
               <div style="margin:20px 0;text-align:center;">
-                <a class="btn-primary" href="{{contact.swot_retry_payment_url | fallback:'https://my.cfobydesign.com/payment-link/6a0db7aa1a6dcdeebb53b641'}}" style="display:inline-block;padding:16px 32px;background:#c4a647;color:#ffffff;font-family:Arial,sans-serif;font-weight:700;text-decoration:none;border-radius:6px;font-size:15px;letter-spacing:1px;">RETRY PAYMENT →</a>
+                <a class="btn-primary" href="{{#if contact.swot_retry_payment_url}}{{contact.swot_retry_payment_url}}{{else}}https://my.cfobydesign.com/payment-link/6a0db7aa1a6dcdeebb53b641{{/if}}" style="display:inline-block;padding:16px 32px;background:#c4a647;color:#ffffff;font-family:Arial,sans-serif;font-weight:700;text-decoration:none;border-radius:6px;font-size:15px;letter-spacing:1px;">RETRY PAYMENT →</a>
               </div>
 
               <p style="margin:24px 0 0;color:#6b7280;font-size:14px;">
-                <strong>Card giving you trouble even after a retry?</strong> Reply to this email and Liz will send you a fresh checkout link or handle it manually — either works.
+                Still having trouble? Email <a href="mailto:support@cfobydesign.com" style="color:#1a1a1a;">support@cfobydesign.com</a> or text us at <strong>352-717-9635</strong> and we will help you get the checkout completed.
               </p>
 
               <p style="margin:20px 0 0;color:#6b7280;font-size:13px;text-align:center;font-style:italic;">
-                Your assessment answers are safe — nothing was lost when the payment failed. Once the card clears, you'll pick up exactly where you left off.
+                Your existing answers are safe. Once the card clears, you will pick up exactly where you left off.
               </p>
 
             </td>

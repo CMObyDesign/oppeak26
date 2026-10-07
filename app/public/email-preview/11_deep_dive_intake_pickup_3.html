@@ -38,9 +38,9 @@
           <tr>
             <td class="card-td" style="padding:28px 32px;font-family:Georgia,serif;color:#1a1a1a;font-size:16px;line-height:1.7;">
 
-              <p style="margin:0 0 16px;">Hi {{contact.first_name | fallback:"there"}},</p>
+              <p style="margin:0 0 16px;">Hi {{#if contact.first_name}}{{contact.first_name}}{{else}}there{{/if}},</p>
 
-              <p style="margin:0 0 16px;">I have not heard back, so let me make this easy. There are two ways to get your Business Health Analysis across the finish line. Either one works.</p>
+              <p style="margin:0 0 16px;">I have not heard back, so let me make this easy. There are two ways to get your Business Growth Analysis across the finish line. Either one works.</p>
 
               <!-- ============ OPTION ONE ============ -->
               <div style="margin:22px 0 18px;padding:22px 24px;background:#fafaf7;border-radius:8px;border-left:4px solid #c4a647;">
@@ -92,7 +92,7 @@
                 <a href="mailto:support@cfobydesign.com" style="color:#6b7280;text-decoration:underline;"><!--[if mso]><font color="#6b7280"><![endif]-->Support<!--[if mso]></font><![endif]--></a>
               </div>
               <div style="font-family:Arial,sans-serif;color:#4b5563;font-size:9px;margin-top:10px;line-height:1.6;">
-                You are receiving this because you purchased the Business Health Analysis. This is a service message about your order.
+                You are receiving this because you purchased the Business Growth Analysis. This is a service message about your order.
               </div>
             </td>
           </tr>

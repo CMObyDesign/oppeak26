@@ -5,7 +5,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="format-detection" content="telephone=no, address=no, date=no, email=no">
-  <title>Your CFO by Design Full Diagnostic</title>
+  <title>Your CFO By Design Full Diagnostic is ready</title>
   <style>
     @media only screen and (max-width:600px) {
       .wrap-td { padding: 16px 8px !important; }
@@ -21,6 +21,9 @@
   </style>
 </head>
 <body style="margin:0;padding:0;background:#fafaf7;font-family:Georgia,serif;">
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#fafaf7;">
+    Your diagnostic is complete. Your next step is the included 30-minute strategist review.
+  </div>
   <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#fafaf7;">
     <tr>
       <td class="wrap-td" align="center" style="padding:24px 12px;">
@@ -28,7 +31,7 @@
 
           <tr>
             <td class="card-td" style="padding:28px 32px;background:#0f0f0f;border-radius:12px 12px 0 0;text-align:center;">
-              <img class="logo" src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png" alt="CFO by Design" width="200" style="display:block;margin:0 auto;width:200px;max-width:200px;height:auto;border:0;">
+              <img class="logo" src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png" alt="CFO By Design" width="200" style="display:block;margin:0 auto;width:200px;max-width:200px;height:auto;border:0;">
               <div style="font-family:Arial,sans-serif;color:#9ca3af;font-size:11px;letter-spacing:2.5px;margin-top:10px;">STRATEGY MATTERS · YOUR BUSINESS MATTERS</div>
             </td>
           </tr>
@@ -36,39 +39,43 @@
           <tr>
             <td class="card-td" style="padding:28px 32px;font-family:Georgia,serif;color:#1a1a1a;font-size:16px;line-height:1.7;">
 
-              <p style="margin:0 0 16px;">Hi {{contact.first_name | fallback:"there"}},</p>
+              <p style="margin:0 0 16px;">Hi {{#if contact.first_name}}{{contact.first_name}}{{else}}there{{/if}},</p>
 
               <p style="margin:0 0 20px;">{{contact.swot_email_blurb}}</p>
 
-              <p style="margin:0 0 20px;">Your Full Diagnostic is below — every section references the specific answers you gave us. Read it carefully, then book your strategy session so we can act on it together.</p>
+              <p style="margin:0 0 16px;">Your $47 Full Diagnostic is ready.</p>
+
+              <p style="margin:0 0 16px;">Read it once on your own first. Every material finding should tie back to the answers and numbers you gave us. Pay particular attention to the first-priority issue and anything marked as needing clarification.</p>
+
+              <p style="margin:0 0 20px;">Then book the 30-minute strategist review included with your purchase. On that call, your CFO By Design strategist will help you interpret the findings, separate what we know from what still needs to be verified, and identify the first financial move worth addressing.</p>
 
               <div class="report-box" style="margin:20px 0 28px;padding:20px;background:#fafaf7;border:1px solid #e5e7eb;border-radius:8px;">
                 {{contact.swot_full_report}}
               </div>
 
+              <!-- ============ PRIMARY: BOOK THE INCLUDED REVIEW ============ -->
+              <p style="margin:0 0 12px;"><strong>Your next move:</strong> book your included 30-minute strategist review. A written report can show you the pattern. The live review is where you decide what deserves action first.</p>
+
+              <div style="margin:20px 0;text-align:center;">
+                <a class="btn-primary" href="https://my.cfobydesign.com/widget/booking/D3yNZNFtqIYsChkOgQc9" style="display:inline-block;padding:16px 32px;background:#c4a647;color:#ffffff;font-family:Arial,sans-serif;font-weight:700;text-decoration:none;border-radius:6px;font-size:15px;letter-spacing:1px;">BOOK MY INCLUDED 30-MIN STRATEGY REVIEW</a>
+              </div>
+              <p style="margin:12px 0 24px;text-align:center;font-family:Arial,sans-serif;color:#9ca3af;font-size:11px;">Already included in your $47 Full Diagnostic · No additional cost</p>
+
               <div style="margin:20px 0 8px;text-align:center;">
-                <a class="btn-secondary" href="{{contact.swot_report_path}}" style="display:inline-block;padding:12px 24px;background:#1a1a1a;color:#ffffff;font-family:Arial,sans-serif;font-weight:600;font-size:13px;text-decoration:none;border-radius:6px;">🔗 View Full Report Online</a>
+                <a class="btn-secondary" href="{{contact.swot_report_path}}" style="display:inline-block;padding:12px 24px;background:#1a1a1a;color:#ffffff;font-family:Arial,sans-serif;font-weight:600;font-size:13px;text-decoration:none;border-radius:6px;">🔗 View Full Diagnostic Online</a>
               </div>
               <p style="text-align:center;font-family:Arial,sans-serif;color:#9ca3af;font-size:12px;line-height:1.5;margin:0 0 24px;">
-                Opens a clean version in your browser — easy to share with a partner or CPA.<br>
+                Share with a partner, CPA, or bookkeeper.<br>
                 To save as PDF: open the report online, then press ⌘P (Mac) or Ctrl+P (Windows).
               </p>
 
-              <p style="margin:0 0 12px;"><strong>Your next move:</strong> book your 30-minute strategy session. On the call, we'll walk through the diagnostic together, focus on the single most urgent gap, and you'll leave with a concrete plan for the next 30 days.</p>
-
-              <div style="margin:20px 0;text-align:center;">
-                <a class="btn-primary" href="https://my.cfobydesign.com/widget/booking/D3yNZNFtqIYsChkOgQc9" style="display:inline-block;padding:16px 32px;background:#c4a647;color:#ffffff;font-family:Arial,sans-serif;font-weight:700;text-decoration:none;border-radius:6px;font-size:15px;letter-spacing:1px;">BOOK MY 30-MIN STRATEGY SESSION</a>
-              </div>
-
-              <!-- ============ $297 DEEP DIVE UPSELL — the missing revenue link ============ -->
-              <div style="margin:32px 0 12px;padding:22px;background:#fdf8f0;border:2px solid #c4a647;border-radius:8px;">
-                <div style="font-family:Arial,sans-serif;font-weight:700;color:#92400e;font-size:11px;letter-spacing:2px;margin-bottom:8px;">↑ UPGRADE · DEEP DIVE ENGAGEMENT</div>
-                <p style="margin:0 0 12px;font-family:Georgia,serif;font-size:17px;font-weight:700;color:#1a1a1a;">Ready to turn this diagnostic into a written 90-day plan?</p>
-                <p style="margin:0 0 16px;color:#374151;font-size:14px;line-height:1.55;">The Deep Dive Engagement gives you a Strategist Brief modeled from your real numbers, plus a Business Growth Plan mapping 90-day / 6-month / 12-month moves — followed by a 50-minute session where we walk it together.</p>
+              <!-- ============ SECONDARY — BGA, subordinated below the fold ============ -->
+              <div style="margin:28px 0 12px;padding-top:22px;border-top:1px solid #e5e7eb;">
+                <p style="margin:0 0 10px;font-family:Arial,sans-serif;font-weight:700;color:#9ca3af;font-size:11px;letter-spacing:2px;text-align:center;">AFTER THE REVIEW CALL</p>
+                <p style="margin:0 0 14px;color:#6b7280;font-size:14px;line-height:1.6;text-align:center;">If the review surfaces a need for a deeper team review and a written 90-day plan, your strategist will walk you through the <strong style="color:#1a1a1a;">Business Growth Analysis</strong> on the call. No need to decide now.</p>
                 <div style="text-align:center;">
-                  <a class="btn-primary" href="https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0" style="display:inline-block;padding:14px 28px;background:#c4a647;color:#ffffff;font-family:Arial,sans-serif;font-weight:700;text-decoration:none;border-radius:6px;font-size:14px;letter-spacing:1px;">UPGRADE TO THE DEEP DIVE →</a>
+                  <a href="https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0" style="display:inline-block;padding:10px 20px;color:#6b7280;font-family:Arial,sans-serif;font-size:12px;text-decoration:underline;">Explore the Business Growth Analysis →</a>
                 </div>
-                <p style="margin:12px 0 0;text-align:center;font-family:Arial,sans-serif;color:#9ca3af;font-size:11px;">One-time payment · no subscription · Miguel-written</p>
               </div>
 
               <p style="margin:20px 0 0;color:#6b7280;font-size:14px;text-align:center;">

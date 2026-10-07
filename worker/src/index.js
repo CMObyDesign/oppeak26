@@ -61,14 +61,16 @@ const RUBRIC_VERSION     = "r3.0";  // ASSESSMENT_RUBRIC — Elizabeth-led rewri
                                      // strength recognition on free tier, synthesis-
                                      // oriented tier guides, 3-path customer-facing
                                      // classification (urgent + strong collapsed).
-// buildPrompt() format. Bumped to p2.1: output JSON `path` enum
-// narrowed to {rehab, needs-attention, growth} to match the new
-// customer-facing classification, and the strategistBrief spec now
-// requires the consultant to name what to probe, contradictions in
-// the intake, assumptions not to make, and verifications required
-// before recommending action. The FACTS + DERIVED METRICS block
-// structure (from p2.0) is unchanged.
-const PROMPT_VERSION     = "p2.1";
+// buildPrompt() format. Bumped to p2.2: TIER_GUIDE.paid_297 was
+// rewritten to the Business Growth Analysis prompt (prioritized
+// 90-day growth plan built on the Full Diagnostic), which materially
+// changes the paid_297 generation; the previous Deep Dive instructions
+// are retired. p2.1 narrowed the output JSON `path` enum to
+// {rehab, needs-attention, growth} and tightened the strategistBrief
+// spec; the FACTS + DERIVED METRICS block structure (from p2.0) is
+// unchanged. Bumping lets `writeCanonicalRecord`-stored provenance
+// distinguish pre- and post-BGA paid_297 reports in D1.
+const PROMPT_VERSION     = "p2.2";
 
 const CONFIG = {
   CLAUDE_MODEL: "claude-sonnet-4-6",
@@ -1785,14 +1787,14 @@ ${couponRow}
   } else if (tier === "paid_297") {
     cta = `
       <div class="cta-panel">
-        <p class="eyebrow gold">FINAL STEP · BOOK YOUR DEEP DIVE</p>
-        <h2>Your Business Playbook is <em>ready.</em></h2>
+        <p class="eyebrow gold">FINAL STEP · BOOK YOUR BGA SESSION</p>
+        <h2>Your Business Growth Plan is <em>ready.</em></h2>
         <p class="sub">Pick a time below for your 50-minute session with your strategist. We'll walk the plan together and start execution.</p>
         <div class="cfobd-calendar" style="max-width:820px;margin:24px auto 0;background:#fafaf7;border:1px solid var(--line);border-radius:10px;overflow:hidden;">
           <iframe
             src="${bookingLink297}${emailParam}"
             style="width:100%;min-height:820px;border:0;display:block;"
-            title="Book your 50-minute Deep Dive session"
+            title="Book your 50-minute Business Growth Analysis session"
             loading="lazy"
             allow="clipboard-write"></iframe>
         </div>
@@ -2630,7 +2632,7 @@ async function handleReportStatus(contactId, env) {
 // R2 artifact was deleted or expired. Either way the diagnostic survives.
 const REPORT_ID_SHAPE = /^[0-9a-f-]{32,40}$/i;
 function tierLabelOf(tier) {
-  if (tier === "paid_297") return "Business Playbook";
+  if (tier === "paid_297") return "Business Growth Analysis";
   if (tier === "paid_47")  return "Full Diagnostic";
   return "SWOT Diagnostic";
 }
@@ -2894,7 +2896,7 @@ async function handleReport(contactId, env, requestUrl) {
   let reportFieldKey, tierLabel, tier, reportContent;
   const preferPaid47 = tags.includes("swot_paid_47") || tags.includes("swot_solomon50_applied");
   if (tags.includes("swot_paid_297") && contentOf("business_playbook")) {
-    reportFieldKey = "business_playbook"; tierLabel = "Business Playbook"; tier = "paid_297";
+    reportFieldKey = "business_playbook"; tierLabel = "Business Growth Analysis"; tier = "paid_297";
     reportContent = contentOf("business_playbook");
   } else if (preferPaid47 && contentOf("swot_full_report")) {
     reportFieldKey = "swot_full_report"; tierLabel = "Full Diagnostic"; tier = "paid_47";
@@ -2903,7 +2905,7 @@ async function handleReport(contactId, env, requestUrl) {
     reportFieldKey = "swot_free_report"; tierLabel = "SWOT Diagnostic"; tier = "free";
     reportContent = contentOf("swot_free_report");
   } else if (tags.includes("swot_paid_297")) {
-    reportFieldKey = "business_playbook"; tierLabel = "Business Playbook"; tier = "paid_297";
+    reportFieldKey = "business_playbook"; tierLabel = "Business Growth Analysis"; tier = "paid_297";
     reportContent = "";
   } else if (preferPaid47) {
     reportFieldKey = "swot_full_report"; tierLabel = "Full Diagnostic"; tier = "paid_47";
@@ -4395,7 +4397,7 @@ async function answersFromContactFields(contact, env) {
 //
 // AUTH: Endpoint is publicly reachable, and a contact ID is exposed to end users
 // via the /report/{contactId} URL. Without protection anyone can POST here with
-// tier=paid_297 and get a Business Playbook generated + swot_paid_297 tag applied.
+// tier=paid_297 and get a Business Growth Analysis generated + swot_paid_297 tag applied.
 // Two-layer defense:
 //   1. Shared secret compared to env.WEBHOOK_SECRET. Accepted via EITHER
 //      `x-webhook-secret: <secret>` OR `Authorization: Bearer <secret>` — GHL's
@@ -5671,7 +5673,10 @@ export default {
       // One report field per tier — no mirroring. Each tier has its own named deliverable:
       //   free     -> swot_free_report      (Free SWOT Report)
       //   paid_47  -> swot_full_report      (Full Diagnostic Report)
-      //   paid_297 -> business_playbook     (Business Playbook — the $297 deliverable)
+      //   paid_297 -> business_playbook     (Business Growth Analysis — the $297 deliverable;
+      //                                      the GHL field key stays `business_playbook` as a
+      //                                      stable integration identifier per
+      //                                      docs/brand/PRODUCT_NAMING_AND_LADDER.md)
       const reportFieldKey =
         tier === "paid_297" ? "business_playbook"
         : tier === "paid_47" ? "swot_full_report"

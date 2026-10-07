@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>SWOT Email Templates — Preview</title>
+<title>CFO By Design — Email Templates Preview</title>
 <style>
   :root { color-scheme: dark; }
   body {
@@ -14,7 +14,7 @@
     font-family: 'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
   }
   header {
-    max-width: 960px;
+    max-width: 1040px;
     margin: 0 auto 32px;
   }
   h1 {
@@ -29,11 +29,20 @@
     font-size: 14px;
     line-height: 1.6;
   }
+  h3.section {
+    max-width: 1040px;
+    margin: 32px auto 12px;
+    font-family: 'Playfair Display', Georgia, serif;
+    font-weight: 600;
+    font-size: 18px;
+    color: hsl(45, 95%, 60%);
+    letter-spacing: 0.02em;
+  }
   .grid {
-    max-width: 960px;
+    max-width: 1040px;
     margin: 0 auto;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
     gap: 20px;
   }
   .card {
@@ -84,16 +93,8 @@
     letter-spacing: 0.03em;
   }
   .card a.open:hover { filter: brightness(1.1); }
-  .card a.raw {
-    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-    font-size: 11px;
-    color: hsl(215, 20%, 70%);
-    text-decoration: none;
-    text-align: center;
-  }
-  .card a.raw:hover { color: hsl(45, 95%, 60%); text-decoration: underline; }
   footer {
-    max-width: 960px;
+    max-width: 1040px;
     margin: 40px auto 0;
     padding-top: 24px;
     border-top: 1px solid rgba(255,255,255,0.08);
@@ -114,59 +115,132 @@
 <body>
 
 <header>
-  <h1>SWOT delivery email templates</h1>
-  <p class="lead">Preview of every workflow email in the funnel. Merge fields render as literal <code>{{contact.first_name}}</code> here — actual sends interpolate them in HL.</p>
+  <h1>CFO By Design — email templates</h1>
+  <p class="lead">Preview of every workflow email in the funnel, ordered by send sequence. Merge fields render as literal <code>{{contact.first_name}}</code> here — actual sends interpolate them in HighLevel.</p>
+  <p class="lead" style="margin-top:10px;">Product ladder: <strong>Business Health Check</strong> (free) → <strong>$47 Full Diagnostic</strong> → <strong>Business Growth Analysis</strong> ($297, BGA) → <strong>Premium CFO Bundle Service</strong>.</p>
 </header>
 
+<h3 class="section">Free Business Health Check sequence</h3>
 <div class="grid">
-
   <div class="card">
-    <div class="num">01 / 10</div>
-    <h2>Free Report Delivery</h2>
+    <div class="num">E1 · HEALTH CHECK DELIVERY</div>
+    <h2>Business Health Check is ready</h2>
     <div class="meta">
       Workflow: <code>02. SWOT Free Report</code><br>
       Trigger tag: <code>swot_report_ready_free</code><br>
-      Body field: <code>swot_free_report</code>
+      Body field: <code>swot_free_report</code><br>
+      Primary CTA: view report · Secondary paid CTA: $47 Full Diagnostic
     </div>
     <a class="open" href="01_free_report_delivery.html" target="_blank" rel="noopener">Preview →</a>
   </div>
-
   <div class="card">
-    <div class="num">02 / 10</div>
-    <h2>Partial SWOT ($47) Delivery</h2>
+    <div class="num">E2 · 24H FREE FOLLOW-UP</div>
+    <h2>Numbers or bank balance?</h2>
+    <div class="meta">
+      Fires 24h after E1 if <code>swot_paid_47</code> not applied<br>
+      Teaches Miguel's financial-visibility idea; sells $47
+    </div>
+    <a class="open" href="08_health_check_followup_bank_balance.html" target="_blank" rel="noopener">Preview →</a>
+  </div>
+  <div class="card">
+    <div class="num">E3 · 2-3 DAY FREE FOLLOW-UP</div>
+    <h2>Signals vs. diagnosis</h2>
+    <div class="meta">
+      Fires 2–3 days after E2 if <code>swot_paid_47</code> not applied<br>
+      Makes the free→paid gap unmistakable; sells $47
+    </div>
+    <a class="open" href="12_health_check_followup_signals.html" target="_blank" rel="noopener">Preview →</a>
+  </div>
+</div>
+
+<h3 class="section">$47 Full Diagnostic sequence</h3>
+<div class="grid">
+  <div class="card">
+    <div class="num">E4 · $47 PAYMENT FAILED</div>
+    <h2>Quick fix — payment did not go through</h2>
+    <div class="meta">
+      Workflow: <code>08. SWOT Payment Failed Retry</code><br>
+      Trigger tag: <code>swot_payment_failed_47</code><br>
+      Retry URL: <code>contact.swot_retry_payment_url</code>
+    </div>
+    <a class="open" href="07_payment_failed_retry.html" target="_blank" rel="noopener">Preview →</a>
+  </div>
+  <div class="card">
+    <div class="num">E5 · FULL DIAGNOSTIC DELIVERY</div>
+    <h2>Full Diagnostic + included review</h2>
     <div class="meta">
       Workflow: <code>03b. SWOT $47 Report Delivery</code><br>
       Trigger tag: <code>swot_report_ready_paid_47</code><br>
-      Body field: <code>swot_full_report</code>
+      Body field: <code>swot_full_report</code><br>
+      <strong>Primary CTA: book included 30-min review</strong> · BGA subordinated
     </div>
     <a class="open" href="02_partial_swot_delivery.html" target="_blank" rel="noopener">Preview →</a>
   </div>
-
   <div class="card">
-    <div class="num">03 / 10</div>
-    <h2>Deep Dive — Part 1 Strategist Brief</h2>
+    <div class="num">E6 · CONSULT NOT BOOKED</div>
+    <h2>You already paid for the most important part</h2>
+    <div class="meta">
+      Fires 1 day after E5 if 30-min appt not booked<br>
+      Optional 2nd fire at 3 days; recovers the included call
+    </div>
+    <a class="open" href="13_full_diagnostic_consult_not_booked.html" target="_blank" rel="noopener">Preview →</a>
+  </div>
+</div>
+
+<h3 class="section">$297 Business Growth Analysis sequence</h3>
+<div class="grid">
+  <div class="card">
+    <div class="num">E7 · BGA PART 1 READY</div>
+    <h2>Business Growth Analysis — Part 1</h2>
     <div class="meta">
       Workflow: <code>04b. SWOT $297 Part 1 Delivery</code><br>
       Trigger tag: <code>swot_report_ready_paid_297</code><br>
-      Body field: <code>business_playbook</code>
+      Body field: <code>business_playbook</code> (stable id)<br>
+      Primary CTA: upload financials
     </div>
     <a class="open" href="03_deep_dive_part1.html" target="_blank" rel="noopener">Preview →</a>
   </div>
-
   <div class="card">
-    <div class="num">04 / 10</div>
-    <h2>Deep Dive — Part 2 Growth Plan</h2>
+    <div class="num">E8 · BGA FINANCIALS MISSING</div>
+    <h2>Your Growth Plan is waiting on one thing</h2>
+    <div class="meta">
+      Fires 1 day after E7 if financials not uploaded<br>
+      Optional 2nd fire at 3 days
+    </div>
+    <a class="open" href="14_bga_financials_missing.html" target="_blank" rel="noopener">Preview →</a>
+  </div>
+  <div class="card">
+    <div class="num">E9 · FINANCIALS RECEIVED</div>
+    <h2>We have your financials</h2>
+    <div class="meta">
+      Workflow: <code>06. Financial Upload Received</code><br>
+      Trigger tag: <code>swot_financials_uploaded</code><br>
+      Confirms receipt; locks in 50-min BGA session
+    </div>
+    <a class="open" href="06_financials_upload_received.html" target="_blank" rel="noopener">Preview →</a>
+  </div>
+  <div class="card">
+    <div class="num">E10 · GROWTH PLAN DELIVERY</div>
+    <h2>Business Growth Plan is ready (Part 2)</h2>
     <div class="meta">
       Workflow: <code>04c. SWOT $297 Part 2 Delivery</code><br>
-      Trigger tag: <code>swot_growth_plan_ready</code> (Miguel manual)<br>
+      Trigger tag: <code>swot_growth_plan_ready</code> (manual)<br>
       Body field: <code>swot_growth_plan</code>
     </div>
     <a class="open" href="04_deep_dive_part2.html" target="_blank" rel="noopener">Preview →</a>
   </div>
-
   <div class="card">
-    <div class="num">05 / 10</div>
-    <h2>Marketing Audit Delivery</h2>
+    <div class="num">E11 · BGA PAYMENT FAILED</div>
+    <h2>Quick fix — BGA payment did not go through</h2>
+    <div class="meta">
+      Trigger tag: <code>swot_payment_failed_297</code><br>
+      Dedicated BGA retry; reuses retry URL merge field
+    </div>
+    <a class="open" href="15_bga_payment_failed.html" target="_blank" rel="noopener">Preview →</a>
+  </div>
+  <div class="card">
+    <div class="num">ADDON · MARKETING AUDIT</div>
+    <h2>Marketing Audit delivery</h2>
     <div class="meta">
       Workflow: <code>04d. SWOT $297 Marketing Audit</code><br>
       Trigger tag: <code>swot_marketing_audit_ready</code> (Spark manual)<br>
@@ -174,66 +248,41 @@
     </div>
     <a class="open" href="05_marketing_audit.html" target="_blank" rel="noopener">Preview →</a>
   </div>
+</div>
 
+<h3 class="section">BGA intake-pickup drip (post-purchase)</h3>
+<div class="grid">
   <div class="card">
-    <div class="num">06 / 10</div>
-    <h2>Financials Upload Received</h2>
-    <div class="meta">
-      Workflow: <code>06. Financial Upload Received</code><br>
-      Trigger tag: <code>swot_financials_uploaded</code><br>
-      Body field: none (holding email)
-    </div>
-    <a class="open" href="06_financials_upload_received.html" target="_blank" rel="noopener">Preview →</a>
-  </div>
-
-  <div class="card">
-    <div class="num">07 / 10</div>
-    <h2>Payment Failed — Retry</h2>
-    <div class="meta">
-      Workflow: <code>08. SWOT Payment Failed Retry</code><br>
-      Trigger tag: <code>swot_payment_failed_47</code> or <code>swot_payment_failed_297</code><br>
-      Body field: none (retry email)
-    </div>
-    <a class="open" href="07_payment_failed_retry.html" target="_blank" rel="noopener">Preview →</a>
-  </div>
-
-  <div class="card">
-    <div class="num">08 / 10</div>
-    <h2>Deep Dive Intake — Pickup #1 (post-purchase)</h2>
+    <div class="num">PICKUP #1</div>
+    <h2>You are in — here is where to pick up</h2>
     <div class="meta">
       Workflow: <code>09. SWOT $297 Intake Pickup 1</code><br>
-      Trigger tag: <code>swot_paid_297</code> (fires on payment)<br>
-      Body field: none (confirmation + expectation-setting)
+      Trigger: <code>swot_paid_297</code> (fires on payment)
     </div>
     <a class="open" href="09_deep_dive_intake_pickup_1.html" target="_blank" rel="noopener">Preview →</a>
   </div>
-
   <div class="card">
-    <div class="num">09 / 10</div>
-    <h2>Deep Dive Intake — Pickup #2 (nudge)</h2>
+    <div class="num">PICKUP #2</div>
+    <h2>About 12 minutes from done</h2>
     <div class="meta">
       Workflow: <code>10. SWOT $297 Intake Pickup 2</code><br>
-      Trigger: <code>swot_paid_297</code> AND NOT <code>swot_paid_297_intake_complete</code> after ~24h<br>
-      Body field: none (nudge)
+      Trigger: paid 297 AND NOT intake-complete after ~24h
     </div>
     <a class="open" href="10_deep_dive_intake_pickup_2.html" target="_blank" rel="noopener">Preview →</a>
   </div>
-
   <div class="card">
-    <div class="num">10 / 10</div>
-    <h2>Deep Dive Intake — Pickup #3 (final)</h2>
+    <div class="num">PICKUP #3</div>
+    <h2>Two ways to finish this</h2>
     <div class="meta">
       Workflow: <code>11. SWOT $297 Intake Pickup 3</code><br>
-      Trigger: same cohort, ~72h after payment, still no <code>swot_paid_297_intake_complete</code><br>
-      Body field: none (finish-it-yourself vs 15-min call fork)
+      ~72h after payment, still no intake-complete; finish-it-yourself vs. 15-min call fork
     </div>
     <a class="open" href="11_deep_dive_intake_pickup_3.html" target="_blank" rel="noopener">Preview →</a>
   </div>
-
 </div>
 
 <footer>
-  Source-of-truth templates live at <code>email-templates/</code> in the repo. This preview folder is a copy so Cloudflare Pages can serve renderable HTML. When you edit a template in <code>email-templates/</code>, run <code>cp email-templates/*.html app/public/email-preview/</code> before pushing so the preview stays in sync — or edit both together.
+  Source-of-truth templates live at <code>email-templates/</code> in the repo. This preview folder is a copy so Cloudflare Pages can serve renderable HTML. When you edit a template in <code>email-templates/</code>, run <code>cp email-templates/*.html app/public/email-preview/</code> before pushing so the preview stays in sync. All greetings use Handlebars <code>{{#if contact.first_name}}…{{/if}}</code> — never Liquid pipe filters, which the HL template parser rejects.
 </footer>
 
 </body>
