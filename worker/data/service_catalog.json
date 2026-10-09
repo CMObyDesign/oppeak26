@@ -1,0 +1,94 @@
+[
+  {
+    "service_id": "placeholder_fractional_cfo_core",
+    "name": "PLACEHOLDER — Fractional CFO (Core) — replace with real service",
+    "problem_solved": "Owner has no forward cash visibility and no monthly rhythm for financial review, and keeps making decisions from a bank balance instead of a plan.",
+    "signals_relevant": [
+      "low_margin_visibility",
+      "no_13_week_cash_forecast",
+      "monthly_close_absent_or_late"
+    ],
+    "when_not_to_recommend": [
+      "active_tax_default",
+      "legal_distress",
+      "revenue_band_below_500k",
+      "books_not_closable"
+    ],
+    "deliverables": [
+      "PLACEHOLDER — Monthly close review with CFO By Design strategist",
+      "PLACEHOLDER — 13-week rolling cash forecast maintained by CFOBD",
+      "PLACEHOLDER — Quarterly strategy session"
+    ],
+    "client_responsibility": [
+      "PLACEHOLDER — Bookkeeper closes books by day 7 of each month",
+      "PLACEHOLDER — Owner attends monthly review"
+    ],
+    "cfobd_responsibility": [
+      "PLACEHOLDER — Review and interpret monthly financials",
+      "PLACEHOLDER — Maintain 13-week cash forecast",
+      "PLACEHOLDER — Flag material deviations and recommend adjustments"
+    ],
+    "pricing": {
+      "model": "monthly_retainer",
+      "amount_usd": 0,
+      "min_term_months": 0,
+      "note": "PLACEHOLDER — pricing TBD by Miguel"
+    },
+    "bundle_eligibility": {
+      "included_in_bundles": ["placeholder_premium_cfo_bundle"],
+      "pairs_well_with": [],
+      "replaces": []
+    },
+    "dependencies": [
+      "PLACEHOLDER — Must have reliable bookkeeping (if books are >60 days behind, recommend placeholder_bookkeeping_cleanup first)."
+    ],
+    "talking_points": [
+      "PLACEHOLDER — This is the ongoing rhythm, not a one-time fix.",
+      "PLACEHOLDER — You keep day-to-day operations; we hold you to the plan."
+    ]
+  },
+  {
+    "service_id": "placeholder_bookkeeping_cleanup",
+    "name": "PLACEHOLDER — Bookkeeping Cleanup — replace with real service",
+    "problem_solved": "Books are behind or miscategorized to the point where no meaningful financial decision can be made from them. The business needs a one-time reset before any ongoing CFO engagement can work.",
+    "signals_relevant": [
+      "bookkeeping_cleanup_needed",
+      "books_not_closable"
+    ],
+    "when_not_to_recommend": [
+      "legal_distress"
+    ],
+    "deliverables": [
+      "PLACEHOLDER — Reconcile last 12 months of transactions",
+      "PLACEHOLDER — Categorize all uncategorized expenses",
+      "PLACEHOLDER — Deliver clean trial balance and P&L"
+    ],
+    "client_responsibility": [
+      "PLACEHOLDER — Provide access to accounting software and bank feeds",
+      "PLACEHOLDER — Respond to classification questions within 48 hours"
+    ],
+    "cfobd_responsibility": [
+      "PLACEHOLDER — Reconcile and categorize transactions",
+      "PLACEHOLDER — Flag and resolve classification ambiguities with the owner",
+      "PLACEHOLDER — Deliver clean financials ready for Fractional CFO work"
+    ],
+    "pricing": {
+      "model": "project_fee",
+      "amount_usd": 0,
+      "min_term_months": 0,
+      "note": "PLACEHOLDER — scoped per-engagement by Miguel"
+    },
+    "bundle_eligibility": {
+      "included_in_bundles": [],
+      "pairs_well_with": ["placeholder_fractional_cfo_core"],
+      "replaces": []
+    },
+    "dependencies": [
+      "PLACEHOLDER — Access to accounting software and bank feeds required to begin."
+    ],
+    "talking_points": [
+      "PLACEHOLDER — This is a reset, not a replacement for your bookkeeper.",
+      "PLACEHOLDER — Clean books are a prerequisite for every other engagement — we don't recommend starting Fractional CFO work without them."
+    ]
+  }
+]
