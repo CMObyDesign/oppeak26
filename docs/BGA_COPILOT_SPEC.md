@@ -139,62 +139,238 @@ button refuses after that.
 
 ## 3. Behavior guidelines for Solomon in a case session
 
-These go into the system prompt that governs Solomon on BGA case
-sessions. They are not hard rules in code; they are directions for the
-model.
+### 3.1 The universal provenance rule (safety invariant)
+
+**Every material conclusion Solomon states — in any tool, in any
+output — must be traceable to one of four provenance tags**:
+
+| Tag | What it means | Example |
+|-----|--------------|---------|
+| `VERIFIED FACT` | Taken from a verified financial entry the strategist recorded in `swot_verified_financials`. Carries the metric name, value, period, and source document. | `[VF: AR_over_90 = $96,800, period=2026-09-30, source=AR_aging.pdf]` |
+| `CLIENT-STATED` | Taken from the client's own words in the BGA intake narrative fields. Carries the intake question ID. | `[CS: owner_hiring_plan, from Q_D, "plans to hire 2 in Q1"]` |
+| `STRATEGIST JUDGMENT` | A conclusion the strategist entered during the call via `record_decision` or inline edit. Carries a timestamp. | `[SJ: 2026-10-09T14:32, "pricing is the real issue, not AR"]` |
+| `SERVICE MATCH` | A service recommendation drawn from the structured services catalog (§7). Carries the service ID and the specific `signals_relevant` catalog entry that matched. | `[SM: fractional_cfo_core, signal=low_margin_visibility]` |
+
+This rule is enforced at the model layer (system prompt directs
+Solomon to emit the tag inline with every claim) AND at the Pre-Send
+QA layer (§5.3 — any customer-visible claim lacking a provenance tag
+is a blocker). The console renders the tags as inline badges so the
+strategist can see provenance at a glance; the customer-facing render
+strips the tags and leaves clean prose.
+
+The point: Solomon has no path to inventing financial recommendations
+from thin air. Every number came from somewhere, and the system knows
+where.
+
+### 3.2 Behavior directives (prompt-level)
+
+These go into the system prompt. They are not hard rules in code (the
+provenance rule above is the hard rule); they are directions that
+shape how Solomon reads the case and talks about it.
 
 - **Keep the review constructive.** Lead with what's working before
-  what needs attention. "Positive about the company and the review" per
-  the strategist's directive.
-- **Challenge assumptions.** When a client's stated goal doesn't match
-  their numbers, say so plainly. Example: "They want 30% growth in 12
-  months. Trailing-12 margin is 38%, AR >60 is $185K, concentration risk
-  is ~45% top-3. 30% growth is possible, but it stacks on top of three
-  stability gaps. Worth asking: do they want growth or stability first?"
-- **Clarify missing facts.** Keep a running `clarifications_needed`
-  list and surface items whenever a recommendation would depend on
-  something not yet verified.
-- **Change priorities when the strategist tells you to.** The call is
-  where real priorities land. If the strategist says "they want to focus
-  on pricing not AR," rewrite the 90-day section to lead with pricing.
-- **Discuss what the client can handle internally.** Section 6 (Support
-  Gaps) is editable — mark each gap as "client handles" or "needs CFO
-  BD" based on what the strategist records from the call.
-- **Present relevant CFO By Design fractional services.** Only
-  recommend services the strategist's catalog says apply. Never invent
-  offerings or pricing. If section 7 cannot be filled from the catalog,
-  render "requires catalog" placeholder; don't guess.
-- **Record what the client actually decided.** Use the
-  `record_decision` and `record_service_selection` tools. Decisions
-  flow into Email 04's next-steps block.
-- **Stop at the button.** When the draft is ready, Solomon's final move
-  is "Draft looks ready. If you agree, click Mark Reviewed, then
-  Approve & Send." Solomon does NOT invoke a finalize tool. There is
-  no finalize tool.
+  what needs attention. "Positive about the company and the review"
+  per the strategist's directive.
+- **Challenge assumptions.** When a client's stated goal doesn't
+  match their verified numbers, say so plainly with both provenance
+  tags visible. Example: "`[CS: Q_H, "want 30% growth in 12 months"]`
+  — `[VF: gross_margin_pct=38, period=TTM]`, `[VF: AR_over_60=$185K]`,
+  `[CS: concentration_top_3_pct, ~45]`. Growth is possible, but it
+  stacks on top of three stability gaps."
+- **Flag what's missing before recommending.** If a conclusion
+  depends on a fact that isn't verified yet, say so — do NOT fill
+  the gap with inference. "I cannot responsibly recommend debt
+  restructuring yet: monthly debt service is verified but total
+  outstanding debt and terms are missing. See §4.1 `audit_case_gaps`."
+- **Change priorities when the strategist tells you to.** The call
+  is where real priorities land. Re-render affected sections of the
+  draft when a strategist decision is recorded.
+- **Discuss what the client can handle internally.** Section 6 of
+  the roadmap (Support Gaps) is editable per-item: mark each gap as
+  "client handles" or "needs CFO BD" from the call record.
+- **Present only cataloged services.** Any service recommendation
+  must carry a `SERVICE MATCH` tag to a specific catalog entry. No
+  invented offerings, pricing, or deliverables. If no service in the
+  catalog matches, Solomon says so plainly rather than guessing.
+- **Record what the client actually decided.** Use `record_decision`
+  and `record_service_selection`. Decisions flow into Email 04's
+  next-steps block only after APPROVE & SEND.
+- **Stop at the button.** When the draft is ready, Solomon's final
+  move is "Draft looks ready. Run Pre-Send QA, then if 0 blockers,
+  click Mark Reviewed and Approve & Send." Solomon does NOT invoke
+  a finalize tool. There is no finalize tool.
 
 ---
 
-## 4. Tool-call surface
+## 4. The strategist toolkit — nine named skills
 
-Each tool is a server endpoint the Ask Solomon client can invoke on
-behalf of a conversation turn. All are password-gated (CONSOLE_PASSWORD).
-All are scoped to one `contactId` per call. All are logged to the
-session's `/asksolomon/history` row with a visible "wrote to field X"
-line in the conversation transcript.
+Not seven anonymous tools; nine named skills inside one case view.
+Each has a button in the Ask Solomon console and a corresponding
+Worker endpoint. All are password-gated via `checkConsolePassword`
+(`x-console-password` header). All scoped to one `contactId` per
+call. Every call appends to the session's `/asksolomon/history` row
+AND to the case's `swot_bga_version_history` field (§8), with a
+visible "wrote to field X" line in the conversation transcript.
 
-| Tool | Writes | Fires HL automation? |
-|------|--------|----------------------|
-| `generate_financial_request(contactId)` | `swot_financials_request_list` | No |
-| `store_verified_financials(contactId, summary)` | `swot_verified_financials` | No |
-| `generate_roadmap_draft(contactId)` | `swot_growth_plan_draft` (full 8-section render with "DRAFT · INTERNAL PREP ONLY" banner) | No |
-| `update_roadmap_section(contactId, n, content)` | `swot_growth_plan_draft` (in place, section n only) | No |
-| `record_decision(contactId, text)` | appends an entry to `swot_bga_decisions` (JSON array of `{at, text}`) | No |
-| `record_service_selection(contactId, service_ids, bundle_id)` | `swot_bga_services_selected` | No |
-| `preview_final_email(contactId)` | nothing — renders Email 04 locally against current draft + decisions + selections for the strategist to review | No |
+| Toolkit button | Underlying tool endpoint | Writes to | Fires HL? |
+|---------------|-------------------------|-----------|-----------|
+| [ FIND WHAT'S MISSING ] | `audit_case_gaps` | nothing (read-only) | No |
+| [ RECORD / REVIEW VERIFIED FINANCIALS ] | `verified_financials_panel` | `swot_verified_financials` (JSON array) | No |
+| [ DRAFT ROADMAP ] | `generate_roadmap_draft` | `swot_growth_plan_draft` + applies `swot_growth_plan_drafted` tag | No |
+| [ MATCH CFO BY DESIGN SERVICES ] | `match_services` | adds `SERVICE MATCH` entries to the current draft | No |
+| [ CHALLENGE THIS PLAN ] | `challenge_roadmap` | nothing (read-only adversarial review) | No |
+| [ PREP ME FOR THE CALL ] | `generate_prep_brief` | `swot_bga_prep_brief` | No |
+| [ PROCESS CALL NOTES ] | `extract_call_decisions` | nothing until strategist confirms → then `swot_bga_decisions` + `swot_bga_services_selected` | No |
+| [ RUN PRE-SEND QA ] | `red_team_check` | `swot_bga_red_team_report` | No |
+| [ APPROVE & SEND TO CLIENT ] | `approve_and_send` (the button) | `swot_growth_plan`, `swot_bga_next_steps`, `swot_bga_services_selected_display`, applies `swot_growth_plan_ready` | **YES — Email 04 fires** |
 
-**There is no `finalize_and_send` tool.** The LLM has no server endpoint
-for applying `swot_growth_plan_ready` or writing `swot_growth_plan`.
-Attempting to invoke one 404s because it isn't registered.
+**There is no `finalize_and_send` tool.** The LLM has no server
+endpoint for applying `swot_growth_plan_ready` or writing
+`swot_growth_plan`. The button is the only path (§5).
+
+### 4.1 `audit_case_gaps` — FIND WHAT'S MISSING
+
+Runs automatically on every case load; also on demand. Reports:
+
+- Which BGA intake fields are empty.
+- Which verified-financial metrics are missing (checked against the
+  canonical metric list in §7).
+- Whether `swot_full_report` is present (prior Full Diagnostic).
+- Whether `swot_strategist_brief` is present.
+- Whether `swot_verified_financials` has entries matching the
+  verified-financial metrics the LLM would need to make a given
+  recommendation ("to recommend debt restructuring, we need
+  `monthly_debt_service`, `outstanding_debt_total`, `debt_terms`
+  — have 1 of 3").
+- Specific documents or questions to request from the client to
+  close each gap.
+
+Read-only. No state changes. Output goes to the conversation.
+
+### 4.2 `verified_financials_panel` — RECORD / REVIEW VERIFIED FINANCIALS
+
+Structured per-metric form in the console. The strategist records
+each verified metric with:
+
+```
+metric_id:    cash_on_hand | revenue_ttm | gross_margin_pct |
+              net_profit | ar_30_60_90 | monthly_debt_service |
+              outstanding_debt | working_capital | tax_status | ...
+value:        <number or structured value for metrics like ar_30_60_90>
+period:       <YYYY-MM-DD or "TTM" or similar>
+source_doc:   <filename or GHL file reference>
+note:         <optional strategist note>
+provenance:   "verified"   ← fixed; this tool writes only verified entries
+```
+
+The field `swot_verified_financials` holds a JSON array of these
+objects. The console renders them as a table. Each entry's
+provenance badge is `VERIFIED FACT`.
+
+The canonical metric list lives in §7 of the HL field catalog
+companion doc (`docs/BGA_COPILOT_HL_SETUP.md`) so the two stay in sync.
+
+### 4.3 `generate_roadmap_draft` — DRAFT ROADMAP
+
+Unchanged from the prior spec. Pulls Part 1, strategist brief,
+intake, Full Diagnostic (if present), verified financials, and the
+services catalog. Produces the 8-section draft with "DRAFT · INTERNAL
+PREP ONLY · NOT FOR CUSTOMER DELIVERY" banner. Writes to
+`swot_growth_plan_draft`. Applies `swot_growth_plan_drafted` tag.
+
+Every claim in the output carries an inline provenance tag per §3.1.
+Section 7 (Service Recommendations) is populated by calling
+`match_services` as a sub-step; if no catalog entry matches, section
+7 says so plainly.
+
+### 4.4 `match_services` — MATCH CFO BY DESIGN SERVICES
+
+Reads the structured services catalog (§7). For each identified need
+in the current draft:
+
+- Scans `signals_relevant` across all catalog entries.
+- Checks `when_not_to_recommend` to exclude.
+- Verifies `dependencies` are supportable from verified facts.
+- Returns a ranked list of service matches, each with the specific
+  signal that matched (`SERVICE MATCH` provenance tag).
+
+Writes the matches into the current draft's Section 7. Standalone
+read-only mode also available ("show me what services would match
+without changing the draft").
+
+### 4.5 `challenge_roadmap` — CHALLENGE THIS PLAN
+
+Read-only adversarial self-review. Takes the CURRENT draft (post any
+edits), runs an LLM pass with explicit "poke holes" framing. Returns
+a critique:
+
+- "Is this treating a symptom as the cause?"
+- "Is the recommended hire supportable from verified cash + revenue?"
+- "Is service X recommended because it fits, or because we sell it?"
+- "Does priority #2 depend on #1 — and have we said so?"
+- "Are we certain about this 12-month item, or should it be a
+  reassessment goal?"
+
+Does NOT change state. Does NOT touch any field. The strategist reads
+the critique and manually updates sections via `update_roadmap_section`
+if they agree.
+
+### 4.6 `generate_prep_brief` — PREP ME FOR THE CALL
+
+One-screen condensed briefing drawn from the current draft. Not a
+summary — a specific prep sheet with these sections only:
+
+```
+Top 3 financial priorities (ranked, with VF provenance)
+Verified facts supporting each one
+Assumptions still needing validation
+Questions Miguel should ask
+90-day roadmap preview
+Likely objections or concerns
+Services worth discussing (with SM provenance)
+Services NOT to recommend (with reason)
+Decisions the call needs to produce
+```
+
+Writes to `swot_bga_prep_brief`. Does not fire anything. Likely more
+day-to-day useful than reading the full draft.
+
+### 4.7 `extract_call_decisions` — PROCESS CALL NOTES
+
+Takes free-form call notes pasted by the strategist (or, future, a
+transcript). Parses them into a structured record:
+
+```
+Priorities confirmed
+Priorities changed
+Client corrections (to verified facts or intake answers)
+90-day commitments
+6-month direction
+12-month goals / reassessment
+Next steps
+Services discussed
+Services selected
+Services declined / deferred
+Follow-up needed
+```
+
+**Nothing is committed until the strategist confirms it.** The tool
+returns the parsed structure for review; a separate "Confirm
+decisions" action writes to `swot_bga_decisions` and
+`swot_bga_services_selected`.
+
+### 4.8 `red_team_check` — RUN PRE-SEND QA
+
+**Mandatory before APPROVE & SEND TO CLIENT becomes enabled.** See
+§5.3 for the full blocker/warning checklist. Writes the result to
+`swot_bga_red_team_report`. The button endpoint (§5.2) refuses unless
+the latest red-team report has 0 blockers.
+
+### 4.9 `approve_and_send` — APPROVE & SEND TO CLIENT (the button)
+
+Only path to writing `swot_growth_plan` and applying
+`swot_growth_plan_ready`. Preconditions, write ordering, and
+guardrails in §5.
 
 ---
 
@@ -202,23 +378,35 @@ Attempting to invoke one 404s because it isn't registered.
 
 **UI**: `[APPROVE & SEND TO CLIENT]` button in the case view.
 
-**Preconditions** (all enforced server-side on the endpoint, not just UI):
+### 5.1 Preconditions
 
-1. Caller is authenticated with CONSOLE_PASSWORD.
+All enforced server-side on the endpoint, not just UI:
+
+1. Caller is authenticated via `checkConsolePassword`
+   (`x-console-password` header).
 2. `contactId` has `swot_paid_297` applied.
 3. `swot_growth_plan_draft` field is populated and non-empty.
-4. The request body includes `reviewed: true` — set when the strategist
-   clicks the separate `[Mark Reviewed]` toggle in the console after
-   reading the final draft.
-5. `swot_growth_plan_ready` is NOT already present on the contact
+4. **The latest `swot_bga_red_team_report` for this contact has 0
+   blockers** (§5.3). The button is disabled in the UI until this is
+   satisfied; the endpoint re-verifies server-side.
+5. The request body includes `reviewed: true` — set when the
+   strategist clicks the separate `[Mark Reviewed]` toggle in the
+   console after reading the final draft AND the red-team report.
+6. `swot_growth_plan_ready` is NOT already present on the contact
    (idempotent refusal).
 
-**UI flow**:
+### 5.2 UI flow
 
 ```
 Strategist reviews final draft in the case view
          ↓
-Clicks [Mark Reviewed]  ← sets a UI flag; swot_growth_plan_draft stays as-is
+Clicks [RUN PRE-SEND QA]  ← runs red_team_check (§5.3)
+         ↓
+Red-team report returned with blockers/warnings counts
+         ↓ (if blockers > 0, strategist fixes and re-runs)
+0 blockers  →  [Mark Reviewed] toggle becomes available
+         ↓
+Clicks [Mark Reviewed]  ← sets a UI flag
          ↓
 [APPROVE & SEND TO CLIENT] button becomes enabled
          ↓
@@ -252,7 +440,66 @@ helper on `worker/src/index.js`, which reads the `x-console-password`
 header for consistency with every other `/asksolomon` API. There is no
 separate auth path for the button.
 
-**Server endpoint behavior** (`handleApproveAndSend` in `worker/src/index.js`):
+### 5.3 Pre-Send QA checklist (`red_team_check`)
+
+Each item is categorized as **BLOCKER** (prevents send) or
+**WARNING** (requires explicit strategist acknowledgment but can
+proceed). The checklist runs against the current `swot_growth_plan_draft`,
+`swot_bga_decisions`, and `swot_bga_services_selected`.
+
+**Blockers** (any one present → button disabled, must fix):
+
+1. Service marked "selected" when the catalog match only ranked it
+   as "recommended" (status elevation requires explicit
+   `record_service_selection` call, not just a catalog match).
+2. Financial claim in customer-visible copy with no `VERIFIED FACT`
+   or `CLIENT-STATED` provenance tag.
+3. Service recommendation in customer-visible copy without a
+   `SERVICE MATCH` provenance tag tied to a specific signal.
+4. Missing 90-day priorities section.
+5. Internal terminology detected in customer copy. Banned terms
+   from `docs/brand/PRODUCT_NAMING_AND_LADDER.md`: `SWOT`, `rubric`,
+   `paid_297`, `Deep Dive`, `business_playbook`, `Business Health
+   Analysis`, `deep-dive analysis`, and the internal path labels
+   `rehab`/`urgent`/`strong` in customer-visible contexts.
+6. Miguel-personal pronoun ("I will…", "my team will…") in
+   customer-visible copy. The customer-facing copy speaks for CFO By
+   Design, not for one strategist by name.
+
+**Warnings** (any present → checkbox to acknowledge, then can proceed):
+
+1. A 12-month item presented as a certain outcome rather than a
+   reassessment goal.
+2. 6-month section is noticeably shorter than the 90-day section
+   (likely under-developed).
+3. An intake answer and a verified financial fact disagree
+   (e.g. intake says 45% margin, verified says 38%) and the draft
+   does not call out the gap.
+4. A service listed in the catalog with current
+   `when_not_to_recommend` conditions present is still in the
+   recommendations list.
+
+The red-team report writes to `swot_bga_red_team_report` as:
+
+```json
+{
+  "run_at": "<ISO timestamp>",
+  "blockers": [
+    { "id": "service_elevation_without_decision",
+      "where": "section 7, item 3",
+      "detail": "..." }
+  ],
+  "warnings": [...],
+  "acknowledged_warnings": []
+}
+```
+
+The button endpoint re-verifies this field at request time. If a
+warning is unacknowledged, the UI shows an acknowledgment checkbox;
+on acknowledgment the `acknowledged_warnings` array updates. If a
+blocker is present, the button stays disabled.
+
+### 5.4 Server endpoint behavior (`handleApproveAndSend` in `worker/src/index.js`)
 
 Step order is intentional and the only correct sequence. Writes before
 tag so the Email 04 merge fields are populated by the time the HL
@@ -322,15 +569,28 @@ is the right tool for a cross-isolate serialization point.
 
 ## 6. HL field + tag inventory
 
-### New fields to add in the HL custom field catalog
+**Note on types**: HL only exposes flat types — LARGE_TEXT is the
+only one that fits our structured-data needs. Fields marked
+"LARGE_TEXT (JSON)" store a JSON string in the HL field; the Worker
+and console serialize/deserialize at the boundary. HL merge-field
+rendering of these in customer emails would ship raw JSON — so none
+of the JSON-shaped fields are customer-facing. The two customer-facing
+fields (`swot_bga_next_steps`, `swot_bga_services_selected_display`)
+hold rendered HTML written by the button endpoint only.
 
-| Field | Type | Written by | Customer-facing? |
-|-------|------|-----------|------------------|
-| `swot_financials_request_list` | LARGE_TEXT | `generate_financial_request` tool | No — internal strategist use |
-| `swot_verified_financials` | LARGE_TEXT | `store_verified_financials` tool (strategist pastes in via chat) | No — Solomon's input |
-| `swot_growth_plan_draft` | LARGE_TEXT | `generate_roadmap_draft` + `update_roadmap_section` tools | No — internal prep |
-| `swot_bga_decisions` | LARGE_TEXT (JSON array) | `record_decision` tool | No — Solomon's input to the final next-steps render |
-| `swot_bga_services_selected` | LARGE_TEXT (JSON) | `record_service_selection` tool | No — Solomon's input to the final selection render |
+### New fields in the HL custom field catalog
+
+| Field | HL type · code shape | Written by | Customer-facing? |
+|-------|---------------------|-----------|------------------|
+| `swot_financials_request_list` | LARGE_TEXT (prose) | `audit_case_gaps` + `generate_financial_request` | No — internal strategist use |
+| `swot_verified_financials` | LARGE_TEXT (JSON array of `{metric_id, value, period, source_doc, note, provenance}`) | `verified_financials_panel` | No — Solomon's input |
+| `swot_growth_plan_draft` | LARGE_TEXT (prose with inline provenance tags + "DRAFT · INTERNAL" banner) | `generate_roadmap_draft` + `update_roadmap_section` + `match_services` | No — internal prep |
+| `swot_bga_decisions` | LARGE_TEXT (JSON array of `{at, text, type, actor}`) | `extract_call_decisions` (after strategist confirms) | No — Solomon's input to the final next-steps render |
+| `swot_bga_services_selected` | LARGE_TEXT (JSON array of `{service_id, status: "selected" \| "declined" \| "deferred", reason}`) | `extract_call_decisions` (after strategist confirms) | No — Solomon's input to the final selection render |
+| `swot_bga_prep_brief` | LARGE_TEXT (prose, one-screen) | `generate_prep_brief` | No — internal strategist use |
+| `swot_bga_red_team_report` | LARGE_TEXT (JSON — see §5.3) | `red_team_check` | No — internal strategist use |
+| `swot_bga_version_history` | LARGE_TEXT (JSON array of `{at, actor, action, affected_field, snapshot_hash}`) | **appended by every BGA tool call** (§8) | No — audit trail |
+| `swot_bga_services_catalog_ref` | LARGE_TEXT (plain string: the catalog version SHA the draft was built against) | `generate_roadmap_draft` + `match_services` | No — audit trail |
 | `swot_bga_next_steps` | LARGE_TEXT (rendered HTML) | **button endpoint only** | **Yes — merged into Email 04** |
 | `swot_bga_services_selected_display` | LARGE_TEXT (rendered HTML) | **button endpoint only** | **Yes — merged into Email 04** |
 
@@ -340,11 +600,23 @@ is the right tool for a cross-isolate serialization point.
 |-------|------|
 | `swot_growth_plan` | **Button endpoint only.** Customer-facing final roadmap. Unchanged contract. |
 
+### Status of PR #89 (already merged)
+
+PR #89 landed the first seven fields in the HL custom-field catalog
+with LARGE_TEXT type. The additional four fields above
+(`swot_bga_prep_brief`, `swot_bga_red_team_report`,
+`swot_bga_version_history`, `swot_bga_services_catalog_ref`) need to
+be added in a follow-up HL-config step before the Worker + console
+build begins. See `docs/BGA_COPILOT_HL_SETUP.md` §1 for the
+step-by-step; the four new fields follow the same creation profile
+(LARGE_TEXT, grouped under "BGA / Solomon", **Contact object**, not
+on any public form).
+
 ### New tags to add
 
 | Tag | Applied by | Purpose |
 |-----|-----------|---------|
-| `swot_growth_plan_drafted` | `generate_roadmap_draft` tool (optional, for HL dashboard visibility) | Signals "prep done; call-ready" |
+| `swot_growth_plan_drafted` | `generate_roadmap_draft` tool | Signals "prep done; call-ready." Already covered in PR #89. |
 
 ### Existing tags unchanged
 
@@ -354,7 +626,157 @@ is the right tool for a cross-isolate serialization point.
 
 ---
 
-## 7. Guardrails pinned in regression tests
+## 7. Structured services catalog
+
+The catalog is the single source of truth for what CFO By Design
+offers, when each offering applies, and how Solomon talks about them.
+Not a PDF Solomon "reads"; a structured JSON file the Worker loads
+and matches against.
+
+### 7.1 Location and version control
+
+**File**: `worker/data/service_catalog.json`
+**Companion**: `docs/services/CATALOG_SCHEMA.md` (JSON Schema +
+glossary of what each field means)
+**Versioning**: committed to git; every change is a PR. The commit
+SHA is the catalog version. `swot_bga_services_catalog_ref` records
+which SHA a given case was built against.
+
+### 7.2 Per-service schema
+
+```json
+{
+  "service_id": "fractional_cfo_core",
+  "name": "Fractional CFO — Core",
+  "problem_solved": "Owner has no forward cash visibility and no
+     monthly rhythm for financial review.",
+  "signals_relevant": [
+    "low_margin_visibility",
+    "ar_concentration_risk",
+    "no_13_week_cash_forecast",
+    "monthly_close_absent_or_late"
+  ],
+  "when_not_to_recommend": [
+    "active_tax_default",
+    "legal_distress",
+    "revenue_band_below_500k"
+  ],
+  "deliverables": [
+    "Monthly close review with Miguel",
+    "13-week rolling cash forecast",
+    "Quarterly strategy session",
+    "..."
+  ],
+  "client_responsibility": [
+    "Bookkeeper closes books by day 7 of each month",
+    "Owner attends monthly review",
+    "..."
+  ],
+  "cfobd_responsibility": [
+    "Review and interpret monthly financials",
+    "Maintain 13-week cash forecast",
+    "..."
+  ],
+  "pricing": {
+    "model": "monthly_retainer",
+    "amount_usd": 0,
+    "min_term_months": 0,
+    "note": "pricing TBD by Miguel"
+  },
+  "bundle_eligibility": {
+    "included_in_bundles": ["premium_cfo_bundle"],
+    "pairs_well_with": ["bookkeeping_cleanup", "cash_management_core"],
+    "replaces": []
+  },
+  "dependencies": [
+    "Must have reliable bookkeeping — if books are >60 days behind,
+     recommend bookkeeping_cleanup first."
+  ],
+  "talking_points": [
+    "This is the ongoing rhythm, not a one-time fix.",
+    "You keep the day-to-day; we hold you to the plan."
+  ]
+}
+```
+
+### 7.3 Content ownership
+
+- **Schema**: owned by this repo. Changes to the schema require a
+  PR to `docs/services/CATALOG_SCHEMA.md` AND updates to any tool
+  (`match_services`, `red_team_check`) that reads the field.
+- **Content**: owned by Miguel. He fills in services with their real
+  problem-solved, signals, when-not, deliverables, pricing. PRs
+  updating `worker/data/service_catalog.json` are content-only.
+  Spark reviews for schema conformance before merge.
+- **Initial scaffold**: `worker/data/service_catalog.json` ships
+  with 1-2 placeholder entries so the Worker can be built and
+  tested against something. Build PRs refer to real entries only
+  once Miguel's catalog content lands.
+
+### 7.4 How Solomon uses the catalog
+
+- `match_services` iterates the catalog, scores each service's
+  `signals_relevant` against the current case's verified facts +
+  intake answers, filters out any service with a current
+  `when_not_to_recommend` condition met, and returns a ranked list.
+- Every service recommendation Solomon emits carries a `SERVICE
+  MATCH` provenance tag with the specific signal that matched.
+- `red_team_check` blocks any service recommendation in customer
+  copy that lacks a `SERVICE MATCH` tag.
+- The `swot_bga_services_catalog_ref` field records the catalog
+  SHA at draft time so later version-history audits can tell which
+  catalog version was in effect.
+
+---
+
+## 8. Audit trail / version history
+
+Financial recommendations need an auditable record of what Solomon
+drafted, what Miguel edited, what the call changed, and what was
+finally sent. The spec encodes this at the field level, not as a
+separate database.
+
+### 8.1 `swot_bga_version_history` — the per-case audit log
+
+Every BGA tool call appends an entry:
+
+```json
+{
+  "at": "2026-10-09T14:32:11Z",
+  "actor": "miguel@cfobydesign.com",  // via CONSOLE_PASSWORD session
+  "action": "generate_roadmap_draft",
+  "affected_field": "swot_growth_plan_draft",
+  "snapshot_hash": "sha256:abc123...",
+  "catalog_ref": "sha:7f0a9b2"
+}
+```
+
+- `snapshot_hash` is a SHA-256 of the field's new content, so the
+  log is tamper-evident without storing full content twice.
+- Full-content snapshots live in the `/asksolomon/history` row
+  for the session; the version-history field is the index.
+- The red-team check and the approve-and-send call both append
+  entries. The approve entry includes the final content hash so a
+  future dispute can be traced to the exact bytes delivered to the
+  client.
+
+### 8.2 Why in the HL field, not a separate DB
+
+The case lives on the GHL contact. Keeping the version history on
+the same contact means every reader (strategist, Miguel, Spark ops)
+sees the same record without a second query. It also means the
+version history is backed up and exportable through the same channel
+as every other BGA field.
+
+Caveat: HL LARGE_TEXT fields have a size limit. The log is bounded
+by capping entries to ~50 per contact (older entries get written to
+R2 under `bga_audit/<contact_id>/<yyyy-mm>.json` when the field
+would otherwise overflow). Build PR for version history includes the
+R2 spillover logic.
+
+---
+
+## 9. Guardrails pinned in regression tests
 
 Each of these is a test that must stay green on every PR.
 
@@ -383,70 +805,123 @@ Each of these is a test that must stay green on every PR.
 10. Approve-and-send is the ONLY code path in the Worker that writes
     `swot_growth_plan` or applies `swot_growth_plan_ready`.
     (Grep-based test: no other call site exists.)
+11. **Red-team check blocker gates the button**: a draft with any
+    blocker in `swot_bga_red_team_report` returns 409
+    "red-team blockers present" from the approve endpoint. Test
+    seeds each blocker type (§5.3) and asserts the refusal.
+12. **Red-team check warnings require acknowledgment**: a draft with
+    unacknowledged warnings in `swot_bga_red_team_report` returns
+    400 "unacknowledged warnings present". Test seeds a warning,
+    confirms refusal, then updates `acknowledged_warnings` and
+    confirms the subsequent approve call succeeds.
+13. **Provenance tags in customer-visible output**: `red_team_check`
+    scans the current draft and flags any customer-visible financial
+    claim or service recommendation missing a provenance tag as a
+    blocker. Test seeds a draft with (a) a bare financial claim with
+    no tag → blocker, (b) a service recommendation with no `SERVICE
+    MATCH` tag → blocker, (c) a well-tagged draft → no blockers.
+14. **Services catalog match integrity**: `match_services` returns
+    only services whose `signals_relevant` currently match the case
+    AND whose `when_not_to_recommend` conditions are not met. Test
+    seeds a catalog with one service that would normally match
+    plus a `when_not_to_recommend` condition that IS currently met;
+    confirms the service is excluded.
+15. **Version history appends on every tool call**: every tool-call
+    endpoint writes a new entry to `swot_bga_version_history`
+    (with timestamp, actor, action, affected field, snapshot hash,
+    catalog ref). Test calls three different tools and asserts the
+    log length and ordering.
+16. **No `finalize_and_send` endpoint exists**: grep-based test
+    confirms no handler or route named `finalize_and_send`, nor any
+    other `/asksolomon/case/*` route that writes `swot_growth_plan`.
 
 ---
 
-## 8. What's needed from the strategist before launch
+## 10. What's needed from the strategist before launch
 
-Solomon's job is drafting against the strategist's inputs. Four things
-only the strategist can produce:
+Solomon's job is drafting against the strategist's inputs. Four
+content artifacts only Miguel + CFOBD can produce; everything else
+I can scaffold.
 
-1. **The CFO By Design services catalog** — fractional services, their
-   deliverables, pricing, eligibility rules, and bundle combinations.
-   Lives wherever the strategist wants it (committed as
-   `docs/services/catalog.md`, uploaded as an Ask Solomon library file,
-   or kept as a GHL field — Solomon can read from any of these). Until
-   this exists, section 7 of every draft renders the placeholder
-   "Services catalog not yet loaded — complete this section manually
-   from your prep notes."
-2. **The verified financials summary** — the strategist's own words
-   summarizing what the uploaded P&L / balance sheet / AR aging / tax
-   returns actually show. Pasted into the chat; Solomon stores to
-   `swot_verified_financials`.
-3. **The Part 2 prompt + 8-section structure review.** The structure in
-   this doc comes from the strategist's prior message. If anything
-   should change, change it here before build so the prompt pins it.
-4. **The call-time workflow.** The strategist tells Solomon mid-call
-   what the client decides. Solomon records. If this workflow should
-   look different — say Solomon reads from a transcript rather than the
-   strategist dictating — pin that here before build.
+1. **Services catalog content** — the actual CFO By Design fractional
+   services, each conforming to the §7.2 schema. Content-only PRs
+   against `worker/data/service_catalog.json`. Spark reviews for
+   schema conformance; Miguel owns the content. Until this exists,
+   §7 of every draft renders the placeholder "Services catalog
+   entries pending — complete this section from prep notes" and
+   `red_team_check` relaxes the SERVICE MATCH requirement for that
+   section only (loud warning, not a blocker, until a non-empty
+   catalog ships).
+2. **Verified-financials metric list — confirmed canonical set.**
+   The current working list (reflected in `audit_case_gaps` and the
+   verified-financials panel):
+
+   ```
+   cash_on_hand
+   revenue_ttm
+   gross_margin_pct
+   net_profit_pct
+   ar_30_60_90           (structured object: {d30, d60, d90_plus})
+   monthly_debt_service
+   outstanding_debt_total
+   working_capital
+   tax_status            (enum: current | behind | in_default)
+   ```
+
+   Confirm or revise this list before PR 3 (verified-financials
+   panel) is built. Each metric added later costs a schema change.
+3. **Pre-Send QA blocker/warning split — confirmed.** §5.3 lists 6
+   blockers and 4 warnings. Confirm or adjust before PR 9 lands;
+   this split is baked into `red_team_check` as rule logic.
+4. **Call-notes input shape — confirmed.** Default: free-form
+   paste. `extract_call_decisions` parses into the structured
+   record for strategist confirmation. If the input shape should
+   be a structured template or future transcript ingestion, pin
+   that here before the tool is built.
 
 ---
 
-## 9. Build order
+## 11. Build order
 
-Each row below is one PR, mergeable independently.
+Reshuffled per the user's §11 toolkit vision. Each row is one PR,
+mergeable independently.
 
 | PR | What it ships | Depends on |
 |----|---------------|------------|
-| **1** | New HL custom fields + tag added to the field catalog (`docs/BGA_COPILOT_SPEC.md` already governs the names). HL-side config, not code. | Nothing |
-| **2** | Worker + console scaffolding: `/asksolomon/case/load` + case view UI (read-only — just assembles and displays the bundle). No tool calls yet. | PR 1 |
-| **3** | `generate_financial_request` tool + its endpoint + guardrail test. | PR 2 |
-| **4** | `store_verified_financials` tool + endpoint. | PR 2 |
-| **5** | `generate_roadmap_draft` tool + endpoint + 8-section prompt + "DRAFT · INTERNAL" banner + regression tests. | PR 2 (uses catalog if present, placeholder otherwise) |
-| **6** | `update_roadmap_section`, `record_decision`, `record_service_selection` tools + endpoints. | PR 5 |
-| **7** | `preview_final_email` renderer (local, no fire). | PR 6 |
-| **8** | Email 04 template update (`04_deep_dive_part2.html` + preview mirror) to merge in `{{contact.swot_bga_next_steps}}` and `{{contact.swot_bga_services_selected_display}}` alongside the existing `{{contact.swot_growth_plan}}`. Pre-condition for PR 9 — template-only change, zero fire risk, lands FIRST so the field reads are safe by the time any approval can land. | PR 7 |
-| **9** | **The button**: `worker/migrations/<n>_bga_send_locks.sql` (D1 table creating `bga_send_locks(contact_id TEXT PRIMARY KEY, acquired_at INTEGER NOT NULL)`) + `[Mark Reviewed]` toggle + `[APPROVE & SEND TO CLIENT]` button + modal + `POST /asksolomon/case/approve-and-send` endpoint using the D1-backed lock serialization + all 10 regression tests from §7. | PR 8 |
-| **10** | **Public copy update** (post-launch, not blocking build): sales page + FAQ statements that currently promise "the written plan is prepared/received before the 50-minute session" rewritten to match the new fulfillment timing — plan is prepared during/after the session via the strategist's APPROVE & SEND action. Touch at least the Deep Dive sales page (`app/public/deep-dive-sales/`) and any FAQ copy that references pre-session delivery. | PR 9 |
+| **1** | HL custom field catalog adds (PR #89 — **merged**: 7 fields + 1 tag). Plus a follow-up adding the four additional fields now required: `swot_bga_prep_brief`, `swot_bga_red_team_report`, `swot_bga_version_history`, `swot_bga_services_catalog_ref`. HL-side config only. | Nothing |
+| **2** | **Services catalog scaffold**: `worker/data/service_catalog.json` with 1-2 placeholder entries + `docs/services/CATALOG_SCHEMA.md` JSON Schema. Content-less structural landing. | Nothing (parallel to PR 1 follow-up) |
+| **3** | **Verified-financials panel**: `verified_financials_panel` tool + UI table + `audit_case_gaps` tool that uses the metric list. First tool with user-visible value. | PR 1 + PR 2 |
+| **4** | **Worker + console scaffolding**: `/asksolomon/case/load` + case view UI (read-only — assembles and displays the bundle, auto-runs `audit_case_gaps` on load). | PR 3 |
+| **5** | **Draft Roadmap**: `generate_roadmap_draft` tool + 8-section prompt + inline provenance tags + "DRAFT · INTERNAL" banner. Uses catalog if content exists, placeholder otherwise. | PR 4 |
+| **6** | **Match Services**: `match_services` tool + sub-step inside DRAFT ROADMAP. Depends on catalog having real content for its output to be useful. | PR 5 (works end-to-end once Miguel fills in the catalog) |
+| **7** | **Pre-Call Brief**: `generate_prep_brief` tool + its field write. | PR 5 |
+| **8** | **Challenge My Plan**: `challenge_roadmap` tool (read-only adversarial pass). | PR 5 |
+| **9** | **Call Notes → Decisions**: `extract_call_decisions` tool + "Confirm decisions" action that writes `swot_bga_decisions` and `swot_bga_services_selected`. | PR 5 |
+| **10** | **Version history**: `swot_bga_version_history` write wrapper that every tool call goes through + R2 spillover for overflow entries. Refactor existing tools to use it. | PR 5–9 landed |
+| **11** | **Email 04 template update** (`04_deep_dive_part2.html` + preview mirror) to merge in `{{contact.swot_bga_next_steps}}` and `{{contact.swot_bga_services_selected_display}}`. Pre-condition for PR 12 — template-only, zero fire risk, lands FIRST. | PR 1 |
+| **12** | **Pre-Send QA + Finalize + the button**: `red_team_check` tool + the four blocker and four warning rules + `[Mark Reviewed]` toggle + `[APPROVE & SEND TO CLIENT]` button + modal + D1 migration `bga_send_locks` + `POST /asksolomon/case/approve-and-send` + all 16 regression tests from §9. | PR 10 + PR 11 |
+| **13** | **Public copy update** (post-launch, not blocking build): rewrite sales page + FAQ statements promising "written plan before the 50-minute session." Touch at least `app/public/deep-dive-sales/` and any FAQ copy. | PR 12 |
+| **14** | **Document extraction** (optional, later): PDF/Excel parsing of uploaded financial docs with [VERIFY] [EDIT] [REJECT] confirmation flow. Only verified values enter `swot_verified_financials`. | PR 12 |
 
-PR 8 (template) MUST precede or ship atomically with PR 9 (button).
+PR 11 (template) MUST precede or ship atomically with PR 12 (button).
 Reversing them creates a window where an approval fires the current
-template, which doesn't include `swot_bga_next_steps` or
-`swot_bga_services_selected_display` — the next-steps block and
-service selections would silently be omitted from the client email
-(Codex finding on #87). PR 10 can land any time after PR 9 is live;
-it's a copy fix for the public promise, not a delivery guarantee.
+template, which doesn't include the new merge fields — the next-steps
+block and service selections would silently be omitted from the
+client email (Codex P1 on #87). PR 13 and PR 14 are optional
+post-launch improvements; the toolkit is production-ready once PR 12
+lands.
 
-Each PR is small, mergeable, and leaves the system in a consistent
-state. The dangerous one (PR 9) lands only after every other piece is
-in and tested; the field writes and tag application cannot be reached
-before PR 9 by anyone, and PR 8 ensures the email that fires on the
-ready tag already reads all three merge fields.
+The build order observes two safety rules:
+- No tool can write `swot_growth_plan` or apply
+  `swot_growth_plan_ready` until PR 12.
+- Red-team check (PR 12) gates the button and depends on provenance
+  tags from PRs 5–6 and the catalog from PR 2 (and its content from
+  Miguel). The button cannot usefully ship before the pieces it
+  needs to red-team against.
 
 ---
 
-## 10. Change control
+## 12. Change control
 
 Updates to this document require:
 
@@ -457,7 +932,19 @@ Updates to this document require:
    write.
 3. Any change that affects what the strategist sees or does must be
    reviewed by Miguel before merge.
-4. Any change that touches the button endpoint's preconditions, write
-   ordering, or guardrails must keep every §7 regression test green.
-   The ready tag's single code path is a safety invariant, not a design
-   detail.
+4. Any change that touches the button endpoint's preconditions,
+   write ordering, or guardrails must keep every §9 regression test
+   green. The ready tag's single code path is a safety invariant,
+   not a design detail.
+5. Any change that touches the universal provenance rule (§3.1) is
+   a safety-rule change. Must land with: a `red_team_check` rule
+   update, a regression test for the new rule, and explicit sign-off
+   from Miguel. The point of the four provenance tags is that
+   there's no silent escape hatch — expanding or weakening the rule
+   needs the same scrutiny as touching the button endpoint.
+6. Services catalog content changes (`worker/data/service_catalog.json`)
+   land as content-only PRs reviewed by Spark for schema conformance
+   and by Miguel for substance. Schema changes
+   (`docs/services/CATALOG_SCHEMA.md`) land separately as code PRs
+   that update `match_services` and `red_team_check` in the same
+   diff.
