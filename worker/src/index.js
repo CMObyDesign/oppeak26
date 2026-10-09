@@ -23,6 +23,10 @@
 import { CONSOLE_PAGE } from "./console_page.js";
 import { renderStrategistPage } from "./strategist_page.js";
 import {
+  handleAuditCaseGaps,
+  handleVerifiedFinancialsPanel,
+} from "./bga_copilot/case_handlers.js";
+import {
   dbFromEnv,
   newSubmissionId,
   newReportId,
@@ -5663,6 +5667,16 @@ export default {
     // (so the production email workflow fires and the tester receives a real email).
     if (path === "/asksolomon/run") {
       return handleConsoleRun(request, env, ctx, url);
+    }
+
+    // BGA Copilot case tools (PR 3 of the build — docs/BGA_COPILOT_SPEC.md §4).
+    // Neither can write swot_growth_plan or apply swot_growth_plan_ready;
+    // those are reserved for the APPROVE & SEND button endpoint (PR 12).
+    if (path === "/asksolomon/case/audit-gaps") {
+      return handleAuditCaseGaps(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/case/verified-financials") {
+      return handleVerifiedFinancialsPanel(request, env, { checkPassword: checkConsolePassword });
     }
 
     // POST /audit — JSON marketing audit. No auth (matches GET /audit).
