@@ -133,6 +133,46 @@ export const CASE_VIEW_PAGE = `<!DOCTYPE html>
     padding: 10px 14px; border-radius: 6px; font-size: 12px; margin-bottom: 16px;
     line-height: 1.5;
   }
+  .draft-banner {
+    background: #fef3c7; border: 1px solid #fcd34d; color: #92400e;
+    padding: 10px 14px; border-radius: 6px; font-size: 12px; font-weight: 700;
+    letter-spacing: 1px; text-transform: uppercase; margin-bottom: 12px;
+    text-align: center;
+  }
+  .section-block {
+    border: 1px solid #e5e7eb; border-radius: 6px; margin-bottom: 10px;
+    background: #ffffff;
+  }
+  .section-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 14px; border-bottom: 1px solid #f3f4f6; background: #fafafa;
+  }
+  .section-header .num {
+    font-size: 10px; color: #92400e; font-weight: 700; letter-spacing: 1.5px;
+    text-transform: uppercase;
+  }
+  .section-header .title {
+    font-size: 14px; font-weight: 600; color: #1a1a1a; margin: 2px 0 0;
+  }
+  .section-actions button { font-size: 12px; padding: 4px 10px; }
+  .section-body {
+    padding: 12px 14px; font-size: 13px; white-space: pre-wrap;
+    line-height: 1.6; color: #374151;
+  }
+  .section-body.editing { padding: 0; }
+  .section-body textarea {
+    width: 100%; padding: 12px 14px; border: 0; resize: vertical;
+    font-family: inherit; font-size: 13px; line-height: 1.6;
+    min-height: 160px;
+  }
+  .section-edit-actions {
+    padding: 8px 14px; display: flex; gap: 8px; justify-content: flex-end;
+    border-top: 1px solid #f3f4f6; background: #fafafa;
+  }
+  .generate-row {
+    display: flex; justify-content: space-between; align-items: center;
+    gap: 12px; font-size: 12px; color: #6b7280;
+  }
 </style>
 </head>
 <body>
@@ -245,6 +285,11 @@ export const CASE_VIEW_PAGE = `<!DOCTYPE html>
     <div class="panel">
       <h2>Case state</h2>
       <div id="case-state-pane"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Draft Roadmap</h2>
+      <div id="roadmap-pane"></div>
     </div>
 
     <div class="panel">
@@ -707,10 +752,171 @@ function renderCase(bundle, auditData) {
   renderAudit(bundle, auditData);
   renderVerifiedFinancials(bundle);
   renderCaseState(bundle);
+  renderRoadmap(bundle);
   const intake = bundle.intake || {};
   renderContentPane("strategist-brief-pane", intake.strategist_brief);
   renderContentPane("business-playbook-pane", intake.business_playbook);
   renderContentPane("full-diagnostic-pane", intake.full_diagnostic);
+}
+
+// -------- Roadmap panel (PR 5b) --------
+
+const DRAFT_BANNER = "⚠️ DRAFT · INTERNAL PREP ONLY · NOT FOR CUSTOMER DELIVERY ⚠️";
+
+function renderRoadmap(bundle) {
+  const pane = document.getElementById("roadmap-pane");
+  const rd = bundle.roadmap_draft || { present: false, content: "" };
+  if (!rd.present || !rd.content) {
+    pane.innerHTML = ''
+      + '<div class="generate-row">'
+        + '<div>No draft yet. Generating pulls Part 1, strategist brief, intake, verified financials, and the services catalog, and runs the 8-section prompt.</div>'
+        + '<button class="primary" onclick="generateRoadmap()" id="generate-roadmap-btn">Generate draft</button>'
+      + '</div>'
+      + '<div id="generate-roadmap-error" class="error-banner hidden" style="margin-top:10px;"></div>';
+    return;
+  }
+  renderDraftContent(pane, rd.content);
+}
+
+function renderDraftContent(pane, content) {
+  const parsed = parseDraftOnClient(content);
+  const chunks = [];
+  chunks.push('<div class="draft-banner">' + esc(DRAFT_BANNER) + '</div>');
+  if (!parsed.sections.length) {
+    // Fallback: Claude produced a draft that didn't parse into sections.
+    // Show the raw content and let the strategist regenerate.
+    chunks.push('<div class="section-content">' + esc(content) + '</div>');
+  } else {
+    for (const s of parsed.sections) {
+      const num = s.n;
+      chunks.push(
+        '<div class="section-block" data-section-n="' + esc(num) + '">'
+        + '<div class="section-header">'
+          + '<div>'
+            + '<div class="num">Section ' + esc(num) + '</div>'
+            + '<div class="title">' + esc(s.title) + '</div>'
+          + '</div>'
+          + '<div class="section-actions">'
+            + '<button onclick="startEditSection(' + esc(num) + ')">Edit</button>'
+          + '</div>'
+        + '</div>'
+        + '<div class="section-body" id="section-body-' + esc(num) + '">'
+          + (s.body ? esc(s.body) : '<em style="color:#9ca3af;">(empty)</em>')
+        + '</div>'
+      + '</div>'
+      );
+    }
+  }
+  chunks.push('<div class="generate-row" style="margin-top:12px;">');
+  chunks.push('<div>Re-generating replaces the entire draft. Per-section edits above do not.</div>');
+  chunks.push('<button onclick="generateRoadmap()" id="generate-roadmap-btn">Re-generate draft</button>');
+  chunks.push('</div>');
+  chunks.push('<div id="generate-roadmap-error" class="error-banner hidden" style="margin-top:10px;"></div>');
+  pane.innerHTML = chunks.join("");
+}
+
+// Client-side parser mirrors the server's parseDraftSections() signature
+// so the UI can render per-section without a second round-trip.
+function parseDraftOnClient(text) {
+  const re = /^##\s+Section\s+(\d+)\s*[—-]\s*(.+?)\s*$/gm;
+  const matches = [];
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    matches.push({ n: Number(m[1]), title: m[2], start: m.index, headerEnd: re.lastIndex });
+  }
+  const sections = [];
+  for (let i = 0; i < matches.length; i++) {
+    const cur = matches[i];
+    const next = matches[i + 1];
+    const body = text.slice(cur.headerEnd, next ? next.start : text.length)
+      .replace(/^[ \t]*\n/, "").replace(/\s+$/, "");
+    sections.push({ n: cur.n, title: cur.title, body });
+  }
+  return { sections };
+}
+
+function startEditSection(n) {
+  const block = document.querySelector('[data-section-n="' + n + '"]');
+  if (!block) return;
+  const body = document.getElementById("section-body-" + n);
+  const currentText = (body.textContent || "").trim();
+  body.classList.add("editing");
+  body.innerHTML = '<textarea id="section-edit-' + n + '">' + esc(currentText) + '</textarea>';
+  // Replace Edit with Save / Cancel.
+  const actions = block.querySelector(".section-actions");
+  actions.innerHTML =
+    '<button onclick="cancelEditSection(' + n + ', ' + JSON.stringify(currentText).replace(/</g, "\\u003c") + ')">Cancel</button>' +
+    '<button class="primary" onclick="saveEditSection(' + n + ')">Save</button>';
+}
+
+function cancelEditSection(n, previousText) {
+  const body = document.getElementById("section-body-" + n);
+  body.classList.remove("editing");
+  body.innerHTML = previousText ? esc(previousText) : '<em style="color:#9ca3af;">(empty)</em>';
+  const block = document.querySelector('[data-section-n="' + n + '"]');
+  const actions = block.querySelector(".section-actions");
+  actions.innerHTML = '<button onclick="startEditSection(' + n + ')">Edit</button>';
+}
+
+async function saveEditSection(n) {
+  const ta = document.getElementById("section-edit-" + n);
+  if (!ta) return;
+  const newContent = ta.value;
+  const block = document.querySelector('[data-section-n="' + n + '"]');
+  const actions = block.querySelector(".section-actions");
+  actions.innerHTML = '<span class="loader">Saving…</span>';
+  try {
+    const { status, data } = await callApi("/asksolomon/case/update-roadmap-section", {
+      contactId: currentContactId,
+      section_number: n,
+      new_content: newContent,
+    });
+    if (status === 401) { logout(); return; }
+    if (!data.success) {
+      actions.innerHTML = '<button class="primary" onclick="saveEditSection(' + n + ')">Save</button>';
+      alert("Save failed: " + (data.error || "unknown"));
+      return;
+    }
+    // Server returned the full updated draft. Rebuild the panel from
+    // scratch — simpler and avoids drift if the parse changes.
+    renderDraftContent(document.getElementById("roadmap-pane"), data.draft);
+  } catch (err) {
+    actions.innerHTML = '<button class="primary" onclick="saveEditSection(' + n + ')">Save</button>';
+    alert("Request failed: " + (err && err.message ? err.message : String(err)));
+  }
+}
+
+async function generateRoadmap() {
+  if (!currentContactId) return;
+  const btn = document.getElementById("generate-roadmap-btn");
+  if (!btn) return;
+  const errEl = document.getElementById("generate-roadmap-error");
+  errEl.classList.add("hidden");
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Generating… (30–60s)";
+  try {
+    const { status, data } = await callApi("/asksolomon/case/generate-roadmap-draft", {
+      contactId: currentContactId,
+    });
+    if (status === 401) { logout(); return; }
+    if (!data.success) {
+      errEl.textContent = "Generate failed: " + (data.error || "unknown");
+      errEl.classList.remove("hidden");
+      return;
+    }
+    renderDraftContent(document.getElementById("roadmap-pane"), data.draft);
+    if (data.drafted_tag_applied === false) {
+      errEl.textContent = "Draft saved, but the swot_growth_plan_drafted tag didn't apply. Re-run to retry.";
+      errEl.classList.remove("hidden");
+    }
+  } catch (err) {
+    errEl.textContent = "Request failed: " + (err && err.message ? err.message : String(err));
+    errEl.classList.remove("hidden");
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
 }
 
 document.getElementById("password-input")?.addEventListener("keydown", (e) => {
