@@ -377,7 +377,7 @@ describe("assembleCaseBundle — pure assembly (no network)", () => {
     assert.equal(b.case_state.decisions_count, 0);
   });
 
-  it("parses services_selected as a flat id array", () => {
+  it("parses services_selected as a flat id array (legacy string + {id} shapes)", () => {
     const contact = {
       tags: ["swot_paid_297"],
       customFields: [{
@@ -387,6 +387,36 @@ describe("assembleCaseBundle — pure assembly (no network)", () => {
     };
     const b = assembleCaseBundle(contact, idMap, { contactId: "c1" });
     assert.deepEqual(b.case_state.services_selected, ["svc-a", "svc-b"]);
+  });
+
+  it("(Codex P2 on #100) parses PR-9-fixup shape: only status='selected' entries show in case state", () => {
+    const contact = {
+      tags: ["swot_paid_297"],
+      customFields: [{
+        fieldKey: "contact.swot_bga_services_selected",
+        value: JSON.stringify([
+          { service_id: "svc-a", status: "selected", reason: "" },
+          { service_id: "svc-b", status: "declined_or_deferred", reason: "" },
+          { service_id: "svc-c", status: "selected", reason: "owner approved" },
+        ]),
+      }],
+    };
+    const b = assembleCaseBundle(contact, idMap, { contactId: "c1" });
+    assert.deepEqual(b.case_state.services_selected, ["svc-a", "svc-c"]);
+  });
+
+  it("(Codex P2 on #100) counts decisions when stored as the flat array shape", () => {
+    const decisionsArray = [
+      { at: "2026-10-09T20:00:00Z", category: "priorities_confirmed", text: "x" },
+      { at: "2026-10-09T20:00:00Z", category: "ninety_day_commitments", text: "y" },
+      { at: "2026-10-09T20:00:00Z", category: "next_steps", text: "z" },
+    ];
+    const contact = {
+      tags: ["swot_paid_297"],
+      customFields: [{ fieldKey: "contact.swot_bga_decisions", value: JSON.stringify(decisionsArray) }],
+    };
+    const b = assembleCaseBundle(contact, idMap, { contactId: "c1" });
+    assert.equal(b.case_state.decisions_count, 3);
   });
 
   it("flags presence of prep_brief and red_team_report when non-empty", () => {

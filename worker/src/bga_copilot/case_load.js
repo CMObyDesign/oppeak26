@@ -344,13 +344,37 @@ function countJsonArrayItems(raw) {
   }
 }
 
+/**
+ * Parse swot_bga_services_selected into a flat array of selected
+ * service_ids for the case-state header display.
+ *
+ * Accepted shapes (ordered newest → legacy):
+ *   - [{service_id, status, reason}, ...]  — PR 9 fixup shape per
+ *     spec §6. Only entries with status === "selected" are included;
+ *     declined/deferred entries are stored on the field for Email 04
+ *     rendering (PR 11) but the case-state tile shows only positives.
+ *   - [{id}, ...]  — pre-PR 9 placeholder shape.
+ *   - [string, ...]  — bare service_id strings (also legacy).
+ */
 function parseServicesList(raw) {
   if (typeof raw !== "string" || raw.trim() === "") return [];
   try {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed
-      .map((s) => (typeof s === "string" ? s : s && s.id ? s.id : null))
+      .map((s) => {
+        if (typeof s === "string") return s;
+        if (s && typeof s === "object") {
+          // {service_id, status, reason} — only "selected" counts here.
+          if (typeof s.service_id === "string") {
+            if (s.status && s.status !== "selected") return null;
+            return s.service_id;
+          }
+          // Legacy {id} shape.
+          if (typeof s.id === "string") return s.id;
+        }
+        return null;
+      })
       .filter((s) => typeof s === "string" && s.length > 0);
   } catch {
     return [];

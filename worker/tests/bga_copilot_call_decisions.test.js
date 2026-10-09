@@ -296,7 +296,7 @@ describe("POST /asksolomon/case/confirm-call-decisions — handleConfirmCallDeci
     } finally { cap.restore(); }
   });
 
-  it("happy path: writes ONLY swot_bga_decisions + swot_bga_services_selected in one PUT; no tag", async () => {
+  it("(Codex P2 on #100) happy path: writes decisions as a flat array and services_selected with status/reason", async () => {
     let writeBody = null;
     const cap = stubFetch((url, init) => {
       const u = String(url);
@@ -320,13 +320,41 @@ describe("POST /asksolomon/case/confirm-call-decisions — handleConfirmCallDeci
       assert.ok(writeBody && Array.isArray(writeBody.customFields));
       const keys = writeBody.customFields.map((f) => f.key).sort();
       assert.deepEqual(keys, ["swot_bga_decisions", "swot_bga_services_selected"]);
-      // services_selected is a JSON array of valid ids.
-      const selField = writeBody.customFields.find((f) => f.key === "swot_bga_services_selected");
-      assert.deepEqual(JSON.parse(selField.field_value), ["fractional_cfo_core"]);
-      // decisions.services_selected is kept in sync with the body-level selection.
+
+      // Finding 1: swot_bga_decisions is a FLAT ARRAY of
+      // { at, category, text } records so case_load's
+      // countJsonArrayItems counts it correctly on reload.
       const decField = writeBody.customFields.find((f) => f.key === "swot_bga_decisions");
-      const parsed = JSON.parse(decField.field_value);
-      assert.deepEqual(parsed.services_selected, ["fractional_cfo_core"]);
+      const decisionsArr = JSON.parse(decField.field_value);
+      assert.ok(Array.isArray(decisionsArr), "swot_bga_decisions must be an array");
+      assert.ok(decisionsArr.length > 0);
+      for (const d of decisionsArr) {
+        assert.ok(typeof d.at === "string" && /^\d{4}-/.test(d.at), "each entry has an ISO timestamp");
+        assert.ok(typeof d.category === "string");
+        assert.ok(typeof d.text === "string" && d.text.length > 0);
+      }
+      // Entries cover all non-empty sections from the record.
+      assert.ok(decisionsArr.find((d) => d.category === "priorities_confirmed" && d.text === "Collect on AR_over_90"));
+      assert.ok(decisionsArr.find((d) => d.category === "ninety_day_commitments" && d.text === "Close monthly books by day 7"));
+
+      // Finding 2: swot_bga_services_selected is an array of
+      // { service_id, status, reason }. Selected and
+      // declined_or_deferred both land here with distinct status.
+      const selField = writeBody.customFields.find((f) => f.key === "swot_bga_services_selected");
+      const selArr = JSON.parse(selField.field_value);
+      assert.ok(Array.isArray(selArr));
+      // The sample record has fractional_cfo_core selected and
+      // bookkeeping_cleanup under services_declined_or_deferred.
+      const selected = selArr.filter((e) => e.status === "selected").map((e) => e.service_id);
+      const declined = selArr.filter((e) => e.status === "declined_or_deferred").map((e) => e.service_id);
+      assert.deepEqual(selected, ["fractional_cfo_core"]);
+      assert.deepEqual(declined, ["bookkeeping_cleanup"]);
+      // Every entry carries the full {service_id, status, reason} shape.
+      for (const e of selArr) {
+        assert.ok(typeof e.service_id === "string");
+        assert.ok(e.status === "selected" || e.status === "declined_or_deferred");
+        assert.ok(typeof e.reason === "string");
+      }
     } finally { cap.restore(); }
   });
 
@@ -356,7 +384,7 @@ describe("POST /asksolomon/case/confirm-call-decisions — handleConfirmCallDeci
     } finally { cap.restore(); }
   });
 
-  it("services_selected dedupes while preserving first-seen order", async () => {
+  it("services_selected dedupes while preserving first-seen order (within selected status)", async () => {
     let writeBody = null;
     const cap = stubFetch((url, init) => {
       if (String(url).includes("/contacts/") && init?.method === "PUT") {
@@ -366,10 +394,14 @@ describe("POST /asksolomon/case/confirm-call-decisions — handleConfirmCallDeci
       return ghlContactRes();
     });
     try {
+      // Record's services_declined_or_deferred is empty here so we
+      // only check the "selected" bucket; dup rules are the same.
+      const rec = sampleGoodRecord();
+      rec.services_declined_or_deferred = [];
       await handleConfirmCallDecisions(
         post({
           contactId: "c1",
-          decisions: sampleGoodRecord(),
+          decisions: rec,
           services_selected: [
             "fractional_cfo_core", "bookkeeping_cleanup",
             "fractional_cfo_core", // dup
@@ -377,10 +409,11 @@ describe("POST /asksolomon/case/confirm-call-decisions — handleConfirmCallDeci
           ],
         }),
         makeEnv(), { checkPassword });
-      const sel = JSON.parse(
+      const selArr = JSON.parse(
         writeBody.customFields.find((f) => f.key === "swot_bga_services_selected").field_value,
       );
-      assert.deepEqual(sel, ["fractional_cfo_core", "bookkeeping_cleanup"]);
+      const selected = selArr.filter((e) => e.status === "selected").map((e) => e.service_id);
+      assert.deepEqual(selected, ["fractional_cfo_core", "bookkeeping_cleanup"]);
     } finally { cap.restore(); }
   });
 
@@ -398,10 +431,75 @@ describe("POST /asksolomon/case/confirm-call-decisions — handleConfirmCallDeci
       await handleConfirmCallDecisions(
         post({ contactId: "c1", decisions: sampleGoodRecord() }),
         makeEnv(), { checkPassword });
-      const sel = JSON.parse(
+      const selArr = JSON.parse(
         writeBody.customFields.find((f) => f.key === "swot_bga_services_selected").field_value,
       );
-      assert.deepEqual(sel, ["fractional_cfo_core"]);
+      const selected = selArr.filter((e) => e.status === "selected").map((e) => e.service_id);
+      assert.deepEqual(selected, ["fractional_cfo_core"]);
+    } finally { cap.restore(); }
+  });
+
+  it("(Codex P2 on #100) a service in BOTH selected and declined_or_deferred lands only once, with selected winning", async () => {
+    let writeBody = null;
+    const cap = stubFetch((url, init) => {
+      if (String(url).includes("/contacts/") && init?.method === "PUT") {
+        writeBody = JSON.parse(init.body);
+        return new Response("", { status: 200 });
+      }
+      return ghlContactRes();
+    });
+    try {
+      const rec = sampleGoodRecord();
+      // Overlap: fractional_cfo_core selected AND listed as declined.
+      rec.services_declined_or_deferred = ["fractional_cfo_core", "bookkeeping_cleanup"];
+      await handleConfirmCallDecisions(
+        post({ contactId: "c1", decisions: rec, services_selected: ["fractional_cfo_core"] }),
+        makeEnv(), { checkPassword });
+      const selArr = JSON.parse(
+        writeBody.customFields.find((f) => f.key === "swot_bga_services_selected").field_value,
+      );
+      // fractional_cfo_core appears exactly once with status=selected.
+      const fract = selArr.filter((e) => e.service_id === "fractional_cfo_core");
+      assert.equal(fract.length, 1);
+      assert.equal(fract[0].status, "selected");
+      // bookkeeping_cleanup appears once with declined_or_deferred.
+      const book = selArr.filter((e) => e.service_id === "bookkeeping_cleanup");
+      assert.equal(book.length, 1);
+      assert.equal(book[0].status, "declined_or_deferred");
+    } finally { cap.restore(); }
+  });
+
+  it("(Codex P2 on #100) rejects an unknown service_id in services_declined_or_deferred", async () => {
+    const cap = stubFetch(() => ghlContactRes());
+    try {
+      const rec = sampleGoodRecord();
+      rec.services_declined_or_deferred = ["not_in_catalog"];
+      const res = await handleConfirmCallDecisions(
+        post({ contactId: "c1", decisions: rec, services_selected: ["fractional_cfo_core"] }),
+        makeEnv(), { checkPassword });
+      assert.equal(res.status, 400);
+      const b = await res.json();
+      assert.match(b.error, /services_declined_or_deferred contains unknown service_id/);
+    } finally { cap.restore(); }
+  });
+
+  it("(Codex P2 on #100) response carries both decisions_stored (array) and services_selected (entries)", async () => {
+    const cap = stubFetch((url, init) => {
+      if (String(url).includes("/contacts/") && init?.method === "PUT") return new Response("", { status: 200 });
+      return ghlContactRes();
+    });
+    try {
+      const res = await handleConfirmCallDecisions(
+        post({ contactId: "c1", decisions: sampleGoodRecord(), services_selected: ["fractional_cfo_core"] }),
+        makeEnv(), { checkPassword });
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.ok(Array.isArray(body.decisions_stored));
+      assert.ok(body.decisions_stored.length > 0);
+      assert.ok(Array.isArray(body.services_selected));
+      assert.ok(body.services_selected.every((e) => typeof e.service_id === "string" && typeof e.status === "string"));
+      // Record (per-category view) still returned for UI continuity.
+      assert.ok(body.decisions && typeof body.decisions === "object");
     } finally { cap.restore(); }
   });
 });

@@ -923,7 +923,16 @@ async function confirmCallDecisions() {
     }
     callDecisionsRecord = data.decisions;
     renderCallDecisionsPreview();
-    showCallDecisionsError("Saved. " + data.services_selected.length + " service(s) selected.");
+    // (Codex P2 on #100) services_selected is now an array of
+    // { service_id, status, reason }; count only true "selected"
+    // entries for the UI confirmation line.
+    const entries = Array.isArray(data.services_selected) ? data.services_selected : [];
+    const n = entries.filter((e) => e && e.status === "selected").length;
+    const nx = entries.length - n;
+    showCallDecisionsError(
+      "Saved. " + n + " selected"
+      + (nx > 0 ? ", " + nx + " declined/deferred." : "."),
+    );
   } catch (err) {
     if (requestedContactId !== currentContactId) return;
     showCallDecisionsError("Request failed: " + (err && err.message ? err.message : String(err)));
