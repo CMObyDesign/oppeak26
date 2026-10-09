@@ -293,6 +293,11 @@ export const CASE_VIEW_PAGE = `<!DOCTYPE html>
     </div>
 
     <div class="panel">
+      <h2>Prep Me For The Call</h2>
+      <div id="prep-brief-pane"></div>
+    </div>
+
+    <div class="panel">
       <h2>Strategist Brief (internal)</h2>
       <div id="strategist-brief-pane" class="section-content empty">—</div>
     </div>
@@ -753,6 +758,7 @@ function renderCase(bundle, auditData) {
   renderVerifiedFinancials(bundle);
   renderCaseState(bundle);
   renderRoadmap(bundle);
+  renderPrepBrief(bundle);
   const intake = bundle.intake || {};
   renderContentPane("strategist-brief-pane", intake.strategist_brief);
   renderContentPane("business-playbook-pane", intake.business_playbook);
@@ -970,6 +976,83 @@ async function generateRoadmap() {
 
 function showGenerateRoadmapError(msg) {
   const el = document.getElementById("generate-roadmap-error");
+  if (!el) return;
+  if (!msg) { el.classList.add("hidden"); el.textContent = ""; return; }
+  el.textContent = msg;
+  el.classList.remove("hidden");
+}
+
+// -------- Prep brief panel (PR 7) --------
+
+const PREP_BRIEF_BANNER = "📋 INTERNAL · PREP ONLY · NOT CUSTOMER-FACING 📋";
+
+function renderPrepBrief(bundle) {
+  const pane = document.getElementById("prep-brief-pane");
+  const pb = bundle.prep_brief || { present: false, content: "" };
+  if (!pb.present || !pb.content) {
+    pane.innerHTML = ''
+      + '<div class="generate-row">'
+        + '<div>Depends on the Draft Roadmap. Produces a one-screen prep sheet (priorities, VF, assumptions, questions, 90-day preview, objections, services to discuss / avoid, decisions the call needs).</div>'
+        + '<button class="primary" onclick="generatePrepBrief()" id="generate-prep-brief-btn">Generate prep brief</button>'
+      + '</div>'
+      + '<div id="generate-prep-brief-error" class="error-banner hidden" style="margin-top:10px;"></div>';
+    return;
+  }
+  renderPrepBriefContent(pane, pb.content);
+}
+
+function renderPrepBriefContent(pane, content) {
+  const chunks = [];
+  chunks.push('<div class="draft-banner">' + esc(PREP_BRIEF_BANNER) + '</div>');
+  // Render body between banner and end verbatim — the brief is a
+  // read-only artifact; no per-section edit (regenerating is cheaper
+  // than reconciling edits on a one-screen view).
+  const body = String(content).startsWith(PREP_BRIEF_BANNER)
+    ? String(content).slice(PREP_BRIEF_BANNER.length).replace(/^\s*/, "")
+    : String(content);
+  chunks.push('<div class="section-content">' + esc(body) + '</div>');
+  chunks.push('<div class="generate-row" style="margin-top:12px;">');
+  chunks.push('<div>Re-generate pulls the current draft + fresh service matches and rebuilds the brief.</div>');
+  chunks.push('<button onclick="generatePrepBrief()" id="generate-prep-brief-btn">Re-generate prep brief</button>');
+  chunks.push('</div>');
+  chunks.push('<div id="generate-prep-brief-error" class="error-banner hidden" style="margin-top:10px;"></div>');
+  pane.innerHTML = chunks.join("");
+}
+
+async function generatePrepBrief() {
+  if (!currentContactId) return;
+  const btn = document.getElementById("generate-prep-brief-btn");
+  if (!btn) return;
+  showGeneratePrepBriefError(null);
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Generating… (20–45s)";
+  try {
+    const { status, data } = await callApi("/asksolomon/case/generate-prep-brief", {
+      contactId: currentContactId,
+    });
+    if (status === 401) { logout(); return; }
+    if (!data.success) {
+      showGeneratePrepBriefError("Generate failed: " + (data.error || "unknown"));
+      return;
+    }
+    renderPrepBriefContent(document.getElementById("prep-brief-pane"), data.brief);
+    const n = data.matches_included_count || 0;
+    const nx = data.matches_excluded_count || 0;
+    showGeneratePrepBriefError(
+      "Brief saved. Services section bound to " + n + " included / " + nx + " excluded matches "
+      + "on catalog " + (data.catalog_version || "unknown") + ".",
+    );
+  } catch (err) {
+    showGeneratePrepBriefError("Request failed: " + (err && err.message ? err.message : String(err)));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
+
+function showGeneratePrepBriefError(msg) {
+  const el = document.getElementById("generate-prep-brief-error");
   if (!el) return;
   if (!msg) { el.classList.add("hidden"); el.textContent = ""; return; }
   el.textContent = msg;
