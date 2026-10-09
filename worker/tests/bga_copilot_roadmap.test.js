@@ -407,6 +407,32 @@ describe("POST /asksolomon/case/generate-roadmap-draft — handleGenerateRoadmap
     } finally { cap.restore(); }
   });
 
+  it("(Codex P2 on #97) writes swot_bga_services_catalog_ref in the same PUT as the draft", async () => {
+    let writeBody = null;
+    const cap = stubFetch((url, init) => {
+      const u = String(url);
+      if (u.includes("api.anthropic.com")) return claudeRes(sampleGoodDraft());
+      if (u.includes("/customFields") && !u.includes("/contacts/")) return emptyCatalogRes();
+      if (u.endsWith("/tags")) return new Response("", { status: 200 });
+      if (u.includes("/contacts/") && init?.method === "PUT") {
+        writeBody = JSON.parse(init.body);
+        return new Response("", { status: 200 });
+      }
+      return ghlContactRes();
+    });
+    try {
+      const res = await handleGenerateRoadmapDraft(post({ contactId: "c1" }), makeEnv(), { checkPassword });
+      assert.equal(res.status, 200);
+      // The PUT body carries BOTH fields in a single atomic write.
+      assert.ok(writeBody && Array.isArray(writeBody.customFields));
+      const keys = writeBody.customFields.map((f) => f.key).sort();
+      assert.deepEqual(keys, ["swot_bga_services_catalog_ref", "swot_growth_plan_draft"]);
+      const refField = writeBody.customFields.find((f) => f.key === "swot_bga_services_catalog_ref");
+      // Content-hash short SHA — 12 lowercase hex chars.
+      assert.match(refField.field_value, /^[0-9a-f]{12}$/);
+    } finally { cap.restore(); }
+  });
+
   it("drafted_tag_applied=false when the tag endpoint fails, but draft still saves", async () => {
     const cap = stubFetch(router({ tagOk: false }));
     try {

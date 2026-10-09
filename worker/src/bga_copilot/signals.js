@@ -123,9 +123,22 @@ export function verifiedFinancialsToSignals(entries) {
   const tax = byId.tax_status?.value;
   if (tax === "in_default") disqualifiers.add("active_tax_default");
 
+  // (Codex P2 on #97) Materiality threshold: a $1 stale receivable on
+  // a multi-million-dollar business shouldn't fire the signal. Require
+  // the 90+ bucket to clear BOTH a floor ($10k, dollar-amount noise
+  // filter) AND a share of revenue (1%, scale-aware filter) when
+  // revenue_ttm is known. Falls back to the $10k floor alone when
+  // revenue is unknown (avoids silently firing on an unknown-scale
+  // business).
   const ar = byId.ar_30_60_90?.value;
   if (ar && typeof ar === "object" && typeof ar.d90_plus === "number" && ar.d90_plus > 0) {
-    signals.add("ar_aging_90_plus_present");
+    const AR_FLOOR_USD = 10_000;
+    const AR_SHARE_OF_REV = 0.01;
+    const revKnown = typeof rev === "number" && Number.isFinite(rev) && rev > 0;
+    const material = revKnown
+      ? ar.d90_plus >= AR_FLOOR_USD && ar.d90_plus >= rev * AR_SHARE_OF_REV
+      : ar.d90_plus >= AR_FLOOR_USD;
+    if (material) signals.add("ar_aging_90_plus_present");
   }
 
   const monthlyDebt = byId.monthly_debt_service?.value;
@@ -144,14 +157,118 @@ export function verifiedFinancialsToSignals(entries) {
 }
 
 /**
- * Combines tag-derived + VF-derived signals/disqualifiers into one
- * deduped, sorted pair of lists. Used by match_services as the
- * authoritative input per spec §7.4.
+ * Pulls signals from paid_297 intake answers via conservative keyword
+ * heuristics. (Codex P1 on #97.) Intake answers often establish the
+ * qualitative conditions the catalog signals name — "we don't have a
+ * cash forecast", "margin visibility is weak", "monthly close is late
+ * every quarter" — and the strategist can't be relied upon to tag
+ * every such condition by hand.
+ *
+ * Rules deliberately conservative — a false positive here puts an
+ * irrelevant service in Section 7, which the strategist has to
+ * remove. We prefer missing a signal over inventing one. Each rule
+ * requires BOTH a topic word AND a condition word in the same answer
+ * text, so the slug fires only when the client wrote about the topic
+ * in a condition-active way.
+ *
+ * Answers come in as `[{ fieldKey, label, value }]` — the extractor
+ * output from case_load.js. We scan `label + " " + value` so a short
+ * answer plus a descriptive label still match.
  */
-export function deriveCaseSignals({ tags, verified_financials_entries } = {}) {
+export function intakeToSignals(answers) {
+  const signals = new Set();
+  if (!Array.isArray(answers)) return { signals: [] };
+
+  const texts = answers
+    .map((a) => (a && typeof a === "object")
+      ? `${String(a.label || "")} ${String(a.value || "")}`.toLowerCase()
+      : "")
+    .filter((t) => t.length > 0);
+
+  const anyMatches = (text, needles) => needles.some((n) => text.includes(n));
+
+  const RULES = [
+    {
+      slug: "no_13_week_cash_forecast",
+      topic: ["cash forecast", "13-week", "13 week", "cash flow forecast", "forward cash"],
+      condition: ["no ", "don't have", "do not have", "none", "absent", "missing", "haven't", "have not"],
+    },
+    {
+      slug: "low_margin_visibility",
+      topic: ["margin", "gross margin", "profit margin"],
+      condition: ["don't know", "do not know", "unclear", "no visibility", "surprise", "unknown", "can't tell"],
+    },
+    {
+      slug: "monthly_close_absent_or_late",
+      topic: ["monthly close", "month-end close", "month end close", "closing the books"],
+      condition: ["late", "behind", "absent", "no ", "don't", "do not", "skipped", "quarterly instead"],
+    },
+    {
+      slug: "pricing_review_opportunity",
+      topic: ["pricing", "prices", "price list", "rate card"],
+      condition: ["haven't raised", "not raised", "stale", "not updated", "same price", "years ago", "last reviewed", "overdue"],
+    },
+    {
+      slug: "ar_concentration_risk",
+      topic: ["customer", "client", "revenue"],
+      condition: ["concentrated", "single customer", "one customer", "top customer", "top client", "50% of revenue", "40% of revenue"],
+    },
+    {
+      slug: "bookkeeping_cleanup_needed",
+      topic: ["books", "bookkeeping", "quickbooks", "ledger", "chart of accounts"],
+      condition: ["behind", "messy", "miscategor", "not reconciled", "unreconciled", "cleanup", "clean up", "catch up", "catch-up"],
+    },
+    {
+      slug: "hiring_plan_not_supportable",
+      topic: ["hire", "hiring", "add staff", "new role", "headcount"],
+      condition: ["can't afford", "not sure", "stretched", "unsure", "worried about", "unsupportable"],
+    },
+    {
+      slug: "tax_filings_current_but_strategy_absent",
+      topic: ["tax", "taxes"],
+      condition: ["no strategy", "no planning", "just file", "only file", "no tax plan", "nothing proactive"],
+    },
+    {
+      slug: "growth_capital_question",
+      topic: ["loan", "line of credit", "capital", "financing", "sba", "investor"],
+      condition: ["consider", "should we", "weighing", "looking at", "exploring", "think about"],
+    },
+  ];
+
+  for (const text of texts) {
+    for (const r of RULES) {
+      if (signals.has(r.slug)) continue;
+      if (anyMatches(text, r.topic) && anyMatches(text, r.condition)) {
+        signals.add(r.slug);
+      }
+    }
+  }
+
+  return { signals: [...signals].sort() };
+}
+
+/**
+ * Combines tag-derived + VF-derived + intake-derived signals /
+ * disqualifiers into one deduped, sorted pair of lists. Used by
+ * match_services as the authoritative input per spec §7.4.
+ *
+ * (Codex P1 on #97) `paid_297_answers` is folded in so a paid-297
+ * contact whose intake establishes a qualifying condition doesn't
+ * need manual `_opp` tags to activate the matcher.
+ */
+export function deriveCaseSignals({
+  tags,
+  verified_financials_entries,
+  paid_297_answers,
+} = {}) {
   const fromTags = tagsToSignals(tags);
   const fromVf = verifiedFinancialsToSignals(verified_financials_entries);
-  const signals = [...new Set([...fromTags.signals, ...fromVf.signals])].sort();
-  const disqualifiers = [...new Set([...fromTags.disqualifiers, ...fromVf.disqualifiers])].sort();
+  const fromIntake = intakeToSignals(paid_297_answers);
+  const signals = [
+    ...new Set([...fromTags.signals, ...fromVf.signals, ...fromIntake.signals]),
+  ].sort();
+  const disqualifiers = [
+    ...new Set([...fromTags.disqualifiers, ...fromVf.disqualifiers]),
+  ].sort();
   return { signals, disqualifiers };
 }

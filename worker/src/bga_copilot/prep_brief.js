@@ -211,10 +211,32 @@ export function parsePrepBriefSections(text) {
 }
 
 /**
- * Validate a generated prep brief before writing. Rejects truncated
- * responses and malformed section layouts.
+ * Extract every [SM: service_id, signal=slug] tag out of a prep-brief
+ * section's body. (Codex P1 on #98) Used to verify every SM tag binds
+ * to a real included match + its catalog signal.
  */
-export function validateGeneratedPrepBrief(text, stopReason) {
+export function extractSmTags(sectionBody) {
+  const out = [];
+  const re = /\[SM:\s*([a-z0-9_]+)\s*,\s*signal=([a-z0-9_]+)\s*\]/gi;
+  const s = String(sectionBody || "");
+  let m;
+  while ((m = re.exec(s)) !== null) {
+    out.push({ service_id: m[1], signal: m[2] });
+  }
+  return out;
+}
+
+/**
+ * Validate a generated prep brief before writing. Rejects truncated
+ * responses, malformed section layouts, and (Codex P1 on #98) any SM
+ * tag in Section 7 that doesn't bind to a real included service +
+ * one of its matched signals, or any SM tag at all in Section 8
+ * (exclusions must not emit SM tags).
+ *
+ * `matches` is the output of `matchServices` from the same request —
+ * same source of truth the prompt was built from.
+ */
+export function validateGeneratedPrepBrief(text, stopReason, { matches } = {}) {
   if (stopReason === "max_tokens") {
     return { ok: false, error: "Claude hit the max_tokens limit — prep brief truncated; re-run" };
   }
@@ -237,6 +259,52 @@ export function validateGeneratedPrepBrief(text, stopReason) {
       };
     }
   }
+
+  // (Codex P1 on #98) Provenance guardrails on SM tags.
+  // We validate ONLY when matches is provided; the pure helper is
+  // called in tests without matches to exercise shape rules alone.
+  if (matches && typeof matches === "object") {
+    const section7 = sections.find((s) => s.n === 7);
+    const section8 = sections.find((s) => s.n === 8);
+
+    // Section 8 must NOT contain SM tags — exclusions aren't
+    // recommendations, so emitting an SM tag there would wrongly
+    // promote a disqualified service through downstream SM-grep audits.
+    const section8Tags = extractSmTags(section8?.body || "");
+    if (section8Tags.length > 0) {
+      return {
+        ok: false,
+        error: "section 8 (excluded services) must not contain [SM:] tags",
+      };
+    }
+
+    // Every Section 7 SM tag must bind to an included match.
+    // Build a lookup of included service_id → set of matched signals,
+    // then verify each (service_id, signal) pair.
+    const includedById = new Map();
+    for (const r of matches.included || []) {
+      if (r && typeof r.service_id === "string") {
+        includedById.set(r.service_id, new Set(Array.isArray(r.matched_signals) ? r.matched_signals : []));
+      }
+    }
+    const section7Tags = extractSmTags(section7?.body || "");
+    for (const tag of section7Tags) {
+      const signalsForService = includedById.get(tag.service_id);
+      if (!signalsForService) {
+        return {
+          ok: false,
+          error: `section 7 SM tag binds to unknown service_id "${tag.service_id}" (not in matches.included)`,
+        };
+      }
+      if (!signalsForService.has(tag.signal)) {
+        return {
+          ok: false,
+          error: `section 7 SM tag "${tag.service_id}" uses signal "${tag.signal}" which did not match this case`,
+        };
+      }
+    }
+  }
+
   return { ok: true, brief };
 }
 
@@ -347,16 +415,20 @@ export async function handleGeneratePrepBrief(request, env, { checkPassword }) {
   // match_services recently, and the brief shouldn't invent SM tags.
   const vfRaw = readCustomField(contact, "swot_verified_financials", idMap);
   const vfEntries = parseVerifiedFinancials(vfRaw);
+
+  const bundle = assembleCaseBundle(contact, idMap, { contactId, catalog });
+
   const { signals, disqualifiers } = deriveCaseSignals({
     tags,
     verified_financials_entries: vfEntries,
+    // (Codex P1 on #97) Intake answers surface qualifying conditions
+    // the strategist may not have manually tagged — thread them here.
+    paid_297_answers: bundle?.intake?.paid_297_answers || [],
   });
   const matches = matchServices({
     activeSignals: signals, activeDisqualifiers: disqualifiers,
   });
   const catalogVersion = await getServicesCatalogVersion();
-
-  const bundle = assembleCaseBundle(contact, idMap, { contactId, catalog });
 
   const systemText = buildPrepBriefSystemPrompt();
   const userText = buildPrepBriefUserPrompt(bundle, { draft, matches, catalogVersion });
@@ -364,7 +436,11 @@ export async function handleGeneratePrepBrief(request, env, { checkPassword }) {
   const claude = await callClaudeForPrepBrief(systemText, userText, env);
   if (!claude.ok) return json({ success: false, error: claude.error }, 503);
 
-  const validated = validateGeneratedPrepBrief(claude.text, claude.stop_reason);
+  // Codex P1 on #98: pass the match set so SM-tag provenance
+  // guardrails fire — the validator rejects unknown service_ids,
+  // signals Claude invented, and SM tags leaking into the
+  // exclusions section.
+  const validated = validateGeneratedPrepBrief(claude.text, claude.stop_reason, { matches });
   if (!validated.ok) return json({ success: false, error: validated.error }, 502);
 
   const brief = validated.brief;

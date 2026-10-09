@@ -696,7 +696,7 @@ hold rendered HTML written by the button endpoint only.
 | `swot_bga_prep_brief` | LARGE_TEXT (prose, one-screen) | `generate_prep_brief` | No — internal strategist use |
 | `swot_bga_red_team_report` | LARGE_TEXT (JSON — see §5.3) | `red_team_check` | No — internal strategist use |
 | `swot_bga_version_history` | LARGE_TEXT (JSON array of `{at, actor, action, affected_field, snapshot_hash}`) | **appended by every BGA tool call** (§8) | No — audit trail |
-| `swot_bga_services_catalog_ref` | LARGE_TEXT (plain string: the catalog version SHA the draft was built against) | `generate_roadmap_draft` + `match_services` | No — audit trail |
+| `swot_bga_services_catalog_ref` | LARGE_TEXT (plain string: the first 12 hex chars of SHA-256 of the catalog JSON — see §7.1) | `generate_roadmap_draft` + `match_services` | No — audit trail |
 | `swot_bga_next_steps` | LARGE_TEXT (rendered HTML) | **button endpoint only** | **Yes — merged into Email 04** |
 | `swot_bga_services_selected_display` | LARGE_TEXT (rendered HTML) | **button endpoint only** | **Yes — merged into Email 04** |
 
@@ -744,9 +744,24 @@ and matches against.
 **File**: `worker/data/service_catalog.json`
 **Companion**: `docs/services/CATALOG_SCHEMA.md` (JSON Schema +
 glossary of what each field means)
-**Versioning**: committed to git; every change is a PR. The commit
-SHA is the catalog version. `swot_bga_services_catalog_ref` records
-which SHA a given case was built against.
+**Versioning**: committed to git; every change is a PR. The catalog
+version `swot_bga_services_catalog_ref` records is the first 12 hex
+characters of the SHA-256 of the parsed catalog JSON — a
+content-addressable identifier that is stable across:
+
+- cosmetic reformats (same content → same version),
+- branches (two commits with identical catalog content, same version),
+- Worker-only deploys without a catalog change (the recorded version
+  does not drift just because the Worker redeployed).
+
+A commit-SHA-based identifier would change on every unrelated commit
+and would need a build-time inject through Workers Builds. The
+content hash satisfies the audit-trail intent (a successful match
+can be correlated with the exact catalog JSON that produced it) and
+is derivable in the Worker without build-time plumbing. (Codex P2
+on #97: previous spec text said "commit SHA"; the content hash is
+what the implementation records and this clarification brings the
+spec in line with the shipping behavior.)
 
 ### 7.2 Per-service schema
 

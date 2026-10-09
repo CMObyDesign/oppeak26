@@ -38,6 +38,12 @@ import {
   parseDraftSections,
   replaceSectionBody,
 } from "./roadmap.js";
+import {
+  fetchGHLCustomFieldsCatalog,
+} from "../ghl_catalog.js";
+import {
+  assembleCaseBundle,
+} from "./case_load.js";
 
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 const DRAFT_FIELD_KEY = "swot_growth_plan_draft";
@@ -167,8 +173,13 @@ export function formatSection7Body(matches, { catalogVersion } = {}) {
   return parts.join("\n").replace(/\s+$/, "");
 }
 
-async function updateGhlCustomField(contactId, fieldKey, value, env) {
+/**
+ * Writes one or more custom fields atomically in a single PUT.
+ * Pass `[{ key, value }, ...]`.
+ */
+async function updateGhlCustomFields(contactId, fields, env) {
   if (!env.GHL_API_KEY) return false;
+  if (!Array.isArray(fields) || fields.length === 0) return false;
   try {
     const res = await fetch(`${GHL_API_BASE}/contacts/${encodeURIComponent(contactId)}`, {
       method: "PUT",
@@ -178,7 +189,7 @@ async function updateGhlCustomField(contactId, fieldKey, value, env) {
         Version: "2021-07-28",
       },
       body: JSON.stringify({
-        customFields: [{ key: fieldKey, field_value: value }],
+        customFields: fields.map((f) => ({ key: f.key, field_value: f.value })),
       }),
     });
     return res.ok;
@@ -230,8 +241,21 @@ export async function handleMatchServices(request, env, { checkPassword }) {
   const vfRaw = readCustomField(contact, "swot_verified_financials", idMap);
   const vfEntries = parseVerifiedFinancials(vfRaw);
 
+  // (Codex P1 on #97) Pull intake answers so signal derivation
+  // catches qualifying conditions the strategist hasn't manually
+  // tagged (no 13-week forecast, weak margin visibility, etc.).
+  // Build the full bundle here (we need the hydrated intake answers)
+  // and reuse it below for consistency with roadmap / prep-brief.
+  const catalogForBundle = await (async () => {
+    try { return await fetchGHLCustomFieldsCatalog(env); }
+    catch (e) { console.warn(`[match_services] catalog fetch: ${e?.message || e}`); return {}; }
+  })();
+  const bundle = assembleCaseBundle(contact, idMap, { contactId, catalog: catalogForBundle });
+
   const { signals, disqualifiers } = deriveCaseSignals({
-    tags, verified_financials_entries: vfEntries,
+    tags,
+    verified_financials_entries: vfEntries,
+    paid_297_answers: bundle?.intake?.paid_297_answers || [],
   });
   const matches = matchServices({
     activeSignals: signals, activeDisqualifiers: disqualifiers,
@@ -273,7 +297,14 @@ export async function handleMatchServices(request, env, { checkPassword }) {
     return json({ success: false, error: "section 7 replace failed" }, 500);
   }
 
-  const wrote = await updateGhlCustomField(contactId, DRAFT_FIELD_KEY, nextDraft, env);
+  // (Codex P2 on #97) Persist swot_bga_services_catalog_ref alongside
+  // the draft so later red-team / version-history audits can tell
+  // which catalog version produced the recommendations. Written in
+  // the same PUT so a partial-write doesn't leave the fields disagreeing.
+  const wrote = await updateGhlCustomFields(contactId, [
+    { key: DRAFT_FIELD_KEY, value: nextDraft },
+    { key: "swot_bga_services_catalog_ref", value: catalogVersion },
+  ], env);
   if (!wrote) return json({ success: false, error: "writeback to GHL failed" }, 503);
 
   return json({

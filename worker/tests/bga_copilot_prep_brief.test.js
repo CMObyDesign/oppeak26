@@ -15,6 +15,7 @@ import {
   wrapGeneratedPrepBrief,
   parsePrepBriefSections,
   validateGeneratedPrepBrief,
+  extractSmTags,
   handleGeneratePrepBrief,
 } from "../src/bga_copilot/prep_brief.js";
 import { _resetCatalogCacheForTests } from "../src/ghl_catalog.js";
@@ -242,6 +243,70 @@ describe("validateGeneratedPrepBrief", () => {
   });
 });
 
+describe("extractSmTags + SM provenance validation (Codex P1 on #98)", () => {
+  it("extractSmTags pulls service_id + signal out of a section body", () => {
+    const body = "- A [SM: fractional_cfo_core, signal=low_margin_visibility]\n- B [SM: bookkeeping_cleanup, signal=bookkeeping_cleanup_needed]";
+    const tags = extractSmTags(body);
+    assert.deepEqual(tags, [
+      { service_id: "fractional_cfo_core", signal: "low_margin_visibility" },
+      { service_id: "bookkeeping_cleanup", signal: "bookkeeping_cleanup_needed" },
+    ]);
+  });
+
+  it("extractSmTags returns [] on empty / non-string input", () => {
+    assert.deepEqual(extractSmTags(""), []);
+    assert.deepEqual(extractSmTags(null), []);
+    assert.deepEqual(extractSmTags(undefined), []);
+  });
+
+  it("validator passes a brief whose S7 SM tags all bind to matches.included", () => {
+    const matches = {
+      included: [{ service_id: "fractional_cfo_core", matched_signals: ["low_margin_visibility"] }],
+      excluded: [],
+    };
+    const r = validateGeneratedPrepBrief(sampleGoodBrief(), "end_turn", { matches });
+    assert.equal(r.ok, true);
+  });
+
+  it("validator rejects an unknown service_id in Section 7", () => {
+    const matches = {
+      included: [{ service_id: "some_other_service", matched_signals: ["low_margin_visibility"] }],
+      excluded: [],
+    };
+    const r = validateGeneratedPrepBrief(sampleGoodBrief(), "end_turn", { matches });
+    assert.equal(r.ok, false);
+    assert.match(r.error, /unknown service_id/);
+  });
+
+  it("validator rejects a signal that didn't match this case for an included service", () => {
+    const matches = {
+      included: [{ service_id: "fractional_cfo_core", matched_signals: ["some_other_signal"] }],
+      excluded: [],
+    };
+    const r = validateGeneratedPrepBrief(sampleGoodBrief(), "end_turn", { matches });
+    assert.equal(r.ok, false);
+    assert.match(r.error, /did not match this case/);
+  });
+
+  it("validator rejects any [SM:] tag in Section 8 (exclusions must not emit SM)", () => {
+    const withBadS8 = sampleGoodBrief().replace(
+      "## Section 8 — Services NOT to recommend (with reason)\n- Growth capital (excluded by: active_tax_default)",
+      "## Section 8 — Services NOT to recommend (with reason)\n- Growth capital [SM: growth_capital_x, signal=low_margin_visibility]",
+    );
+    const matches = { included: [{ service_id: "fractional_cfo_core", matched_signals: ["low_margin_visibility"] }], excluded: [] };
+    const r = validateGeneratedPrepBrief(withBadS8, "end_turn", { matches });
+    assert.equal(r.ok, false);
+    assert.match(r.error, /section 8 .* must not contain \[SM:\] tags/);
+  });
+
+  it("validator skips SM-tag checks when matches is not provided (pure-shape mode)", () => {
+    // Backward-compat: tests that only exercise section layout
+    // should still pass without supplying matches.
+    const r = validateGeneratedPrepBrief(sampleGoodBrief(), "end_turn");
+    assert.equal(r.ok, true);
+  });
+});
+
 describe("POST /asksolomon/case/generate-prep-brief — handleGeneratePrepBrief", () => {
   it("401 without x-console-password", async () => {
     const res = await handleGeneratePrepBrief(post({ contactId: "c1" }, {}), makeEnv(), { checkPassword });
@@ -326,6 +391,12 @@ describe("POST /asksolomon/case/generate-prep-brief — handleGeneratePrepBrief"
         return new Response("", { status: 200 });
       }
       return ghlContactRes({
+        // (Codex P1 on #98) Prep-brief SM provenance now validates
+        // against matches.included — the fixture catalog's
+        // fractional_cfo_core needs low_margin_visibility to fire for
+        // the sample brief's [SM: fractional_cfo_core, signal=...] tag
+        // to validate. Tag the contact so the matcher includes it.
+        tags: ["swot_paid_297", "low_margin_visibility_opp"],
         customFields: [{ fieldKey: "contact.swot_growth_plan_draft", value: SAMPLE_DRAFT }],
       });
     });
@@ -395,6 +466,9 @@ describe("POST /asksolomon/case/generate-prep-brief — handleGeneratePrepBrief"
       if (u.includes("/customFields") && !u.includes("/contacts/")) return emptyCatalogRes();
       if (u.includes("/contacts/") && init?.method === "PUT") return new Response("", { status: 500 });
       return ghlContactRes({
+        // Same as happy path — need SM tag validation to pass before
+        // the test can exercise the writeback-fail branch.
+        tags: ["swot_paid_297", "low_margin_visibility_opp"],
         customFields: [{ fieldKey: "contact.swot_growth_plan_draft", value: SAMPLE_DRAFT }],
       });
     });
