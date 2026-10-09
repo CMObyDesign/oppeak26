@@ -198,6 +198,22 @@ describe("intakeToSignals — Codex P1 on #97", () => {
     assert.ok(r.signals.includes("monthly_close_absent_or_late"));
   });
 
+  it("(Codex P2 on #99) does NOT fire monthly_close_absent_or_late on a healthy denial", () => {
+    // "No issues; books close by day 7" used to fire because "no "
+    // was in the condition list. Now it shouldn't.
+    const r = intakeToSignals([
+      { fieldKey: "p297_q", label: "Monthly close?", value: "No issues; books close by day 7" },
+    ]);
+    assert.ok(!r.signals.includes("monthly_close_absent_or_late"));
+  });
+
+  it("(Codex P2 on #99) fires monthly_close_absent_or_late on explicit absence phrasing", () => {
+    const r = intakeToSignals([
+      { fieldKey: "p297_q", label: "Monthly close?", value: "We don't close books monthly — quarterly only" },
+    ]);
+    assert.ok(r.signals.includes("monthly_close_absent_or_late"));
+  });
+
   it("fires bookkeeping_cleanup_needed on 'books behind' / 'messy' phrasing", () => {
     const r = intakeToSignals([
       { fieldKey: "p297_q", label: "Books status?", value: "QuickBooks is a mess — months behind on reconciliation" },

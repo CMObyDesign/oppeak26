@@ -36,6 +36,10 @@ import { handleMatchServices } from "./bga_copilot/match_services.js";
 import { handleGeneratePrepBrief } from "./bga_copilot/prep_brief.js";
 import { handleChallengeRoadmap } from "./bga_copilot/challenge.js";
 import {
+  handleExtractCallDecisions,
+  handleConfirmCallDecisions,
+} from "./bga_copilot/call_decisions.js";
+import {
   fetchGHLCustomFieldsCatalog,
   GHLCatalogUnavailableError,
 } from "./ghl_catalog.js";
@@ -5675,6 +5679,16 @@ export default {
     // READ-ONLY adversarial critique. Writes NOTHING. No tags.
     if (path === "/asksolomon/case/challenge-roadmap") {
       return handleChallengeRoadmap(request, env, { checkPassword: checkConsolePassword });
+    }
+
+    // PR 9 — docs/BGA_COPILOT_SPEC.md §4.7.
+    // Two-stage: extract (read-only parse), confirm (writes
+    // swot_bga_decisions + swot_bga_services_selected). No tags.
+    if (path === "/asksolomon/case/extract-call-decisions") {
+      return handleExtractCallDecisions(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/case/confirm-call-decisions") {
+      return handleConfirmCallDecisions(request, env, { checkPassword: checkConsolePassword });
     }
 
     // POST /audit — JSON marketing audit. No auth (matches GET /audit).
