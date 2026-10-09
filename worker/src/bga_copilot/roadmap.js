@@ -319,7 +319,44 @@ export async function callClaudeForRoadmap(systemText, userText, env) {
   const data = await res.json().catch(() => null);
   const text = data?.content?.[0]?.text;
   if (!text) return { ok: false, error: "Claude response missing content[0].text" };
-  return { ok: true, text };
+  return { ok: true, text, stop_reason: data?.stop_reason || null };
+}
+
+/**
+ * Validates a generated draft before it's committed to GHL. Codex P2
+ * on #96, finding 1: a truncated response (stop_reason="max_tokens")
+ * or a response that didn't parse into exactly 8 sections should not
+ * be saved as a "finished" draft and should not apply the
+ * `swot_growth_plan_drafted` call-ready tag.
+ *
+ * Returns `{ ok: true, draft }` on success, or `{ ok: false, error }`
+ * on reject.
+ */
+export function validateGeneratedDraft(text, stopReason) {
+  if (stopReason === "max_tokens") {
+    return { ok: false, error: "Claude hit the max_tokens limit — draft truncated; re-run" };
+  }
+  const draft = wrapGeneratedDraft(text);
+  if (!draft.startsWith(DRAFT_BANNER)) {
+    return { ok: false, error: "generated draft is missing the DRAFT banner" };
+  }
+  const { sections } = parseDraftSections(draft);
+  if (sections.length !== SECTIONS.length) {
+    return {
+      ok: false,
+      error: `generated draft has ${sections.length} sections, expected ${SECTIONS.length}`,
+    };
+  }
+  // Section numbers must be 1..SECTIONS.length in order.
+  for (let i = 0; i < SECTIONS.length; i++) {
+    if (sections[i].n !== i + 1) {
+      return {
+        ok: false,
+        error: `generated draft section order wrong: expected ${i + 1}, got ${sections[i].n}`,
+      };
+    }
+  }
+  return { ok: true, draft };
 }
 
 /**
@@ -405,7 +442,12 @@ export async function handleGenerateRoadmapDraft(request, env, { checkPassword }
   const claude = await callClaudeForRoadmap(systemText, userText, env);
   if (!claude.ok) return json({ success: false, error: claude.error }, 503);
 
-  const draft = wrapGeneratedDraft(claude.text);
+  // Codex P2 on #96: validate before any writeback. A truncated or
+  // malformed response must not land as a "finished" draft and must
+  // not trigger the swot_growth_plan_drafted call-ready tag.
+  const validated = validateGeneratedDraft(claude.text, claude.stop_reason);
+  if (!validated.ok) return json({ success: false, error: validated.error }, 502);
+  const draft = validated.draft;
 
   // Write the draft field; apply the drafted tag. Both must succeed
   // to count as a complete generation; the drafted tag is the signal
