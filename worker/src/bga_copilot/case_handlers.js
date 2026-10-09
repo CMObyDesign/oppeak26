@@ -29,7 +29,7 @@ const VERIFIED_FINANCIALS_FIELD_KEY = "swot_verified_financials";
  * Minimal JSON response helper. The main Worker has its own json() but we
  * can't import that here without cycle risk; this is intentionally local.
  */
-function json(body, status = 200) {
+export function json(body, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
@@ -45,7 +45,7 @@ function json(body, status = 200) {
  * decides what to do with null; this function never throws for
  * network reasons.
  */
-async function fetchGhlContact(contactId, env) {
+export async function fetchGhlContact(contactId, env) {
   if (!env.GHL_API_KEY) return { error: "GHL_API_KEY not configured", contact: null };
   let res;
   try {
@@ -78,7 +78,7 @@ async function fetchGhlContact(contactId, env) {
  * This helper looks up by id first (if resolvable), then by fieldKey,
  * then by key, and returns the string value (or empty string).
  */
-function readCustomField(contact, fieldKey, env) {
+export function readCustomField(contact, fieldKey, env) {
   const cfs = Array.isArray(contact.customFields) ? contact.customFields : [];
   const idMap = (env && env.REPORT_FIELD_IDS) || {};
   const id = idMap[fieldKey];

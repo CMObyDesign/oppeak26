@@ -26,6 +26,8 @@ import {
   handleAuditCaseGaps,
   handleVerifiedFinancialsPanel,
 } from "./bga_copilot/case_handlers.js";
+import { handleCaseLoad } from "./bga_copilot/case_load.js";
+import { CASE_VIEW_PAGE } from "./bga_copilot/case_view_page.js";
 import {
   dbFromEnv,
   newSubmissionId,
@@ -5677,6 +5679,17 @@ export default {
     }
     if (path === "/asksolomon/case/verified-financials") {
       return handleVerifiedFinancialsPanel(request, env, { checkPassword: checkConsolePassword });
+    }
+
+    // BGA Copilot case view (PR 4 of the build — docs/BGA_COPILOT_SPEC.md §2.1 + §11 row 4).
+    // GET  /asksolomon/case      → read-only strategist case view HTML (page-level password gate
+    //                              is in the HTML; API-level password gate protects /case/load).
+    // POST /asksolomon/case/load → assembles the case bundle for a swot_paid_297 contact.
+    if (path === "/asksolomon/case" && request.method === "GET") {
+      return new Response(CASE_VIEW_PAGE, { status: 200, headers: htmlHeaders() });
+    }
+    if (path === "/asksolomon/case/load") {
+      return handleCaseLoad(request, env, { checkPassword: checkConsolePassword });
     }
 
     // POST /audit — JSON marketing audit. No auth (matches GET /audit).
