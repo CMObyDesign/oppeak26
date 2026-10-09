@@ -29,6 +29,10 @@ import {
 import { handleCaseLoad } from "./bga_copilot/case_load.js";
 import { CASE_VIEW_PAGE } from "./bga_copilot/case_view_page.js";
 import {
+  handleGenerateRoadmapDraft,
+  handleUpdateRoadmapSection,
+} from "./bga_copilot/roadmap.js";
+import {
   fetchGHLCustomFieldsCatalog,
   GHLCatalogUnavailableError,
 } from "./ghl_catalog.js";
@@ -5640,6 +5644,16 @@ export default {
     // per Codex P1 on #94: the POST-only guard would otherwise make it unreachable.)
     if (path === "/asksolomon/case/load") {
       return handleCaseLoad(request, env, { checkPassword: checkConsolePassword });
+    }
+
+    // PR 5b — docs/BGA_COPILOT_SPEC.md §4.3 + §4.3.1.
+    // Writes ONLY swot_growth_plan_draft + applies swot_growth_plan_drafted.
+    // Never touches swot_growth_plan or applies swot_growth_plan_ready.
+    if (path === "/asksolomon/case/generate-roadmap-draft") {
+      return handleGenerateRoadmapDraft(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/case/update-roadmap-section") {
+      return handleUpdateRoadmapSection(request, env, { checkPassword: checkConsolePassword });
     }
 
     // POST /audit — JSON marketing audit. No auth (matches GET /audit).

@@ -315,6 +315,15 @@ export function assembleCaseBundle(contact, idMap, { contactId, catalog } = { co
       services_selected: servicesSelected,
     },
 
+    // (PR 5b) Full draft content + parsed sections so the case view
+    // can render the per-section edit UI without a second round-trip.
+    // Only the body of each section is returned here; the banner /
+    // prefix is preserved on the server by `replaceSectionBody`.
+    roadmap_draft: {
+      present: growthPlanDraft.trim().length > 0,
+      content: growthPlanDraft,
+    },
+
     canonical_metrics: canonicalMetricsEcho(),
   };
 }
