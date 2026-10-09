@@ -14,22 +14,28 @@
 
 ---
 
-## 1. Create seven custom fields in HighLevel
+## 1. Create eleven custom fields in HighLevel
 
 **Where:** HighLevel dashboard → **Settings** → **Custom Fields** →
-**Add Field** (for each of the seven below).
+**Add Field** (for each of the eleven below).
 
 **Common settings for every new field:**
 
 | Setting | Value |
 |---------|-------|
+| **Object** | **Contact** · This is critical. HL's custom-field setup flow starts with an object selector (Contact / Opportunity / etc.). Pick **Contact**. Fields created on Opportunity or any other object are NOT returned by `/contacts/{id}`, NOT writable through the Worker's `updateGHLContact` path, and NOT available via the `{{contact.*}}` merge fields the delivery emails use. (Codex P2 on PR #89.) |
 | Field Type | **LARGE TEXT** (also called "Multiline Text") |
 | Placement on contact profile | Group under a new or existing group called **"BGA / Solomon"** so these stay together and don't clutter the main contact view |
 | Visible on public forms? | **No** — never attach these to opt-in / lead-capture forms |
 | Visible on contact profile? | Yes (strategist-facing) |
 | Default value | Leave empty |
 
-**The seven fields to create, in this order:**
+**The eleven fields to create** (seven originally in PR #89, plus
+four added by the spec revision for the full strategist toolkit —
+see `docs/BGA_COPILOT_SPEC.md` §6). The first seven already exist
+if PR #89 was completed; verify them against the Contact-object
+requirement and the key names, then create the four new ones (§1.8
+onward).
 
 ### 1.1 `swot_financials_request_list`
 
@@ -108,6 +114,63 @@
 - **Purpose**: Rendered HTML service-selection summary, built from
   `swot_bga_services_selected` at approve-and-send time.
 
+### 1.8 `swot_bga_prep_brief` (added by spec revision)
+
+- **Internal name / Field key**: `swot_bga_prep_brief`
+- **Display label**: "BGA — Pre-Call Prep Brief (internal)"
+- **Written by**: `generate_prep_brief` tool via Ask Solomon
+  (triggered by the `[ PREP ME FOR THE CALL ]` button in the console)
+- **Customer-facing?** **No.** Internal strategist prep sheet, never
+  merged into customer emails.
+- **Purpose**: One-screen condensed briefing drawn from the Draft
+  Roadmap. Top 3 priorities, verified-fact support, assumptions
+  needing validation, questions to ask, 90-day preview, likely
+  objections, services worth discussing and services to avoid, and
+  the decisions the call needs to produce.
+
+### 1.9 `swot_bga_red_team_report` (added by spec revision)
+
+- **Internal name / Field key**: `swot_bga_red_team_report`
+- **Display label**: "BGA — Pre-Send QA Report (internal)"
+- **Written by**: `red_team_check` tool via Ask Solomon (triggered by
+  the `[ RUN PRE-SEND QA ]` button)
+- **Customer-facing?** **No.** Internal gate for the APPROVE & SEND
+  button. Never merged into customer emails.
+- **Purpose**: Structured JSON record of blockers and warnings found
+  in the current draft. The APPROVE & SEND button is disabled unless
+  the latest report has 0 blockers; warnings require explicit
+  strategist acknowledgment before send. See
+  `docs/BGA_COPILOT_SPEC.md` §5.3 for the blocker/warning rules.
+
+### 1.10 `swot_bga_version_history` (added by spec revision)
+
+- **Internal name / Field key**: `swot_bga_version_history`
+- **Display label**: "BGA — Version History (audit trail)"
+- **Written by**: **Every BGA tool call appends an entry.** The field
+  is append-only from the Worker's side; strategist does not edit
+  manually.
+- **Customer-facing?** **No.** Internal audit trail. Never merged
+  into customer emails.
+- **Purpose**: JSON array of `{at, actor, action, affected_field,
+  snapshot_hash, catalog_ref}` entries. Capped at ~50 entries per
+  contact; older entries spill over to R2 under
+  `bga_audit/<contact_id>/<yyyy-mm>.json`. See
+  `docs/BGA_COPILOT_SPEC.md` §8 for the full audit-trail design.
+
+### 1.11 `swot_bga_services_catalog_ref` (added by spec revision)
+
+- **Internal name / Field key**: `swot_bga_services_catalog_ref`
+- **Display label**: "BGA — Services Catalog Version (audit trail)"
+- **Written by**: `generate_roadmap_draft` + `match_services` tools
+  via Ask Solomon
+- **Customer-facing?** **No.** Internal audit metadata. Never merged
+  into customer emails.
+- **Purpose**: Plain-text snapshot of which services catalog version
+  (git commit SHA of `worker/data/service_catalog.json`) the draft
+  was built against. Lets a later dispute or review trace the
+  recommendations back to the exact catalog entries that were in
+  effect at draft time.
+
 ---
 
 ## 2. Create one new tag in HighLevel
@@ -160,6 +223,10 @@ swot_bga_decisions:                  <paste field ID>
 swot_bga_services_selected:          <paste field ID>
 swot_bga_next_steps:                 <paste field ID>
 swot_bga_services_selected_display:  <paste field ID>
+swot_bga_prep_brief:                 <paste field ID>
+swot_bga_red_team_report:            <paste field ID>
+swot_bga_version_history:            <paste field ID>
+swot_bga_services_catalog_ref:       <paste field ID>
 ```
 
 Paste that list into the PR comment on the follow-up code PR (PR 2 of
@@ -178,27 +245,35 @@ the key alone; reading is more reliable with the ID. See
 
 ## 4. What NOT to do during setup
 
-Three things to double-check before saving each field:
+Four things to double-check before saving each field:
 
-- **Do NOT** attach any of the seven new fields to a public lead-capture
-  form. They are strategist-facing only. If one accidentally lands on an
-  opt-in form, clients could see or submit values into it.
-- **Do NOT** rename any field key (the strings in §1 above). The Worker
-  code reads and writes these fields by exact key match. Renaming the
-  display label is fine; renaming the internal key breaks the
-  integration.
+- **Do NOT** create any of the eleven fields on an object other than
+  **Contact**. If HL's object selector is set to Opportunity or
+  anything else at creation time, the field lives on the wrong
+  record type and is unreachable by the Worker, the delivery emails,
+  and `{{contact.*}}` merge fields. Always confirm "Contact" is
+  selected before saving.
+- **Do NOT** attach any of the eleven fields to a public lead-capture
+  form. They are strategist-facing only. If one accidentally lands on
+  an opt-in form, clients could see or submit values into it.
+- **Do NOT** rename any field key (the strings in §1 above). The
+  Worker code reads and writes these fields by exact key match.
+  Renaming the display label is fine; renaming the internal key
+  breaks the integration.
 - **Do NOT** apply `swot_growth_plan_drafted` or `swot_growth_plan_ready`
   manually from the HL UI during normal operation. Both tags should
   originate only from the Worker's code paths. Manual application in
-  HL would skip the guardrails that keep draft and final content from
-  getting mixed up.
+  HL would skip the guardrails that keep draft and final content
+  from getting mixed up.
 
 ---
 
-## 5. Checklist to confirm PR 1 is done
+## 5. Checklist to confirm HL field setup is done
 
-Tick each line before announcing PR 1 complete:
+Tick each line before announcing HL config complete:
 
+- [ ] All eleven fields were created with **Object = Contact** at the
+      HL object selector (not Opportunity or any other object)
 - [ ] `swot_financials_request_list` field created (LARGE_TEXT)
 - [ ] `swot_verified_financials` field created (LARGE_TEXT)
 - [ ] `swot_growth_plan_draft` field created (LARGE_TEXT)
@@ -206,16 +281,22 @@ Tick each line before announcing PR 1 complete:
 - [ ] `swot_bga_services_selected` field created (LARGE_TEXT)
 - [ ] `swot_bga_next_steps` field created (LARGE_TEXT)
 - [ ] `swot_bga_services_selected_display` field created (LARGE_TEXT)
-- [ ] All seven fields grouped under a "BGA / Solomon" section on the
-      contact profile
-- [ ] None of the seven fields attached to any public form
+- [ ] `swot_bga_prep_brief` field created (LARGE_TEXT)
+- [ ] `swot_bga_red_team_report` field created (LARGE_TEXT)
+- [ ] `swot_bga_version_history` field created (LARGE_TEXT)
+- [ ] `swot_bga_services_catalog_ref` field created (LARGE_TEXT)
+- [ ] All eleven fields grouped under a "BGA / Solomon" section on
+      the contact profile
+- [ ] None of the eleven fields attached to any public form
 - [ ] `swot_growth_plan_drafted` tag added to the HL Tags list
-- [ ] HL field IDs captured for all seven fields and pasted into the
-      PR 2 follow-up conversation
+- [ ] HL field IDs captured for all eleven fields and pasted into
+      the follow-up build PR conversation (goes into the Worker's
+      `CONFIG.REPORT_FIELD_IDS` once the Worker PRs begin)
 
-Once every box above is ticked, PR 2 (Worker + console scaffolding)
-can begin. Nothing else in the build can proceed until this HL config
-is in place.
+Once every box above is ticked, the Worker + console scaffolding
+build PRs (see `docs/BGA_COPILOT_SPEC.md` §11) can begin. Nothing
+else in the BGA Copilot build can proceed until this HL config is
+in place.
 
 ---
 
