@@ -336,16 +336,70 @@ export async function handleConfirmCallDecisions(request, env, { checkPassword }
   // swot_bga_decisions matches the swot_bga_services_selected field.
   record.services_selected = dedupedSelected;
 
+  // (Codex P2 on #100, finding 1) swot_bga_decisions is stored as a
+  // flat array of individual decision records so `assembleCaseBundle`
+  // in case_load.js counts a reload correctly (its countJsonArrayItems
+  // returns 0 for a non-array). Each entry carries the section slug it
+  // came from so a later audit / renderer can reconstruct the
+  // category view.
+  const at = new Date().toISOString();
+  const decisionsArray = [];
+  for (const slug of CALL_DECISIONS_SECTIONS) {
+    for (const text of record[slug]) {
+      decisionsArray.push({ at, category: slug, text });
+    }
+  }
+
+  // (Codex P2 on #100, finding 2) swot_bga_services_selected is
+  // stored as an array of {service_id, status, reason} per spec §6.
+  // Status values:
+  //   "selected"              — item in record.services_selected
+  //   "declined_or_deferred"  — item in record.services_declined_or_deferred
+  // The record doesn't currently distinguish declined vs deferred; a
+  // later schema expansion can split the bucket. `reason` is reserved
+  // for a future strategist-edit UI pass (empty for now, never null,
+  // so downstream consumers can rely on the string type).
+  const servicesSelectedEntries = [];
+  for (const service_id of dedupedSelected) {
+    servicesSelectedEntries.push({ service_id, status: "selected", reason: "" });
+  }
+  const declinedOrDeferred = [];
+  const declinedCatalogSeen = new Set(); // dedupe against selected + each other
+  for (const id of dedupedSelected) declinedCatalogSeen.add(id);
+  for (const raw of record.services_declined_or_deferred) {
+    const id = String(raw).trim();
+    if (!id || !catalogIds.has(id)) {
+      return json({
+        success: false,
+        error: `services_declined_or_deferred contains unknown service_id "${id}" (not in catalog)`,
+      }, 400);
+    }
+    if (declinedCatalogSeen.has(id)) continue; // skip overlap with selected or duplicates
+    declinedCatalogSeen.add(id);
+    declinedOrDeferred.push(id);
+    servicesSelectedEntries.push({
+      service_id: id,
+      status: "declined_or_deferred",
+      reason: "",
+    });
+  }
+  // Keep the record's own services_declined_or_deferred in sync too.
+  record.services_declined_or_deferred = declinedOrDeferred;
+
   const wrote = await updateGhlCustomFields(contactId, [
-    { key: DECISIONS_FIELD_KEY, value: JSON.stringify(record) },
-    { key: SERVICES_SELECTED_FIELD_KEY, value: JSON.stringify(dedupedSelected) },
+    { key: DECISIONS_FIELD_KEY, value: JSON.stringify(decisionsArray) },
+    { key: SERVICES_SELECTED_FIELD_KEY, value: JSON.stringify(servicesSelectedEntries) },
   ], env);
   if (!wrote) return json({ success: false, error: "writeback to GHL failed" }, 503);
 
   return json({
     success: true,
     contactId,
+    // Return both the per-category record (for UI continuity between
+    // extract → confirm → re-render) AND the stored flat-array shape
+    // (so callers can see exactly what landed in GHL).
     decisions: record,
-    services_selected: dedupedSelected,
+    decisions_stored: decisionsArray,
+    services_selected: servicesSelectedEntries,
   });
 }
