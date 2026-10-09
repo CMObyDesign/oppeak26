@@ -808,11 +808,47 @@ function renderDraftContent(pane, content) {
     }
   }
   chunks.push('<div class="generate-row" style="margin-top:12px;">');
-  chunks.push('<div>Re-generating replaces the entire draft. Per-section edits above do not.</div>');
+  chunks.push('<div>Re-generating replaces the entire draft. Match-services replaces only Section 7. Per-section edits above do not touch other sections.</div>');
+  chunks.push('<div style="display:flex; gap:8px;">');
+  chunks.push('<button onclick="matchServices()" id="match-services-btn">Match services → Section 7</button>');
   chunks.push('<button onclick="generateRoadmap()" id="generate-roadmap-btn">Re-generate draft</button>');
+  chunks.push('</div>');
   chunks.push('</div>');
   chunks.push('<div id="generate-roadmap-error" class="error-banner hidden" style="margin-top:10px;"></div>');
   pane.innerHTML = chunks.join("");
+}
+
+async function matchServices() {
+  if (!currentContactId) return;
+  const btn = document.getElementById("match-services-btn");
+  if (!btn) return;
+  showGenerateRoadmapError(null);
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Matching…";
+  try {
+    const { status, data } = await callApi("/asksolomon/case/match-services", {
+      contactId: currentContactId,
+      mode: "write",
+    });
+    if (status === 401) { logout(); return; }
+    if (!data.success) {
+      showGenerateRoadmapError("Match failed: " + (data.error || "unknown"));
+      return;
+    }
+    renderDraftContent(document.getElementById("roadmap-pane"), data.draft);
+    const n = (data.matches && data.matches.included) ? data.matches.included.length : 0;
+    const nx = (data.matches && data.matches.excluded) ? data.matches.excluded.length : 0;
+    showGenerateRoadmapError(
+      "Section 7 updated. " + n + " recommended, " + nx + " considered-but-excluded. "
+      + "Catalog version: " + (data.catalog_version || "unknown") + ".",
+    );
+  } catch (err) {
+    showGenerateRoadmapError("Request failed: " + (err && err.message ? err.message : String(err)));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
 }
 
 // Client-side parser mirrors the server's parseDraftSections() signature
@@ -835,21 +871,32 @@ function parseDraftOnClient(text) {
   return { sections };
 }
 
+// Codex P2 on #96 (finding 2): the previous Cancel handler
+// interpolated the pre-edit text into an onclick="…" attribute via
+// JSON.stringify, which starts with a double quote and prematurely
+// terminated the attribute whenever a section had non-empty content.
+// Store the snapshot in a module-local map instead; Cancel reads it
+// out by section number.
+const sectionSnapshots = {};
+
 function startEditSection(n) {
   const block = document.querySelector('[data-section-n="' + n + '"]');
   if (!block) return;
   const body = document.getElementById("section-body-" + n);
   const currentText = (body.textContent || "").trim();
+  sectionSnapshots[n] = currentText;
   body.classList.add("editing");
   body.innerHTML = '<textarea id="section-edit-' + n + '">' + esc(currentText) + '</textarea>';
   // Replace Edit with Save / Cancel.
   const actions = block.querySelector(".section-actions");
   actions.innerHTML =
-    '<button onclick="cancelEditSection(' + n + ', ' + JSON.stringify(currentText).replace(/</g, "\\u003c") + ')">Cancel</button>' +
+    '<button onclick="cancelEditSection(' + n + ')">Cancel</button>' +
     '<button class="primary" onclick="saveEditSection(' + n + ')">Save</button>';
 }
 
-function cancelEditSection(n, previousText) {
+function cancelEditSection(n) {
+  const previousText = sectionSnapshots[n] || "";
+  delete sectionSnapshots[n];
   const body = document.getElementById("section-body-" + n);
   body.classList.remove("editing");
   body.innerHTML = previousText ? esc(previousText) : '<em style="color:#9ca3af;">(empty)</em>';
@@ -890,8 +937,11 @@ async function generateRoadmap() {
   if (!currentContactId) return;
   const btn = document.getElementById("generate-roadmap-btn");
   if (!btn) return;
-  const errEl = document.getElementById("generate-roadmap-error");
-  errEl.classList.add("hidden");
+  // Codex P2 on #96 (finding 3): the error banner captured before
+  // the fetch gets detached when renderDraftContent replaces the
+  // pane. Clear-by-id BEFORE and show-by-id AFTER so the handler
+  // writes to whichever banner node is currently in the DOM.
+  showGenerateRoadmapError(null);
   const prev = btn.textContent;
   btn.disabled = true;
   btn.textContent = "Generating… (30–60s)";
@@ -901,22 +951,29 @@ async function generateRoadmap() {
     });
     if (status === 401) { logout(); return; }
     if (!data.success) {
-      errEl.textContent = "Generate failed: " + (data.error || "unknown");
-      errEl.classList.remove("hidden");
+      showGenerateRoadmapError("Generate failed: " + (data.error || "unknown"));
       return;
     }
     renderDraftContent(document.getElementById("roadmap-pane"), data.draft);
     if (data.drafted_tag_applied === false) {
-      errEl.textContent = "Draft saved, but the swot_growth_plan_drafted tag didn't apply. Re-run to retry.";
-      errEl.classList.remove("hidden");
+      showGenerateRoadmapError(
+        "Draft saved, but the swot_growth_plan_drafted tag didn't apply. Re-run to retry.",
+      );
     }
   } catch (err) {
-    errEl.textContent = "Request failed: " + (err && err.message ? err.message : String(err));
-    errEl.classList.remove("hidden");
+    showGenerateRoadmapError("Request failed: " + (err && err.message ? err.message : String(err)));
   } finally {
     btn.disabled = false;
     btn.textContent = prev;
   }
+}
+
+function showGenerateRoadmapError(msg) {
+  const el = document.getElementById("generate-roadmap-error");
+  if (!el) return;
+  if (!msg) { el.classList.add("hidden"); el.textContent = ""; return; }
+  el.textContent = msg;
+  el.classList.remove("hidden");
 }
 
 document.getElementById("password-input")?.addEventListener("keydown", (e) => {

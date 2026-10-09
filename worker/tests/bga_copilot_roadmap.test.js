@@ -14,6 +14,7 @@ import {
   wrapGeneratedDraft,
   parseDraftSections,
   replaceSectionBody,
+  validateGeneratedDraft,
   handleGenerateRoadmapDraft,
   handleUpdateRoadmapSection,
 } from "../src/bga_copilot/roadmap.js";
@@ -65,8 +66,8 @@ function ghlContactRes({ tags = ["swot_paid_297"], customFields = [] } = {}) {
   );
 }
 
-function claudeRes(text) {
-  return new Response(JSON.stringify({ content: [{ text }] }), {
+function claudeRes(text, { stop_reason = "end_turn" } = {}) {
+  return new Response(JSON.stringify({ content: [{ text }], stop_reason }), {
     status: 200, headers: { "content-type": "application/json" },
   });
 }
@@ -262,6 +263,44 @@ describe("parseDraftSections + replaceSectionBody", () => {
   });
 });
 
+describe("validateGeneratedDraft — Codex P2 on #96 finding 1", () => {
+  it("rejects truncated responses (stop_reason=max_tokens)", () => {
+    const r = validateGeneratedDraft(sampleGoodDraft(), "max_tokens");
+    assert.equal(r.ok, false);
+    assert.match(r.error, /max_tokens/);
+  });
+
+  it("rejects a response that parses to < 8 sections", () => {
+    const partial = `${DRAFT_BANNER}\n\n## Section 1 — Where You Are Now\nbody\n\n## Section 2 — Verified Financial Position\nx`;
+    const r = validateGeneratedDraft(partial, "end_turn");
+    assert.equal(r.ok, false);
+    assert.match(r.error, /expected 8/);
+  });
+
+  it("rejects a response with sections out of order", () => {
+    const scrambled = [
+      DRAFT_BANNER, "",
+      "## Section 1 — a", "a",
+      "## Section 3 — c", "c",
+      "## Section 2 — b", "b",
+      "## Section 4 — d", "d",
+      "## Section 5 — e", "e",
+      "## Section 6 — f", "f",
+      "## Section 7 — g", "g",
+      "## Section 8 — h", "h",
+    ].join("\n");
+    const r = validateGeneratedDraft(scrambled, "end_turn");
+    assert.equal(r.ok, false);
+    assert.match(r.error, /order wrong/);
+  });
+
+  it("passes on a well-formed 8-section response and returns the wrapped draft", () => {
+    const r = validateGeneratedDraft(sampleGoodDraft(), "end_turn");
+    assert.equal(r.ok, true);
+    assert.ok(r.draft.startsWith(DRAFT_BANNER));
+  });
+});
+
 describe("POST /asksolomon/case/generate-roadmap-draft — handleGenerateRoadmapDraft", () => {
   it("401 without x-console-password", async () => {
     const res = await handleGenerateRoadmapDraft(post({ contactId: "c1" }, {}), makeEnv(), { checkPassword });
@@ -376,6 +415,47 @@ describe("POST /asksolomon/case/generate-roadmap-draft — handleGenerateRoadmap
       const body = await res.json();
       assert.equal(body.success, true);
       assert.equal(body.drafted_tag_applied, false);
+    } finally { cap.restore(); }
+  });
+
+  it("(Codex P2 on #96) 502 when Claude returns stop_reason=max_tokens; NO PUT, NO tag", async () => {
+    let putFired = false, tagFired = false;
+    const cap = stubFetch((url, init) => {
+      const u = String(url);
+      if (u.includes("api.anthropic.com")) return claudeRes(sampleGoodDraft(), { stop_reason: "max_tokens" });
+      if (u.includes("/customFields") && !u.includes("/contacts/")) return emptyCatalogRes();
+      if (u.endsWith("/tags")) { tagFired = true; return new Response("", { status: 200 }); }
+      if (u.includes("/contacts/") && init?.method === "PUT") { putFired = true; return new Response("", { status: 200 }); }
+      if (u.includes("/contacts/")) return ghlContactRes();
+      return new Response("not stubbed", { status: 500 });
+    });
+    try {
+      const res = await handleGenerateRoadmapDraft(post({ contactId: "c1" }), makeEnv(), { checkPassword });
+      assert.equal(res.status, 502);
+      const body = await res.json();
+      assert.match(body.error, /max_tokens/);
+      assert.equal(putFired, false, "must not write a truncated draft");
+      assert.equal(tagFired, false, "must not apply the call-ready tag on a truncated draft");
+    } finally { cap.restore(); }
+  });
+
+  it("(Codex P2 on #96) 502 when Claude returns malformed sections; NO PUT, NO tag", async () => {
+    const malformed = `${DRAFT_BANNER}\n\n## Section 1 — only one section`;
+    let putFired = false, tagFired = false;
+    const cap = stubFetch((url, init) => {
+      const u = String(url);
+      if (u.includes("api.anthropic.com")) return claudeRes(malformed);
+      if (u.includes("/customFields") && !u.includes("/contacts/")) return emptyCatalogRes();
+      if (u.endsWith("/tags")) { tagFired = true; return new Response("", { status: 200 }); }
+      if (u.includes("/contacts/") && init?.method === "PUT") { putFired = true; return new Response("", { status: 200 }); }
+      if (u.includes("/contacts/")) return ghlContactRes();
+      return new Response("not stubbed", { status: 500 });
+    });
+    try {
+      const res = await handleGenerateRoadmapDraft(post({ contactId: "c1" }), makeEnv(), { checkPassword });
+      assert.equal(res.status, 502);
+      assert.equal(putFired, false);
+      assert.equal(tagFired, false);
     } finally { cap.restore(); }
   });
 });
