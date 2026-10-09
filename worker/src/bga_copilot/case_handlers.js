@@ -25,6 +25,7 @@ import {
   fetchGHLCustomFieldsCatalog,
   buildFieldKeyToIdMap,
 } from "../ghl_catalog.js";
+import { hashVerifiedFinancialsRaw } from "./vf_hash.js";
 
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 const VERIFIED_FINANCIALS_FIELD_KEY = "swot_verified_financials";
@@ -194,6 +195,10 @@ export async function handleAuditCaseGaps(request, env, { checkPassword }) {
   const fullDiag = readCustomField(contact, "swot_full_report", idMap);
   const vfRaw = readCustomField(contact, VERIFIED_FINANCIALS_FIELD_KEY, idMap);
   const vfEntries = parseVerifiedFinancials(vfRaw);
+  // Codex P1 on #93 (concurrency, now in PR 5a): expose entries_hash
+  // on every read so the client can pin its next write to a known
+  // current state.
+  const entriesHash = await hashVerifiedFinancialsRaw(vfRaw);
 
   const presentIds = vfEntries
     .map((e) => (e && e.metric_id ? e.metric_id : null))
@@ -218,6 +223,7 @@ export async function handleAuditCaseGaps(request, env, { checkPassword }) {
       present_metric_ids: presentIds,
       missing_metric_ids: missingIds,
       entries_count: vfEntries.length,
+      entries_hash: entriesHash,
     },
     canonical_metrics: canonicalMetrics,
   });
@@ -225,9 +231,11 @@ export async function handleAuditCaseGaps(request, env, { checkPassword }) {
 
 /**
  * Expected request body shape for /asksolomon/case/verified-financials:
- *   { contactId: "<id>", entry: {
- *       metric_id, value, period, source_doc, note (optional)
- *   } }
+ *   {
+ *     contactId: "<id>",
+ *     entry: { metric_id, value, period, source_doc, note (optional) },
+ *     expected_entries_hash: "<sha256 hex, from the last /audit-gaps or /case/load>"
+ *   }
  *
  * Validates against the canonical metric vocabulary + per-shape value
  * rules. Upserts the entry (by metric_id) into the swot_verified_financials
@@ -236,6 +244,14 @@ export async function handleAuditCaseGaps(request, env, { checkPassword }) {
  * provenance is forced to "verified" — this tool only writes verified
  * entries. recorded_at is server-stamped so the audit trail reflects the
  * write time, not the strategist's clock.
+ *
+ * Concurrency (Codex P1 on #93, now PR 5a):
+ *   `expected_entries_hash` is required. The server computes the hash of
+ *   the current stored string and compares. On mismatch, 409 with
+ *   `current_entries_hash` + current `entries` so the client can
+ *   reconcile and retry. On match, the write proceeds; the response
+ *   carries the NEW `entries_hash` so the client can pin the next
+ *   write without re-fetching.
  *
  * Returns the updated full array so the console can refresh its table
  * without a round-trip to re-read GHL.
@@ -254,6 +270,16 @@ export async function handleVerifiedFinancialsPanel(request, env, { checkPasswor
   const incoming = body.entry;
   if (!incoming || typeof incoming !== "object") {
     return json({ success: false, error: "entry required" }, 400);
+  }
+
+  const expectedHash = typeof body.expected_entries_hash === "string"
+    ? body.expected_entries_hash.trim().toLowerCase()
+    : "";
+  if (!expectedHash) {
+    return json({
+      success: false,
+      error: "expected_entries_hash required (read it from /case/load or /case/audit-gaps)",
+    }, 400);
   }
 
   // Build the entry we'll store. Force provenance; stamp recorded_at.
@@ -276,20 +302,41 @@ export async function handleVerifiedFinancialsPanel(request, env, { checkPasswor
   // Codex P1 on #93: id-based resolution — see resolveFieldIdMap docstring.
   const idMap = await resolveFieldIdMap(env);
   const currentRaw = readCustomField(contact, VERIFIED_FINANCIALS_FIELD_KEY, idMap);
+
+  // Optimistic concurrency guard. The hash is computed against the raw
+  // stored string the Worker last wrote; any byte-level difference
+  // (another save in flight, a strategist editing in HL directly)
+  // trips a mismatch and the client refetches.
+  const currentHash = await hashVerifiedFinancialsRaw(currentRaw);
+  if (currentHash !== expectedHash) {
+    const current = parseVerifiedFinancials(currentRaw);
+    return json({
+      success: false,
+      error: "entries_hash mismatch — refetch and retry",
+      conflict: true,
+      current_entries_hash: currentHash,
+      entries: current,
+    }, 409);
+  }
+
   const current = parseVerifiedFinancials(currentRaw);
   const next = upsertEntry(current, entry);
+  const nextRaw = JSON.stringify(next);
 
   const ok = await updateGhlFields(
     contactId,
-    [{ key: VERIFIED_FINANCIALS_FIELD_KEY, field_value: JSON.stringify(next) }],
+    [{ key: VERIFIED_FINANCIALS_FIELD_KEY, field_value: nextRaw }],
     env,
   );
   if (!ok) return json({ success: false, error: "writeback to GHL failed" }, 503);
+
+  const nextHash = await hashVerifiedFinancialsRaw(nextRaw);
 
   return json({
     success: true,
     contactId,
     entries: next,
+    entries_hash: nextHash,
     added_or_updated: entry.metric_id,
   });
 }

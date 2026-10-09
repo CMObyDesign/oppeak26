@@ -28,6 +28,7 @@ import {
   fetchGHLCustomFieldsCatalog,
   buildFieldKeyToIdMap,
 } from "../ghl_catalog.js";
+import { hashVerifiedFinancialsRaw } from "./vf_hash.js";
 
 const PAID_297_TAG = "swot_paid_297";
 const REHAB_TAG = "swot_rehab";
@@ -394,5 +395,12 @@ export async function handleCaseLoad(request, env, { checkPassword }) {
   catch (e) { console.warn(`[case_load] catalog fetch: ${e?.message || e}`); }
   const idMap = buildFieldKeyToIdMap(catalog);
   const bundle = assembleCaseBundle(contact, idMap, { contactId, catalog });
+
+  // Codex P1 on #93 (concurrency, now PR 5a): expose entries_hash so
+  // the client can pin its next verified-financials write to the state
+  // it just loaded.
+  const vfRaw = readCustomField(contact, "swot_verified_financials", idMap);
+  bundle.verified_financials.entries_hash = await hashVerifiedFinancialsRaw(vfRaw);
+
   return json({ success: true, ...bundle });
 }

@@ -201,6 +201,45 @@ export const CASE_VIEW_PAGE = `<!DOCTYPE html>
     <div class="panel">
       <h2>Verified financials</h2>
       <div id="verified-financials-pane"></div>
+
+      <!-- Write form (PR 5a). Lets the strategist record one verified
+           financial entry at a time. Each save pins the write to the
+           hash the client last read; the server returns 409 if another
+           save landed in between and the UI prompts for refresh. -->
+      <div class="vf-form-wrap" id="vf-form-wrap" style="margin-top:16px; padding-top:16px; border-top:1px solid #e5e7eb;">
+        <h3 style="font-size:12px; text-transform:uppercase; letter-spacing:1.2px; color:#374151; margin:0 0 10px; font-weight:600;">Record a verified financial</h3>
+        <div class="form-row" style="align-items:flex-start;">
+          <div>
+            <label for="vf-metric">Metric</label>
+            <select id="vf-metric" onchange="renderVfValueInput()"></select>
+          </div>
+          <div id="vf-value-wrap">
+            <label for="vf-value">Value</label>
+            <input id="vf-value" type="text" placeholder="(pick a metric)">
+          </div>
+        </div>
+        <div class="form-row">
+          <div>
+            <label for="vf-period">Period</label>
+            <input id="vf-period" type="text" placeholder="e.g. 2026-09-30 or Q3 2026">
+          </div>
+          <div>
+            <label for="vf-source-doc">Source document</label>
+            <input id="vf-source-doc" type="text" placeholder="e.g. balance_sheet_2026-09.pdf">
+          </div>
+        </div>
+        <div class="form-row">
+          <div style="flex:1;">
+            <label for="vf-note">Note (optional)</label>
+            <input id="vf-note" type="text" placeholder="e.g. reconciled by bookkeeper">
+          </div>
+          <div style="flex:0 0 auto; align-self:flex-end;">
+            <button id="vf-save-button" class="primary" onclick="saveVerifiedFinancial()">Save entry</button>
+          </div>
+        </div>
+        <div id="vf-form-error" class="error-banner hidden" style="margin-top:10px;"></div>
+        <div id="vf-form-success" class="hint hidden" style="margin-top:8px; color:#065f46;"></div>
+      </div>
     </div>
 
     <div class="panel">
@@ -388,6 +427,13 @@ function stateTile(label, truthy) {
     + '</div>';
 }
 
+// Module state for the write form: the current contactId, the latest
+// entries_hash the server handed us, and the canonical metrics spec
+// so we can shape-adapt the value input on each metric change.
+let currentContactId = "";
+let currentEntriesHash = "";
+let canonicalMetricsSpec = {};
+
 function renderVerifiedFinancials(bundle) {
   const pane = document.getElementById("verified-financials-pane");
   const vf = bundle.verified_financials || { entries: [], present_metric_ids: [], missing_metric_ids: [] };
@@ -413,6 +459,208 @@ function renderVerifiedFinancials(bundle) {
     }
   }
   pane.innerHTML = '<div class="metric-grid">' + cards.join("") + '</div>';
+
+  // Keep the write form synced with the current bundle.
+  canonicalMetricsSpec = canonical;
+  currentEntriesHash = vf.entries_hash || "";
+  populateVfMetricDropdown(canonical);
+  renderVfValueInput();
+}
+
+function populateVfMetricDropdown(canonical) {
+  const sel = document.getElementById("vf-metric");
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = "";
+  const first = document.createElement("option");
+  first.value = "";
+  first.textContent = "— pick a metric —";
+  sel.appendChild(first);
+  for (const id of Object.keys(canonical)) {
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = (canonical[id].label || id);
+    sel.appendChild(opt);
+  }
+  if (prev && canonical[prev]) sel.value = prev;
+}
+
+function renderVfValueInput() {
+  const wrap = document.getElementById("vf-value-wrap");
+  if (!wrap) return;
+  const metricId = document.getElementById("vf-metric").value;
+  const spec = metricId ? canonicalMetricsSpec[metricId] : null;
+
+  if (!spec) {
+    wrap.innerHTML =
+      '<label for="vf-value">Value</label>' +
+      '<input id="vf-value" type="text" placeholder="(pick a metric)" disabled>';
+    return;
+  }
+
+  if (spec.shape === "ar_aging") {
+    wrap.innerHTML =
+      '<label>AR aging (' + esc(spec.unit || "USD") + ')</label>' +
+      '<div style="display:flex; gap:8px;">' +
+        '<input id="vf-value-d30"      type="number" min="0" step="0.01" placeholder="30 days">' +
+        '<input id="vf-value-d60"      type="number" min="0" step="0.01" placeholder="60 days">' +
+        '<input id="vf-value-d90plus"  type="number" min="0" step="0.01" placeholder="90+ days">' +
+      '</div>';
+    return;
+  }
+
+  if (spec.shape === "tax_enum") {
+    wrap.innerHTML =
+      '<label for="vf-value">Status</label>' +
+      '<select id="vf-value">' +
+        '<option value="">— pick —</option>' +
+        '<option value="current">current</option>' +
+        '<option value="behind">behind</option>' +
+        '<option value="in_default">in_default</option>' +
+      '</select>';
+    return;
+  }
+
+  if (spec.shape === "text") {
+    wrap.innerHTML =
+      '<label for="vf-value">' + esc(spec.label || "Value") + '</label>' +
+      '<input id="vf-value" type="text" placeholder="free-form text">';
+    return;
+  }
+
+  // Default: number
+  const unitHint = spec.unit ? " (" + esc(spec.unit) + ")" : "";
+  wrap.innerHTML =
+    '<label for="vf-value">Value' + unitHint + '</label>' +
+    '<input id="vf-value" type="number" step="0.01" placeholder="e.g. 184221">';
+}
+
+function readVfValueFromForm(metricId) {
+  const spec = canonicalMetricsSpec[metricId];
+  if (!spec) return { ok: false, error: "pick a metric" };
+
+  if (spec.shape === "ar_aging") {
+    const d30 = parseFloat(document.getElementById("vf-value-d30").value);
+    const d60 = parseFloat(document.getElementById("vf-value-d60").value);
+    const d90 = parseFloat(document.getElementById("vf-value-d90plus").value);
+    if (![d30, d60, d90].every(Number.isFinite)) {
+      return { ok: false, error: "AR aging requires three numeric values" };
+    }
+    return { ok: true, value: { d30, d60, d90_plus: d90 } };
+  }
+  if (spec.shape === "tax_enum") {
+    const v = document.getElementById("vf-value").value;
+    if (!v) return { ok: false, error: "pick a status" };
+    return { ok: true, value: v };
+  }
+  if (spec.shape === "text") {
+    const v = document.getElementById("vf-value").value.trim();
+    if (!v) return { ok: false, error: "value required" };
+    return { ok: true, value: v };
+  }
+  // number
+  const v = parseFloat(document.getElementById("vf-value").value);
+  if (!Number.isFinite(v)) return { ok: false, error: "numeric value required" };
+  return { ok: true, value: v };
+}
+
+function showVfError(msg, offerRefresh) {
+  const el = document.getElementById("vf-form-error");
+  el.innerHTML = "";
+  const span = document.createElement("span");
+  span.textContent = msg;
+  el.appendChild(span);
+  if (offerRefresh) {
+    el.appendChild(document.createTextNode(" "));
+    const btn = document.createElement("button");
+    btn.textContent = "Refresh now";
+    btn.className = "btn";
+    btn.style.marginLeft = "8px";
+    btn.onclick = () => { clearVfMessages(); loadCase(); };
+    el.appendChild(btn);
+  }
+  el.classList.remove("hidden");
+  document.getElementById("vf-form-success").classList.add("hidden");
+}
+function showVfSuccess(msg) {
+  const el = document.getElementById("vf-form-success");
+  el.textContent = msg;
+  el.classList.remove("hidden");
+  document.getElementById("vf-form-error").classList.add("hidden");
+}
+function clearVfMessages() {
+  document.getElementById("vf-form-error").classList.add("hidden");
+  document.getElementById("vf-form-success").classList.add("hidden");
+}
+
+async function saveVerifiedFinancial() {
+  clearVfMessages();
+  if (!currentContactId) {
+    showVfError("Load a case first.", false);
+    return;
+  }
+  const metricId = document.getElementById("vf-metric").value;
+  if (!metricId) { showVfError("Pick a metric.", false); return; }
+  const period = document.getElementById("vf-period").value.trim();
+  const sourceDoc = document.getElementById("vf-source-doc").value.trim();
+  const note = document.getElementById("vf-note").value.trim();
+  if (!period) { showVfError("Period required (e.g. 2026-09-30).", false); return; }
+  if (!sourceDoc) { showVfError("Source document required.", false); return; }
+
+  const v = readVfValueFromForm(metricId);
+  if (!v.ok) { showVfError(v.error, false); return; }
+
+  const entry = { metric_id: metricId, value: v.value, period, source_doc: sourceDoc };
+  if (note) entry.note = note;
+
+  const btn = document.getElementById("vf-save-button");
+  btn.disabled = true;
+  const prevLabel = btn.textContent;
+  btn.textContent = "Saving…";
+  try {
+    const { status, data } = await callApi("/asksolomon/case/verified-financials", {
+      contactId: currentContactId,
+      entry,
+      expected_entries_hash: currentEntriesHash,
+    });
+    if (status === 401) {
+      logout();
+      showVfError("Unauthorized — password rejected.", false);
+      return;
+    }
+    if (status === 409 || data.conflict === true) {
+      // Someone else wrote first — bring the UI back in sync.
+      currentEntriesHash = data.current_entries_hash || currentEntriesHash;
+      showVfError("Another save landed first — refresh and try again.", true);
+      return;
+    }
+    if (!data.success) {
+      showVfError("Save failed: " + (data.error || "unknown"), false);
+      return;
+    }
+    currentEntriesHash = data.entries_hash || "";
+    // Rebuild the metric cards from the server's authoritative array
+    // without a round-trip to re-load everything else.
+    renderVerifiedFinancials({
+      verified_financials: {
+        entries: data.entries,
+        entries_hash: currentEntriesHash,
+      },
+      canonical_metrics: canonicalMetricsSpec,
+    });
+    showVfSuccess('Saved "' + (canonicalMetricsSpec[metricId]?.label || metricId) + '".');
+    // Clear value / note / period / source_doc for the next entry; keep
+    // the metric picker so the strategist can edit the same slot again.
+    document.getElementById("vf-period").value = "";
+    document.getElementById("vf-source-doc").value = "";
+    document.getElementById("vf-note").value = "";
+    renderVfValueInput();
+  } catch (err) {
+    showVfError("Request failed: " + (err && err.message ? err.message : String(err)), false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prevLabel;
+  }
 }
 
 function formatValue(v, spec) {
@@ -454,6 +702,7 @@ function renderContentPane(id, content) {
 
 function renderCase(bundle, auditData) {
   document.getElementById("case-content").classList.remove("hidden");
+  currentContactId = bundle.contactId || "";
   renderHeader(bundle);
   renderAudit(bundle, auditData);
   renderVerifiedFinancials(bundle);

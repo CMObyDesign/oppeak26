@@ -21,6 +21,9 @@ import {
   handleVerifiedFinancialsPanel,
 } from "../src/bga_copilot/case_handlers.js";
 import { _resetCatalogCacheForTests } from "../src/ghl_catalog.js";
+import { hashVerifiedFinancialsRaw, sha256Hex } from "../src/bga_copilot/vf_hash.js";
+
+const EMPTY_HASH_PROMISE = hashVerifiedFinancialsRaw("");
 
 beforeEach(() => {
   // Keep the catalog cache from leaking across tests, now that readCustomField
@@ -210,6 +213,33 @@ describe("POST /asksolomon/case/audit-gaps — handleAuditCaseGaps", () => {
       cap.restore();
     }
   });
+
+  it("(PR 5a) response carries verified_financials.entries_hash matching the stored string", async () => {
+    const existing = [{ metric_id: "cash_on_hand", value: 100 }];
+    const existingRaw = JSON.stringify(existing);
+    const cap = stubFetch(() => ghlContactResponse([
+      { fieldKey: "contact.swot_verified_financials", value: existingRaw },
+    ]));
+    try {
+      const res = await handleAuditCaseGaps(post({ contactId: "c1" }), makeEnv(), { checkPassword });
+      const body = await res.json();
+      const expected = await sha256Hex(existingRaw);
+      assert.equal(body.verified_financials.entries_hash, expected);
+    } finally {
+      cap.restore();
+    }
+  });
+
+  it("(PR 5a) entries_hash for an empty stored field is sha256(\"\")", async () => {
+    const cap = stubFetch(() => ghlContactResponse([]));
+    try {
+      const res = await handleAuditCaseGaps(post({ contactId: "c1" }), makeEnv(), { checkPassword });
+      const body = await res.json();
+      assert.equal(body.verified_financials.entries_hash, await sha256Hex(""));
+    } finally {
+      cap.restore();
+    }
+  });
 });
 
 describe("POST /asksolomon/case/verified-financials — handleVerifiedFinancialsPanel", () => {
@@ -220,26 +250,49 @@ describe("POST /asksolomon/case/verified-financials — handleVerifiedFinancials
     source_doc: "balance_sheet_2026-09.pdf",
   };
 
+  // The expected hash on an empty stored field is sha256("") — well-
+  // known constant; keep this computed each test boot so a tweak to
+  // the hash impl doesn't make the test lie.
+  let EMPTY_HASH;
+
   it("401 without x-console-password", async () => {
-    const req = post({ contactId: "c1", entry: validEntry }, {});
+    EMPTY_HASH = await EMPTY_HASH_PROMISE;
+    const req = post({ contactId: "c1", entry: validEntry, expected_entries_hash: EMPTY_HASH }, {});
     const res = await handleVerifiedFinancialsPanel(req, makeEnv(), { checkPassword });
     assert.equal(res.status, 401);
   });
 
   it("400 without contactId", async () => {
-    const req = post({ entry: validEntry });
+    EMPTY_HASH = await EMPTY_HASH_PROMISE;
+    const req = post({ entry: validEntry, expected_entries_hash: EMPTY_HASH });
     const res = await handleVerifiedFinancialsPanel(req, makeEnv(), { checkPassword });
     assert.equal(res.status, 400);
   });
 
   it("400 without entry", async () => {
-    const req = post({ contactId: "c1" });
+    EMPTY_HASH = await EMPTY_HASH_PROMISE;
+    const req = post({ contactId: "c1", expected_entries_hash: EMPTY_HASH });
     const res = await handleVerifiedFinancialsPanel(req, makeEnv(), { checkPassword });
     assert.equal(res.status, 400);
   });
 
+  it("(PR 5a) 400 without expected_entries_hash", async () => {
+    // Codex P1 on #93: concurrency. The hash is required — no fail-
+    // open path. Clients must read the current hash before writing.
+    const req = post({ contactId: "c1", entry: validEntry });
+    const res = await handleVerifiedFinancialsPanel(req, makeEnv(), { checkPassword });
+    assert.equal(res.status, 400);
+    const body = await res.json();
+    assert.match(body.error, /expected_entries_hash/);
+  });
+
   it("400 on unknown metric_id", async () => {
-    const req = post({ contactId: "c1", entry: { ...validEntry, metric_id: "sales_pipeline" } });
+    EMPTY_HASH = await EMPTY_HASH_PROMISE;
+    const req = post({
+      contactId: "c1",
+      entry: { ...validEntry, metric_id: "sales_pipeline" },
+      expected_entries_hash: EMPTY_HASH,
+    });
     const res = await handleVerifiedFinancialsPanel(req, makeEnv(), { checkPassword });
     assert.equal(res.status, 400);
     const body = await res.json();
@@ -247,20 +300,26 @@ describe("POST /asksolomon/case/verified-financials — handleVerifiedFinancials
   });
 
   it("400 on wrong value shape (string for number metric)", async () => {
-    const req = post({ contactId: "c1", entry: { ...validEntry, value: "184221" } });
+    EMPTY_HASH = await EMPTY_HASH_PROMISE;
+    const req = post({
+      contactId: "c1",
+      entry: { ...validEntry, value: "184221" },
+      expected_entries_hash: EMPTY_HASH,
+    });
     const res = await handleVerifiedFinancialsPanel(req, makeEnv(), { checkPassword });
     assert.equal(res.status, 400);
   });
 
   it("400 on missing period / source_doc", async () => {
+    EMPTY_HASH = await EMPTY_HASH_PROMISE;
     let res = await handleVerifiedFinancialsPanel(
-      post({ contactId: "c1", entry: { ...validEntry, period: "" } }),
+      post({ contactId: "c1", entry: { ...validEntry, period: "" }, expected_entries_hash: EMPTY_HASH }),
       makeEnv(),
       { checkPassword },
     );
     assert.equal(res.status, 400);
     res = await handleVerifiedFinancialsPanel(
-      post({ contactId: "c1", entry: { ...validEntry, source_doc: "" } }),
+      post({ contactId: "c1", entry: { ...validEntry, source_doc: "" }, expected_entries_hash: EMPTY_HASH }),
       makeEnv(),
       { checkPassword },
     );
@@ -268,6 +327,7 @@ describe("POST /asksolomon/case/verified-financials — handleVerifiedFinancials
   });
 
   it("writes a new entry when swot_verified_financials is empty, forces provenance=verified and stamps recorded_at", async () => {
+    EMPTY_HASH = await EMPTY_HASH_PROMISE;
     let writeBody;
     const cap = stubFetch((url, init) => {
       if (init?.method === "PUT") {
@@ -278,7 +338,7 @@ describe("POST /asksolomon/case/verified-financials — handleVerifiedFinancials
     });
     try {
       const res = await handleVerifiedFinancialsPanel(
-        post({ contactId: "c1", entry: validEntry }),
+        post({ contactId: "c1", entry: validEntry, expected_entries_hash: EMPTY_HASH }),
         makeEnv(),
         { checkPassword },
       );
@@ -290,6 +350,16 @@ describe("POST /asksolomon/case/verified-financials — handleVerifiedFinancials
       const stored = body.entries[0];
       assert.equal(stored.provenance, "verified");
       assert.match(stored.recorded_at, /^\d{4}-\d{2}-\d{2}T/);
+
+      // (PR 5a) Response must carry the new entries_hash so the client
+      // can pin its next write without a re-fetch.
+      assert.ok(typeof body.entries_hash === "string");
+      assert.equal(body.entries_hash.length, 64);
+      // And that hash must match what the server would compute from
+      // the PUT body it just wrote.
+      const putField = writeBody.customFields.find((f) => f.key === "swot_verified_financials");
+      const expected = await sha256Hex(putField.field_value);
+      assert.equal(body.entries_hash, expected);
 
       // The PUT body must carry the swot_verified_financials field with the
       // JSON-string-serialized array.
@@ -308,19 +378,22 @@ describe("POST /asksolomon/case/verified-financials — handleVerifiedFinancials
     const existing = [
       { metric_id: "cash_on_hand", value: 100, provenance: "verified" },
     ];
+    const existingRaw = JSON.stringify(existing);
+    const existingHash = await hashVerifiedFinancialsRaw(existingRaw);
     const cap = stubFetch((url, init) => {
       if (init?.method === "PUT") return new Response("", { status: 200 });
       return ghlContactResponse([
-        { fieldKey: "contact.swot_verified_financials", value: JSON.stringify(existing) },
+        { fieldKey: "contact.swot_verified_financials", value: existingRaw },
       ]);
     });
     try {
       const res = await handleVerifiedFinancialsPanel(
-        post({ contactId: "c1", entry: validEntry }),
+        post({ contactId: "c1", entry: validEntry, expected_entries_hash: existingHash }),
         makeEnv(),
         { checkPassword },
       );
       const body = await res.json();
+      assert.equal(res.status, 200);
       assert.equal(body.entries.length, 1); // still 1 — upserted, not appended
       assert.equal(body.entries[0].value, 184221);
     } finally {
@@ -328,14 +401,73 @@ describe("POST /asksolomon/case/verified-financials — handleVerifiedFinancials
     }
   });
 
+  it("(PR 5a) 409 when expected_entries_hash does not match current", async () => {
+    const existing = [{ metric_id: "revenue_ttm", value: 1800000, provenance: "verified" }];
+    const existingRaw = JSON.stringify(existing);
+    const existingHash = await hashVerifiedFinancialsRaw(existingRaw);
+
+    let putCount = 0;
+    const cap = stubFetch((url, init) => {
+      if (init?.method === "PUT") { putCount++; return new Response("", { status: 200 }); }
+      return ghlContactResponse([
+        { fieldKey: "contact.swot_verified_financials", value: existingRaw },
+      ]);
+    });
+    try {
+      // Client thinks the state is empty; actually it already has a revenue_ttm entry.
+      const stale = await hashVerifiedFinancialsRaw("");
+      const res = await handleVerifiedFinancialsPanel(
+        post({ contactId: "c1", entry: validEntry, expected_entries_hash: stale }),
+        makeEnv(),
+        { checkPassword },
+      );
+      assert.equal(res.status, 409);
+      const body = await res.json();
+      assert.equal(body.success, false);
+      assert.equal(body.conflict, true);
+      assert.equal(body.current_entries_hash, existingHash);
+      // Server must surface the current entries so the client can
+      // reconcile without a second fetch.
+      assert.equal(body.entries.length, 1);
+      assert.equal(body.entries[0].metric_id, "revenue_ttm");
+      // Critically: no PUT fires on 409.
+      assert.equal(putCount, 0);
+    } finally {
+      cap.restore();
+    }
+  });
+
+  it("(PR 5a) hash is case-insensitive and whitespace-trimmed on input", async () => {
+    EMPTY_HASH = await EMPTY_HASH_PROMISE;
+    const cap = stubFetch((url, init) => {
+      if (init?.method === "PUT") return new Response("", { status: 200 });
+      return ghlContactResponse([]);
+    });
+    try {
+      const res = await handleVerifiedFinancialsPanel(
+        post({
+          contactId: "c1",
+          entry: validEntry,
+          expected_entries_hash: "  " + EMPTY_HASH.toUpperCase() + "  ",
+        }),
+        makeEnv(),
+        { checkPassword },
+      );
+      assert.equal(res.status, 200);
+    } finally {
+      cap.restore();
+    }
+  });
+
   it("NEVER writes swot_growth_plan or applies swot_growth_plan_ready", async () => {
+    EMPTY_HASH = await EMPTY_HASH_PROMISE;
     const cap = stubFetch((url, init) => {
       if (init?.method === "PUT") return new Response("", { status: 200 });
       return ghlContactResponse([]);
     });
     try {
       await handleVerifiedFinancialsPanel(
-        post({ contactId: "c1", entry: validEntry }),
+        post({ contactId: "c1", entry: validEntry, expected_entries_hash: EMPTY_HASH }),
         makeEnv(),
         { checkPassword },
       );
@@ -353,13 +485,14 @@ describe("POST /asksolomon/case/verified-financials — handleVerifiedFinancials
   });
 
   it("503 when GHL writeback fails", async () => {
+    EMPTY_HASH = await EMPTY_HASH_PROMISE;
     const cap = stubFetch((url, init) => {
       if (init?.method === "PUT") return new Response("boom", { status: 500 });
       return ghlContactResponse([]);
     });
     try {
       const res = await handleVerifiedFinancialsPanel(
-        post({ contactId: "c1", entry: validEntry }),
+        post({ contactId: "c1", entry: validEntry, expected_entries_hash: EMPTY_HASH }),
         makeEnv(),
         { checkPassword },
       );
@@ -370,6 +503,7 @@ describe("POST /asksolomon/case/verified-financials — handleVerifiedFinancials
   });
 
   it("accepts ar_30_60_90 structured value", async () => {
+    EMPTY_HASH = await EMPTY_HASH_PROMISE;
     const cap = stubFetch((url, init) => {
       if (init?.method === "PUT") return new Response("", { status: 200 });
       return ghlContactResponse([]);
@@ -384,6 +518,7 @@ describe("POST /asksolomon/case/verified-financials — handleVerifiedFinancials
             period: "2026-09-30",
             source_doc: "AR_aging.pdf",
           },
+          expected_entries_hash: EMPTY_HASH,
         }),
         makeEnv(),
         { checkPassword },
@@ -395,6 +530,7 @@ describe("POST /asksolomon/case/verified-financials — handleVerifiedFinancials
   });
 
   it("accepts debt_terms text value", async () => {
+    EMPTY_HASH = await EMPTY_HASH_PROMISE;
     const cap = stubFetch((url, init) => {
       if (init?.method === "PUT") return new Response("", { status: 200 });
       return ghlContactResponse([]);
@@ -409,6 +545,7 @@ describe("POST /asksolomon/case/verified-financials — handleVerifiedFinancials
             period: "2026-09-30",
             source_doc: "loan_agreement.pdf",
           },
+          expected_entries_hash: EMPTY_HASH,
         }),
         makeEnv(),
         { checkPassword },

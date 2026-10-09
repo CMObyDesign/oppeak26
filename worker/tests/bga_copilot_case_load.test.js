@@ -23,6 +23,7 @@ import {
   extractPaid297IntakeAnswers,
 } from "../src/bga_copilot/case_load.js";
 import { _resetCatalogCacheForTests } from "../src/ghl_catalog.js";
+import { sha256Hex } from "../src/bga_copilot/vf_hash.js";
 import worker from "../src/index.js";
 
 function makeEnv() {
@@ -292,6 +293,32 @@ describe("POST /asksolomon/case/load — handleCaseLoad", () => {
       const body = await res.json();
       assert.equal(body.classification, "needs-attention");
       assert.deepEqual(body.opportunity_flags, ["ar_aging_opp"]);
+    } finally { restore(); }
+  });
+
+  it("(PR 5a) bundle carries verified_financials.entries_hash matching the stored string", async () => {
+    const existing = JSON.stringify([{ metric_id: "cash_on_hand", value: 100 }]);
+    const { restore } = stubFetch(routedResponder({
+      contact: ghlContact({
+        customFields: [
+          { fieldKey: "contact.swot_verified_financials", value: existing },
+        ],
+      }),
+    }));
+    try {
+      const res = await handleCaseLoad(post({ contactId: "c1" }), makeEnv(), { checkPassword });
+      const body = await res.json();
+      const expected = await sha256Hex(existing);
+      assert.equal(body.verified_financials.entries_hash, expected);
+    } finally { restore(); }
+  });
+
+  it("(PR 5a) bundle entries_hash for an empty field is sha256(\"\")", async () => {
+    const { restore } = stubFetch(routedResponder({ contact: ghlContact() }));
+    try {
+      const res = await handleCaseLoad(post({ contactId: "c1" }), makeEnv(), { checkPassword });
+      const body = await res.json();
+      assert.equal(body.verified_financials.entries_hash, await sha256Hex(""));
     } finally { restore(); }
   });
 
