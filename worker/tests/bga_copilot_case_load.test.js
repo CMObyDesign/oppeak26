@@ -17,8 +17,13 @@
 import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
-import { handleCaseLoad, assembleCaseBundle } from "../src/bga_copilot/case_load.js";
+import {
+  handleCaseLoad,
+  assembleCaseBundle,
+  extractPaid297IntakeAnswers,
+} from "../src/bga_copilot/case_load.js";
 import { _resetCatalogCacheForTests } from "../src/ghl_catalog.js";
+import worker from "../src/index.js";
 
 function makeEnv() {
   return {
@@ -388,10 +393,39 @@ describe("assembleCaseBundle — pure assembly (no network)", () => {
     assert.equal(b.status.day_since_paid_297, null);
   });
 
-  it("day_since_paid_297 clamps to 0 when stamp is in the future", () => {
+  it("(Codex P2 on #94) day_since_paid_297 is null even when dateAdded is set but no paid_297_applied_at", () => {
+    // dateAdded predates paid_297 purchase for upgraded leads; falling
+    // back to it mislabels old contacts as months-overdue. Prefer null.
+    const b = assembleCaseBundle(
+      { tags: ["swot_paid_297"], dateAdded: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString() },
+      idMap, { contactId: "c1" },
+    );
+    assert.equal(b.status.day_since_paid_297, null);
+  });
+
+  it("day_since_paid_297 reads swot_paid_297_applied_at when present", () => {
+    const threeDaysAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+    const b = assembleCaseBundle(
+      {
+        tags: ["swot_paid_297"],
+        customFields: [
+          { fieldKey: "contact.swot_paid_297_applied_at", value: threeDaysAgo },
+        ],
+      },
+      idMap, { contactId: "c1" },
+    );
+    assert.equal(b.status.day_since_paid_297, 3);
+  });
+
+  it("day_since_paid_297 clamps to 0 when swot_paid_297_applied_at is in the future", () => {
     const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
     const b = assembleCaseBundle(
-      { tags: ["swot_paid_297"], dateAdded: future },
+      {
+        tags: ["swot_paid_297"],
+        customFields: [
+          { fieldKey: "contact.swot_paid_297_applied_at", value: future },
+        ],
+      },
       idMap, { contactId: "c1" },
     );
     assert.equal(b.status.day_since_paid_297, 0);
@@ -421,5 +455,121 @@ describe("assembleCaseBundle — pure assembly (no network)", () => {
     const b = assembleCaseBundle(contact, map, { contactId: "c1" });
     assert.equal(b.intake.business_playbook, "resolved via idMap");
     assert.equal(b.intake.strategist_brief, "brief via idMap");
+  });
+
+  it("(Codex P1 on #94) intake.paid_297_answers surfaces client narrative fields", () => {
+    const contact = {
+      tags: ["swot_paid_297"],
+      customFields: [
+        { id: "id-q1", value: "We make custom widgets for aerospace." },
+        { id: "id-q2", value: "Monthly recurring plus one-time project fees." },
+        // Also present but should be excluded:
+        { id: "id-pb",   value: "## Generated playbook, don't duplicate" },
+        { id: "id-swot", value: "Solomon-owned field, filter out" },
+        { id: "id-file", value: "https://files.example.com/aging.pdf" },
+      ],
+    };
+    const catalog = {
+      "id-q1":   { name: "What do you sell?",   fieldKey: "contact.paid_297_q1_what_sold" },
+      "id-q2":   { name: "Revenue model",       fieldKey: "contact.paid_297_q2_revenue_model" },
+      "id-pb":   { name: "Business Playbook",   fieldKey: "contact.business_playbook" },
+      "id-swot": { name: "Internal only",       fieldKey: "contact.swot_internal_notes" },
+      "id-file": { name: "AR Aging PDF Upload", fieldKey: "contact.ar_aging_file_upload" },
+    };
+    const b = assembleCaseBundle(contact, {}, { contactId: "c1", catalog });
+    const answers = b.intake.paid_297_answers;
+    assert.equal(answers.length, 2);
+    assert.deepEqual(answers.map(a => a.fieldKey).sort(), [
+      "paid_297_q1_what_sold",
+      "paid_297_q2_revenue_model",
+    ]);
+    assert.ok(answers.find(a => a.label === "What do you sell?"));
+  });
+
+  it("(Codex P1 on #94) intake.paid_297_answers is [] when nothing qualifies", () => {
+    const b = assembleCaseBundle({ tags: ["swot_paid_297"] }, idMap, { contactId: "c1" });
+    assert.deepEqual(b.intake.paid_297_answers, []);
+  });
+});
+
+describe("extractPaid297IntakeAnswers — filter rules (Codex P1 on #94)", () => {
+  it("drops empty values", () => {
+    const contact = { customFields: [
+      { id: "a", value: "   " },
+      { id: "b", value: "" },
+    ]};
+    const catalog = {
+      a: { name: "Q A", fieldKey: "contact.paid_297_qa" },
+      b: { name: "Q B", fieldKey: "contact.paid_297_qb" },
+    };
+    assert.deepEqual(extractPaid297IntakeAnswers(contact, catalog), []);
+  });
+
+  it("drops Solomon-owned fields by swot_ prefix (key AND name)", () => {
+    const contact = { customFields: [
+      { id: "a", value: "x" },
+      { id: "b", value: "y" },
+    ]};
+    const catalog = {
+      a: { name: "Normal",       fieldKey: "contact.swot_last_event_type" },
+      b: { name: "SWOT Internal",fieldKey: "contact.something_else" },
+    };
+    assert.deepEqual(extractPaid297IntakeAnswers(contact, catalog), []);
+  });
+
+  it("drops the explicit exclude list (business_playbook)", () => {
+    const contact = { customFields: [{ id: "a", value: "generated artifact" }] };
+    const catalog = { a: { name: "Playbook", fieldKey: "contact.business_playbook" } };
+    assert.deepEqual(extractPaid297IntakeAnswers(contact, catalog), []);
+  });
+
+  it("drops file-upload-looking URLs by key + extension heuristics", () => {
+    const contact = { customFields: [
+      { id: "a", value: "https://files.example.com/a.pdf" },
+      { id: "b", value: "https://docs.google.com/x" }, // allowed — not file-upload shaped
+    ]};
+    const catalog = {
+      a: { name: "AR Aging Upload", fieldKey: "contact.ar_aging_file_upload" },
+      b: { name: "Reference link",  fieldKey: "contact.paid_297_q_reference" },
+    };
+    const got = extractPaid297IntakeAnswers(contact, catalog);
+    assert.equal(got.length, 1);
+    assert.equal(got[0].fieldKey, "paid_297_q_reference");
+  });
+
+  it("prefers catalog name over bare fieldKey for the label", () => {
+    const contact = { customFields: [{ id: "a", value: "answer" }] };
+    const catalog = { a: { name: "What is your Q1 goal?", fieldKey: "contact.paid_297_q1" } };
+    const got = extractPaid297IntakeAnswers(contact, catalog);
+    assert.equal(got[0].label, "What is your Q1 goal?");
+  });
+
+  it("falls back to bareKey when catalog has no name", () => {
+    const contact = { customFields: [{ id: "a", fieldKey: "contact.paid_297_q7", value: "answer" }] };
+    assert.equal(extractPaid297IntakeAnswers(contact, {})[0].label, "paid_297_q7");
+  });
+
+  it("drops entries with no resolvable label at all", () => {
+    const contact = { customFields: [{ id: "orphan", value: "x" }] };
+    assert.deepEqual(extractPaid297IntakeAnswers(contact, {}), []);
+  });
+});
+
+describe("GET /asksolomon/case — route reachability (Codex P1 on #94)", () => {
+  it("returns 200 HTML (route lives inside the GET dispatcher)", async () => {
+    // Dead-code bug before this fix: the GET check was placed AFTER the
+    // POST-only guard, so every GET returned 404. Pin the route here
+    // so a future reshuffle can't regress it.
+    const res = await worker.fetch(
+      new Request("https://example.com/asksolomon/case"),
+      { CONSOLE_PASSWORD: "test-password" },
+      { waitUntil() {}, passThroughOnException() {} },
+    );
+    assert.equal(res.status, 200);
+    const ct = res.headers.get("Content-Type") || "";
+    assert.ok(ct.includes("text/html"), `Content-Type: ${ct}`);
+    const body = await res.text();
+    assert.match(body, /BGA Case View/);
+    assert.match(body, /Load a case/);
   });
 });

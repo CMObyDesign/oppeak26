@@ -5332,6 +5332,15 @@ export default {
       if (path === "/asksolomon") {
         return new Response(CONSOLE_PAGE, { status: 200, headers: htmlHeaders() });
       }
+      // GET /asksolomon/case — BGA Copilot case view (PR 4; docs/BGA_COPILOT_SPEC.md §2.1 + §11 row 4).
+      // (Codex P1 on #94) This must live inside the GET dispatcher — the
+      // POST-only guard below rejects every non-POST path, so a GET branch
+      // placed later would be dead code and the page would return 404.
+      // Page-level password gate lives in the HTML; API-level gate protects
+      // /case/load, /case/audit-gaps, /case/verified-financials below.
+      if (path === "/asksolomon/case") {
+        return new Response(CASE_VIEW_PAGE, { status: 200, headers: htmlHeaders() });
+      }
       // GET /audit?url=<domain> — marketing audit endpoint.
       // Also served at /marketing (branded path for asksolomon.cfobydesign.com/marketing).
       // ?mode=internal switches to the team-facing rubric (full detail, quick wins,
@@ -5626,12 +5635,9 @@ export default {
     }
 
     // BGA Copilot case view (PR 4 of the build — docs/BGA_COPILOT_SPEC.md §2.1 + §11 row 4).
-    // GET  /asksolomon/case      → read-only strategist case view HTML (page-level password gate
-    //                              is in the HTML; API-level password gate protects /case/load).
     // POST /asksolomon/case/load → assembles the case bundle for a swot_paid_297 contact.
-    if (path === "/asksolomon/case" && request.method === "GET") {
-      return new Response(CASE_VIEW_PAGE, { status: 200, headers: htmlHeaders() });
-    }
+    // (The GET /asksolomon/case HTML route lives inside the GET dispatcher above,
+    // per Codex P1 on #94: the POST-only guard would otherwise make it unreachable.)
     if (path === "/asksolomon/case/load") {
       return handleCaseLoad(request, env, { checkPassword: checkConsolePassword });
     }

@@ -15,7 +15,6 @@
 import {
   fetchGhlContact,
   readCustomField,
-  resolveFieldIdMap,
   json,
 } from "./case_handlers.js";
 import {
@@ -25,9 +24,26 @@ import {
   CANONICAL_METRICS,
   CANONICAL_METRIC_IDS,
 } from "./metrics.js";
+import {
+  fetchGHLCustomFieldsCatalog,
+  buildFieldKeyToIdMap,
+} from "../ghl_catalog.js";
 
 const PAID_297_TAG = "swot_paid_297";
 const REHAB_TAG = "swot_rehab";
+
+/**
+ * Fields the strategist already sees as their own panels (generated
+ * artifacts / internal state). Exclude from the raw intake-answers
+ * list so the strategist's view isn't duplicated.
+ *
+ * Note: fields with `swot_` prefix are already filtered by the
+ * Solomon-owned-by-name rule below — these are the exceptions that
+ * don't carry the prefix.
+ */
+const INTAKE_ANSWER_EXCLUDE_KEYS = new Set([
+  "business_playbook",
+]);
 
 /**
  * Field keys the bundle reads from the contact. Grouped by purpose so
@@ -103,15 +119,85 @@ function businessName(contact) {
 }
 
 /**
- * Assembles the bundle. Pure once contact + idMap are known; split out
- * so the test suite can exercise the shape without stubbing GHL.
+ * Extracts the paid_297 survey narrative fields from a hydrated
+ * contact. Spec §2.1 requires every paid_297 narrative field,
+ * labeled, in the loaded bundle — these are the client's own-words
+ * answers that Solomon turned into business_playbook. The strategist
+ * needs them during a case to answer "what did the client actually
+ * say about X?" without digging through the HL contact.
  *
- * `idMap` is the inverted catalog from
- * `resolveFieldIdMap(env)` — e.g. { "business_playbook": "<ghl id>", … }.
- * Required because GHL's `/contacts/{id}` returns customFields keyed
- * by id only (Codex P1 on #93).
+ * Filter rules (mirrors `answersFromContactFields` in index.js):
+ *   - value must be non-empty
+ *   - exclude keys / names with `swot_` prefix (all Solomon-owned
+ *     fields, including the entire BGA toolkit's output)
+ *   - exclude a short allowlist of generated artifacts already shown
+ *     as their own panels (business_playbook)
+ *   - exclude file uploads (value is a URL to a file; not analyzable
+ *     and not what the strategist needs here)
+ *
+ * Returns `[{ fieldKey, label, value }]` — label is the catalog name
+ * (friendliest) or the fieldKey (fallback). Fields without any
+ * resolvable label are dropped rather than shown as "field <id>".
+ *
+ * `catalog` is the raw {id → meta} catalog, not the inverted idMap;
+ * handlers pass both because the hydration here needs the full meta
+ * per id, not just a reverse index.
  */
-export function assembleCaseBundle(contact, idMap, { contactId }) {
+export function extractPaid297IntakeAnswers(contact, catalog) {
+  const cfs = Array.isArray(contact.customFields) ? contact.customFields : [];
+  const results = [];
+  for (const f of cfs) {
+    if (!f || !f.id) continue;
+    const raw = f.value ?? f.field_value;
+    const value = typeof raw === "string" ? raw : raw == null ? "" : String(raw);
+    if (!value || !value.trim()) continue;
+
+    const meta = (catalog && catalog[f.id]) || {};
+    const fieldKey = f.fieldKey || f.key || meta.fieldKey || "";
+    const name = f.name || meta.name || "";
+    const bareKey = fieldKey.startsWith("contact.")
+      ? fieldKey.slice("contact.".length)
+      : fieldKey;
+
+    const lowerKey = bareKey.toLowerCase();
+    const lowerName = String(name).toLowerCase();
+    if (lowerKey.startsWith("swot_") || lowerName.startsWith("swot ")) continue;
+    if (INTAKE_ANSWER_EXCLUDE_KEYS.has(bareKey)) continue;
+
+    if (looksLikeFileUpload(value, bareKey, name)) continue;
+
+    const label = name || bareKey;
+    if (!label) continue;
+
+    results.push({
+      fieldKey: bareKey,
+      label,
+      value: value.trim(),
+    });
+  }
+  return results;
+}
+
+function looksLikeFileUpload(value, key, name) {
+  if (!/^https?:\/\//i.test(value)) return false;
+  const k = String(key || "").toLowerCase();
+  const n = String(name || "").toLowerCase();
+  return k.includes("file_upload") || k.includes("upload") ||
+         n.includes("file upload") || n.includes("upload") ||
+         /\.(pdf|xlsx?|csv|docx?|png|jpe?g)(\?|$)/i.test(value);
+}
+
+/**
+ * Assembles the bundle. Pure once contact + idMap + catalog are known;
+ * split out so the test suite can exercise the shape without stubbing GHL.
+ *
+ * `idMap` is the inverted catalog from `resolveFieldIdMap(env)` — e.g.
+ * `{ "business_playbook": "<ghl id>", … }`. `catalog` is the raw
+ * `{id → meta}` map (optional; `{}` is fine when no catalog is
+ * available). Required because GHL's `/contacts/{id}` returns
+ * customFields keyed by id only (Codex P1 on #93).
+ */
+export function assembleCaseBundle(contact, idMap, { contactId, catalog } = { contactId: undefined, catalog: {} }) {
   const tags = Array.isArray(contact.tags) ? contact.tags : [];
   const rehabFlag =
     tags.includes(REHAB_TAG) ||
@@ -175,15 +261,19 @@ export function assembleCaseBundle(contact, idMap, { contactId }) {
 
   // Day-since computation. GHL writes a timestamp alongside tag
   // application in `tags` metadata, but the v2 contact GET endpoint
-  // doesn't surface it as a separate structured field. For now:
-  //   - prefer a date-stamp field if the contact has it (dateAdded
-  //     fallback until the HL side writes a dedicated date on
-  //     swot_paid_297 application)
-  //   - fallback: null, and the console shows "—"
-  const dayStamp =
-    readCustomField(contact, "swot_paid_297_applied_at", idMap) ||
-    contact.dateAdded ||
-    null;
+  // doesn't surface it as a separate structured field. For now, read
+  // from a dedicated date-stamp field; return null if the contact
+  // doesn't have one yet (the console renders "—").
+  //
+  // (Codex P2 on #94) Previously fell back to `contact.dateAdded`,
+  // which predates the paid_297 purchase for any existing lead who
+  // upgrades. That mislabeled days-old purchases as months-overdue
+  // and defeated the "sort by day-since-purchase" prioritization
+  // §2.1 calls for. Prefer "null" over a wrong number; the HL
+  // workflow that applies swot_paid_297 writes
+  // swot_paid_297_applied_at at the same time (follow-up HL task;
+  // once wired, this read fills in automatically).
+  const dayStamp = readCustomField(contact, "swot_paid_297_applied_at", idMap) || null;
   const daysSincePaid297 = daysSince(dayStamp);
 
   return {
@@ -202,6 +292,10 @@ export function assembleCaseBundle(contact, idMap, { contactId }) {
       business_playbook: businessPlaybook,
       strategist_brief: strategistBrief,
       full_diagnostic: fullDiagnostic,
+      // (Codex P1 on #94) Spec §2.1 requires every paid_297 narrative
+      // field in the loaded bundle. Hydrated and filtered here so the
+      // strategist can see the client's own words during the case.
+      paid_297_answers: extractPaid297IntakeAnswers(contact, catalog || {}),
     },
 
     verified_financials: {
@@ -290,8 +384,15 @@ export async function handleCaseLoad(request, env, { checkPassword }) {
   }
 
   // Resolve bare {id,value} customFields via the catalog (one cached
-  // /customFields fetch per worker instance). Codex P1 on #93.
-  const idMap = await resolveFieldIdMap(env);
-  const bundle = assembleCaseBundle(contact, idMap, { contactId });
+  // /customFields fetch per worker instance).
+  //   - Codex P1 on #93: idMap resolves id → fieldKey for reads.
+  //   - Codex P1 on #94: the raw catalog is also needed for intake-
+  //     answers extraction (name labels, filter-by-fieldKey rules).
+  // Both derive from the single cached catalog fetch.
+  let catalog = {};
+  try { catalog = await fetchGHLCustomFieldsCatalog(env); }
+  catch (e) { console.warn(`[case_load] catalog fetch: ${e?.message || e}`); }
+  const idMap = buildFieldKeyToIdMap(catalog);
+  const bundle = assembleCaseBundle(contact, idMap, { contactId, catalog });
   return json({ success: true, ...bundle });
 }
