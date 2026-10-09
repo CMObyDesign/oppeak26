@@ -243,41 +243,80 @@ Click button → modal:
 [Confirm and Send]
          ↓
 POST /asksolomon/case/approve-and-send
-   headers: Authorization: Bearer <CONSOLE_PASSWORD>
+   headers: x-console-password: <CONSOLE_PASSWORD>
    body: { contactId, reviewed: true }
 ```
+
+**Auth note**: the endpoint uses the existing `checkConsolePassword`
+helper on `worker/src/index.js`, which reads the `x-console-password`
+header for consistency with every other `/asksolomon` API. There is no
+separate auth path for the button.
 
 **Server endpoint behavior** (`handleApproveAndSend` in `worker/src/index.js`):
 
 Step order is intentional and the only correct sequence. Writes before
 tag so the Email 04 merge fields are populated by the time the HL
-workflow fires.
+workflow fires. The D1 lock insert happens BEFORE any external write
+so a concurrent request is refused before it can observe stale state.
 
-1. Verify password, `reviewed=true`, draft present, `swot_paid_297`
-   present, `swot_growth_plan_ready` NOT present. Refuse (409) otherwise.
-2. Render the final customer-facing Growth Plan HTML from the current
+1. Verify password (via `checkConsolePassword`), `reviewed=true`, draft
+   present, `swot_paid_297` present. Refuse (401/400/409 respectively)
+   otherwise.
+2. **Acquire send lock atomically**: `INSERT INTO bga_send_locks
+   (contact_id, acquired_at) VALUES (?, ?)` on the D1 `SOLOMON_DB`
+   binding. The table has `contact_id TEXT PRIMARY KEY`, so a
+   duplicate insert raises a UNIQUE constraint error. On conflict,
+   fetch the existing row and return `409 "Already sent at
+   <acquired_at>."`. This insert is the only serialization point —
+   two concurrent approvals for the same contact race on this INSERT,
+   one wins, the other 409s before it reaches any GHL call. Same
+   mechanism also covers the idempotency promise.
+3. Fetch the contact's current tags via GHL. If
+   `swot_growth_plan_ready` is somehow already present (e.g. applied
+   out-of-band in HL), roll back the lock row (`DELETE WHERE
+   contact_id = ?`) and return `409 "Already sent (ready tag present
+   on contact)."`. This defends against a desynced lock table and the
+   small window between step 2 and step 6.
+4. Render the final customer-facing Growth Plan HTML from the current
    `swot_growth_plan_draft` content (strip the "DRAFT · INTERNAL"
    banner; apply customer-facing styling).
-3. Render the next-steps block from `swot_bga_decisions`.
-4. Render the services selection summary from
+5. Render the next-steps block from `swot_bga_decisions`.
+6. Render the services selection summary from
    `swot_bga_services_selected`.
-5. `updateGHLContact(contactId, [
+7. `updateGHLContact(contactId, [
      { key: "swot_growth_plan", field_value: <rendered plan> },
      { key: "swot_bga_next_steps", field_value: <rendered next steps> },
      { key: "swot_bga_services_selected_display",
        field_value: <rendered selections> }
    ])` — all three fields in one HL call so a partial write doesn't
    leave a mixed state.
-6. ONLY if (5) returns ok, `addGHLTag(contactId,
+8. ONLY if (7) returns ok, `addGHLTag(contactId,
    ["swot_growth_plan_ready"])`.
-7. Return `{ success: true }` to the console.
-8. If step (5) failed, do NOT apply the tag. Return `{ success: false,
-   error: "writeback failed; tag not applied" }`. The strategist sees
-   the error, nothing was sent, nothing partially fired.
+9. Return `{ success: true }` to the console. The lock row stays as
+   the permanent send record.
+10. **On any failure after step 2** (GHL fetch, writeback, tag apply):
+    delete the lock row (`DELETE FROM bga_send_locks WHERE contact_id
+    = ?`) so a corrected retry is possible, do NOT apply the tag, and
+    return `{ success: false, error: "<step>: <reason>" }`. The
+    strategist sees exactly which step failed and nothing partially
+    fired. For the specific case of (8) failing after (7) succeeded,
+    the error message tells the strategist to apply
+    `swot_growth_plan_ready` manually in HL — the writes landed, only
+    the tag didn't, and HL has no idempotency on the tag so re-running
+    the whole endpoint would re-write the fields.
 
-**Idempotency**: a second click on the same contact finds
-`swot_growth_plan_ready` already present and returns 409 with a message
-"Already sent at <timestamp>. Not re-sending." No duplicate email.
+**Idempotency**: enforced at the D1 lock insert in step 2. A second
+click lands within milliseconds of the first and loses the INSERT race;
+hours or days later it still finds a row and returns the same 409.
+Either way, the second request cannot reach the GHL writes, cannot
+re-apply the tag, cannot re-send Email 04.
+
+**Why D1-backed, not in-memory**: Workers isolates are not long-lived
+and don't share state across requests to different isolates. A
+per-isolate mutex would only protect one isolate's double-clicks.
+D1's SQLite primary-key uniqueness is strongly consistent for writes
+to the same database (see Cloudflare D1 consistency guarantees) and
+is the right tool for a cross-isolate serialization point.
 
 ---
 
@@ -323,20 +362,27 @@ Each of these is a test that must stay green on every PR.
    and never apply `swot_growth_plan_ready`. One test per tool.
 2. `generate_roadmap_draft` renders content with the "DRAFT · INTERNAL
    PREP ONLY · NOT FOR CUSTOMER DELIVERY" banner at the top.
-3. `POST /asksolomon/case/approve-and-send` refuses without
-   CONSOLE_PASSWORD → 401.
+3. `POST /asksolomon/case/approve-and-send` refuses without a valid
+   `x-console-password` header (via `checkConsolePassword`) → 401.
 4. Approve-and-send refuses without `reviewed=true` → 400.
 5. Approve-and-send refuses without `swot_growth_plan_draft` present →
    409 "no draft to send."
 6. Approve-and-send refuses without `swot_paid_297` present → 403.
 7. Approve-and-send refuses when `swot_growth_plan_ready` is already
-   applied → 409 "already sent at <timestamp>."
-8. Approve-and-send writes `swot_growth_plan` + `swot_bga_next_steps` +
+   applied → 409 "already sent (ready tag present on contact)."
+8. **Concurrent-approval serialization**: two parallel approve calls
+   for the same contact — the first wins the D1 lock insert, writes
+   the fields, applies the tag; the second observes the unique
+   constraint failure on `bga_send_locks` and returns 409 before any
+   GHL call. Test asserts exactly one GHL writeback and exactly one
+   `addGHLTag` observed across both requests.
+9. Approve-and-send writes `swot_growth_plan` + `swot_bga_next_steps` +
    `swot_bga_services_selected_display` BEFORE applying the ready tag.
-   Simulate a writeback failure and confirm the tag is NOT applied.
-9. Approve-and-send is the ONLY code path in the Worker that writes
-   `swot_growth_plan` or applies `swot_growth_plan_ready`.
-   (Grep-based test: no other call site exists.)
+   Simulate a writeback failure and confirm the tag is NOT applied AND
+   the lock row is deleted so a corrected retry is possible.
+10. Approve-and-send is the ONLY code path in the Worker that writes
+    `swot_growth_plan` or applies `swot_growth_plan_ready`.
+    (Grep-based test: no other call site exists.)
 
 ---
 
@@ -380,13 +426,23 @@ Each row below is one PR, mergeable independently.
 | **5** | `generate_roadmap_draft` tool + endpoint + 8-section prompt + "DRAFT · INTERNAL" banner + regression tests. | PR 2 (uses catalog if present, placeholder otherwise) |
 | **6** | `update_roadmap_section`, `record_decision`, `record_service_selection` tools + endpoints. | PR 5 |
 | **7** | `preview_final_email` renderer (local, no fire). | PR 6 |
-| **8** | **The button**: `[Mark Reviewed]` toggle + `[APPROVE & SEND TO CLIENT]` button + modal + `POST /asksolomon/case/approve-and-send` endpoint + all 9 regression tests from §7. | PR 7 |
-| **9** | Email 04 template update (`04_deep_dive_part2.html`) to merge in `{{contact.swot_bga_next_steps}}` and `{{contact.swot_bga_services_selected_display}}` alongside the existing `{{contact.swot_growth_plan}}`. | PR 8 |
+| **8** | Email 04 template update (`04_deep_dive_part2.html` + preview mirror) to merge in `{{contact.swot_bga_next_steps}}` and `{{contact.swot_bga_services_selected_display}}` alongside the existing `{{contact.swot_growth_plan}}`. Pre-condition for PR 9 — template-only change, zero fire risk, lands FIRST so the field reads are safe by the time any approval can land. | PR 7 |
+| **9** | **The button**: `worker/migrations/<n>_bga_send_locks.sql` (D1 table creating `bga_send_locks(contact_id TEXT PRIMARY KEY, acquired_at INTEGER NOT NULL)`) + `[Mark Reviewed]` toggle + `[APPROVE & SEND TO CLIENT]` button + modal + `POST /asksolomon/case/approve-and-send` endpoint using the D1-backed lock serialization + all 10 regression tests from §7. | PR 8 |
+| **10** | **Public copy update** (post-launch, not blocking build): sales page + FAQ statements that currently promise "the written plan is prepared/received before the 50-minute session" rewritten to match the new fulfillment timing — plan is prepared during/after the session via the strategist's APPROVE & SEND action. Touch at least the Deep Dive sales page (`app/public/deep-dive-sales/`) and any FAQ copy that references pre-session delivery. | PR 9 |
+
+PR 8 (template) MUST precede or ship atomically with PR 9 (button).
+Reversing them creates a window where an approval fires the current
+template, which doesn't include `swot_bga_next_steps` or
+`swot_bga_services_selected_display` — the next-steps block and
+service selections would silently be omitted from the client email
+(Codex finding on #87). PR 10 can land any time after PR 9 is live;
+it's a copy fix for the public promise, not a delivery guarantee.
 
 Each PR is small, mergeable, and leaves the system in a consistent
-state. The dangerous one (PR 8) lands last and only after every other
-piece is in and tested; the field writes and tag application cannot be
-reached before PR 8 by anyone.
+state. The dangerous one (PR 9) lands only after every other piece is
+in and tested; the field writes and tag application cannot be reached
+before PR 9 by anyone, and PR 8 ensures the email that fires on the
+ready tag already reads all three merge fields.
 
 ---
 
