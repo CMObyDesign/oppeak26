@@ -13,13 +13,20 @@
 //   docs/BGA_COPILOT_SPEC.md §4.2 (verified_financials_panel)
 //   docs/BGA_COPILOT_SPEC.md §9 guardrails (relevant subset for PR 3)
 
-import { describe, it } from "node:test";
+import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 
 import {
   handleAuditCaseGaps,
   handleVerifiedFinancialsPanel,
 } from "../src/bga_copilot/case_handlers.js";
+import { _resetCatalogCacheForTests } from "../src/ghl_catalog.js";
+
+beforeEach(() => {
+  // Keep the catalog cache from leaking across tests, now that readCustomField
+  // consults it (Codex P1 on #93).
+  _resetCatalogCacheForTests();
+});
 
 function makeEnv() {
   return {
@@ -103,6 +110,36 @@ describe("POST /asksolomon/case/audit-gaps — handleAuditCaseGaps", () => {
       assert.equal(body.verified_financials.missing_metric_ids.length, 10);
       assert.ok(body.canonical_metrics.cash_on_hand);
       assert.ok(body.canonical_metrics.debt_terms);
+    } finally {
+      cap.restore();
+    }
+  });
+
+  it("Codex P1 on #93: resolves id-only customFields via GHL catalog", async () => {
+    // Simulates production: GHL /contacts/{id} returns {id, value} with
+    // no fieldKey; the catalog endpoint supplies the id → fieldKey map.
+    const cap = stubFetch((url) => {
+      if (String(url).includes("/customFields")) {
+        return new Response(JSON.stringify({
+          customFields: [
+            { id: "id-playbook", fieldKey: "contact.business_playbook", dataType: "LARGE_TEXT" },
+            { id: "id-vf", fieldKey: "contact.swot_verified_financials", dataType: "LARGE_TEXT" },
+          ],
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      }
+      return ghlContactResponse([
+        { id: "id-playbook", value: "intake populated via id" },
+        { id: "id-vf", value: JSON.stringify([
+          { metric_id: "cash_on_hand", value: 100 },
+        ])},
+      ]);
+    });
+    try {
+      const res = await handleAuditCaseGaps(post({ contactId: "c1" }), makeEnv(), { checkPassword });
+      const body = await res.json();
+      assert.equal(body.intake_present, true);
+      assert.equal(body.verified_financials.entries_count, 1);
+      assert.ok(body.verified_financials.present_metric_ids.includes("cash_on_hand"));
     } finally {
       cap.restore();
     }

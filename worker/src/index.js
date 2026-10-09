@@ -26,6 +26,12 @@ import {
   handleAuditCaseGaps,
   handleVerifiedFinancialsPanel,
 } from "./bga_copilot/case_handlers.js";
+import { handleCaseLoad } from "./bga_copilot/case_load.js";
+import { CASE_VIEW_PAGE } from "./bga_copilot/case_view_page.js";
+import {
+  fetchGHLCustomFieldsCatalog,
+  GHLCatalogUnavailableError,
+} from "./ghl_catalog.js";
 import {
   dbFromEnv,
   newSubmissionId,
@@ -4233,74 +4239,14 @@ async function fetchGHLContact(contactId, env) {
   return data?.contact || null;
 }
 
-// Per-worker-instance cache for the location's custom-fields catalog.
-// GHL's /contacts/{id} response returns customFields as bare {id, value};
-// we hit /locations/{loc}/customFields once to resolve IDs → {name, fieldKey},
-// which we need for BOTH filtering out Solomon-owned fields on re-runs and
-// giving Solomon a real question label for paid-tier answers.
-let _ghlFieldCatalogCache = null;
-let _ghlFieldCatalogFetchedAt = 0;
-const GHL_FIELD_CATALOG_TTL_MS = 5 * 60 * 1000;
-
-// Distinguished error class so callers can tell a real catalog fetch failure
-// (which should propagate as a retryable webhook error) from an intentional
-// empty catalog (no GHL creds configured, tolerable for local/free-tier flows).
-class GHLCatalogUnavailableError extends Error {
-  constructor(msg) { super(msg); this.name = "GHLCatalogUnavailableError"; }
-}
-
-async function fetchGHLCustomFieldsCatalog(env) {
-  if (!env.GHL_API_KEY) return {};
-  const now = Date.now();
-  if (_ghlFieldCatalogCache && (now - _ghlFieldCatalogFetchedAt) < GHL_FIELD_CATALOG_TTL_MS) {
-    return _ghlFieldCatalogCache;
-  }
-  const locationId = env.GHL_LOCATION_ID || CONFIG.GHL_LOCATION_ID;
-  // model=contact is required by GHL's Get Custom Fields endpoint; without it
-  // the API rejects the request and the catalog stays empty, so hydration
-  // silently no-ops. Explicitly ask for contact-scoped fields.
-  const url = `${CONFIG.GHL_API_BASE}/locations/${locationId}/customFields?model=contact`;
-  let res;
-  try {
-    res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${env.GHL_API_KEY}`,
-        Version: "2021-07-28",
-      },
-    });
-  } catch (e) {
-    // Network-level failure on a cold worker means we cannot resolve bare
-    // {id,value} payloads at all. Serving a stale cache is fine; serving an
-    // empty one silently would risk generating an incomplete paid report
-    // that still passes the answers.length check on any curated free-tier
-    // field the contact carries. Propagate so the webhook can retry.
-    if (_ghlFieldCatalogCache) return _ghlFieldCatalogCache;
-    throw new GHLCatalogUnavailableError(`network error: ${e?.message || e}`);
-  }
-  if (!res.ok) {
-    if (_ghlFieldCatalogCache) {
-      console.warn(`[fetchGHLCustomFieldsCatalog] ${res.status} — using cached catalog.`);
-      return _ghlFieldCatalogCache;
-    }
-    const bodySnippet = (await res.text().catch(() => "")).slice(0, 300);
-    throw new GHLCatalogUnavailableError(`status ${res.status}: ${bodySnippet}`);
-  }
-  const data = await res.json().catch(() => ({}));
-  const list = data?.customFields || [];
-  const map = {};
-  for (const f of list) {
-    if (f && f.id) {
-      map[f.id] = {
-        name: f.name || null,
-        fieldKey: f.fieldKey || f.key || null,
-        dataType: f.dataType || null,
-      };
-    }
-  }
-  _ghlFieldCatalogCache = map;
-  _ghlFieldCatalogFetchedAt = now;
-  return map;
-}
+// GHL custom-fields catalog (shared with worker/src/bga_copilot/*).
+// Historical state (two module-level cache slots + the fetch function +
+// the distinguished error class) now lives in ./ghl_catalog.js. All
+// callers in this file use the same cache instance by virtue of module
+// identity. Codex P1 on #93: BGA case endpoints need the same catalog
+// to resolve customFields; keeping it as a single-source-of-truth
+// module avoids drift between the two paths.
+// See ./ghl_catalog.js for behavior; this file just imports.
 
 // Build the {question, answer} array Solomon expects from the contact's
 // custom fields.
@@ -5386,6 +5332,15 @@ export default {
       if (path === "/asksolomon") {
         return new Response(CONSOLE_PAGE, { status: 200, headers: htmlHeaders() });
       }
+      // GET /asksolomon/case — BGA Copilot case view (PR 4; docs/BGA_COPILOT_SPEC.md §2.1 + §11 row 4).
+      // (Codex P1 on #94) This must live inside the GET dispatcher — the
+      // POST-only guard below rejects every non-POST path, so a GET branch
+      // placed later would be dead code and the page would return 404.
+      // Page-level password gate lives in the HTML; API-level gate protects
+      // /case/load, /case/audit-gaps, /case/verified-financials below.
+      if (path === "/asksolomon/case") {
+        return new Response(CASE_VIEW_PAGE, { status: 200, headers: htmlHeaders() });
+      }
       // GET /audit?url=<domain> — marketing audit endpoint.
       // Also served at /marketing (branded path for asksolomon.cfobydesign.com/marketing).
       // ?mode=internal switches to the team-facing rubric (full detail, quick wins,
@@ -5677,6 +5632,14 @@ export default {
     }
     if (path === "/asksolomon/case/verified-financials") {
       return handleVerifiedFinancialsPanel(request, env, { checkPassword: checkConsolePassword });
+    }
+
+    // BGA Copilot case view (PR 4 of the build — docs/BGA_COPILOT_SPEC.md §2.1 + §11 row 4).
+    // POST /asksolomon/case/load → assembles the case bundle for a swot_paid_297 contact.
+    // (The GET /asksolomon/case HTML route lives inside the GET dispatcher above,
+    // per Codex P1 on #94: the POST-only guard would otherwise make it unreachable.)
+    if (path === "/asksolomon/case/load") {
+      return handleCaseLoad(request, env, { checkPassword: checkConsolePassword });
     }
 
     // POST /audit — JSON marketing audit. No auth (matches GET /audit).
