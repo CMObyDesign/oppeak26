@@ -250,7 +250,12 @@ Runs automatically on every case load; also on demand. Reports:
   verified-financial metrics the LLM would need to make a given
   recommendation ("to recommend debt restructuring, we need
   `monthly_debt_service`, `outstanding_debt_total`, `debt_terms`
-  — have 1 of 3").
+  — have 1 of 3"). All three of those are canonical metric IDs in
+  §10 item 2, so the strategist can enter every fact the audit asks
+  for; `debt_terms` is a free-text field capturing rate, maturity,
+  covenants, prepay penalties, and personal guarantees. (Codex P2
+  on #92: `debt_terms` was referenced here before being pinned as a
+  canonical metric; §10 now includes it.)
 - Specific documents or questions to request from the client to
   close each gap.
 
@@ -533,9 +538,12 @@ The red-team report writes to `swot_bga_red_team_report` as:
   "warnings": [...],
   "acknowledged_warnings": [],
   "inputs_checked": {
-    "draft_hash":        "sha256:<hex of swot_growth_plan_draft content at run_at>",
-    "decisions_hash":    "sha256:<hex of swot_bga_decisions content at run_at>",
-    "selections_hash":   "sha256:<hex of swot_bga_services_selected content at run_at>"
+    "draft_hash":                "sha256:<hex of swot_growth_plan_draft content at run_at>",
+    "decisions_hash":            "sha256:<hex of swot_bga_decisions content at run_at>",
+    "selections_hash":           "sha256:<hex of swot_bga_services_selected content at run_at>",
+    "verified_financials_hash":  "sha256:<hex of swot_verified_financials content at run_at>",
+    "intake_bundle_hash":        "sha256:<hex of the paid_297 intake-answer subset the warnings read, canonicalized at run_at>",
+    "catalog_ref":               "<git SHA of worker/data/service_catalog.json at run_at>"
   }
 }
 ```
@@ -544,15 +552,26 @@ The button endpoint re-verifies this field at request time with
 **both** checks:
 
 1. **No blockers in the latest report** (same as before).
-2. **The three input hashes still match the current content.** If
-   the strategist edited the draft, confirmed new call decisions,
-   or changed service selections after the last QA run, at least one
-   hash now differs and the report is stale. The endpoint refuses
-   with `409 "red-team report is stale; re-run RUN PRE-SEND QA
-   before sending"` and names which input changed. (Codex P1 on
-   #90: without this binding, the strategist could red-team a clean
-   draft, edit something bad into it, and still ship — because the
-   report no longer reflected the content being sent.)
+2. **Every input hash still matches the current content.** The
+   report binds all six inputs any rule in §5.3 could read:
+   - `draft_hash` — the roadmap body
+   - `decisions_hash` — call decisions log
+   - `selections_hash` — service selections
+   - `verified_financials_hash` — the facts warning 3 (intake vs.
+     verified disagreement) checks against intake
+   - `intake_bundle_hash` — the paid_297 intake narrative fields
+     warning 3 reads
+   - `catalog_ref` — the services catalog version warning 4
+     (service with `when_not_to_recommend` conditions still
+     recommended) evaluated against
+
+   If any input differs from the current content, the report is
+   stale. The endpoint refuses with `409 "red-team report is stale;
+   re-run RUN PRE-SEND QA before sending"` and names which input
+   changed. (Codex P1 on #90 + follow-up P1 on #92: without binding
+   every input the QA actually reads, the strategist could red-team
+   a clean draft, then change a verified financial or catalog entry,
+   and ship stale QA.)
 
 If a warning is unacknowledged, the UI shows an acknowledgment
 checkbox; on acknowledgment the `acknowledged_warnings` array
@@ -570,7 +589,32 @@ so a concurrent request is refused before it can observe stale state.
 1. Verify password (via `checkConsolePassword`), `reviewed=true`, draft
    present, `swot_paid_297` present. Refuse (401/400/409 respectively)
    otherwise.
-2. **Acquire send lock atomically**: `INSERT INTO bga_send_locks
+2. **Validate the red-team report before any external write.** Load
+   `swot_bga_red_team_report`. Refuse unless:
+   - the report exists (no QA yet → `409 "run RUN PRE-SEND QA
+     before sending"`),
+   - `blockers` is empty (any blocker → `409 "red-team blockers
+     present"` naming each one),
+   - every `warnings` entry has a matching entry in
+     `acknowledged_warnings` (any unacknowledged → `400
+     "unacknowledged warnings present"` naming them), AND
+   - every hash in `inputs_checked` matches the current content for
+     that input (compute SHA-256 of the current `swot_growth_plan_draft`,
+     `swot_bga_decisions`, `swot_bga_services_selected`,
+     `swot_verified_financials`, the canonical intake-bundle, and the
+     catalog SHA, in exactly the shape the report hashed at run_at;
+     any mismatch → `409 "red-team report is stale; re-run RUN
+     PRE-SEND QA before sending"` naming which input changed).
+
+   Capture the content read in this step into an in-memory
+   `send_bundle` (draft, decisions, selections) that is reused for
+   rendering in step 5. The approve path renders the exact bytes
+   that the QA passed; a later edit between this check and the
+   render cannot slip through. (Codex P2 on #92: without this step
+   explicitly before the lock + render, an implementer following
+   §5.4 numbered sequence could skip the gate the §5.3 prose
+   requires.)
+3. **Acquire send lock atomically**: `INSERT INTO bga_send_locks
    (contact_id, acquired_at) VALUES (?, ?)` on the D1 `SOLOMON_DB`
    binding. The table has `contact_id TEXT PRIMARY KEY`, so a
    duplicate insert raises a UNIQUE constraint error. On conflict,
@@ -579,41 +623,42 @@ so a concurrent request is refused before it can observe stale state.
    two concurrent approvals for the same contact race on this INSERT,
    one wins, the other 409s before it reaches any GHL call. Same
    mechanism also covers the idempotency promise.
-3. Fetch the contact's current tags via GHL. If
+4. Fetch the contact's current tags via GHL. If
    `swot_growth_plan_ready` is somehow already present (e.g. applied
    out-of-band in HL), roll back the lock row (`DELETE WHERE
    contact_id = ?`) and return `409 "Already sent (ready tag present
    on contact)."`. This defends against a desynced lock table and the
-   small window between step 2 and step 6.
-4. Render the final customer-facing Growth Plan HTML from the current
-   `swot_growth_plan_draft` content (strip the "DRAFT · INTERNAL"
-   banner; apply customer-facing styling).
-5. Render the next-steps block from `swot_bga_decisions`.
-6. Render the services selection summary from
-   `swot_bga_services_selected`.
-7. `updateGHLContact(contactId, [
+   small window between step 3 and step 7.
+5. Render the final customer-facing Growth Plan HTML from the
+   `send_bundle.draft` captured in step 2 (strip the "DRAFT · INTERNAL"
+   banner; apply customer-facing styling). Use the step-2 bundle, not
+   a fresh read — the point of hashing in §5.3 is that only the
+   exact bytes QA passed may ship.
+6. Render the next-steps block from `send_bundle.decisions`.
+7. Render the services selection summary from `send_bundle.selections`.
+8. `updateGHLContact(contactId, [
      { key: "swot_growth_plan", field_value: <rendered plan> },
      { key: "swot_bga_next_steps", field_value: <rendered next steps> },
      { key: "swot_bga_services_selected_display",
        field_value: <rendered selections> }
    ])` — all three fields in one HL call so a partial write doesn't
    leave a mixed state.
-8. ONLY if (7) returns ok, `addGHLTag(contactId,
+9. ONLY if (8) returns ok, `addGHLTag(contactId,
    ["swot_growth_plan_ready"])`.
-9. Return `{ success: true }` to the console. The lock row stays as
-   the permanent send record.
-10. **On any failure after step 2** (GHL fetch, writeback, tag apply):
+10. Return `{ success: true }` to the console. The lock row stays as
+    the permanent send record.
+11. **On any failure after step 3** (GHL fetch, writeback, tag apply):
     delete the lock row (`DELETE FROM bga_send_locks WHERE contact_id
     = ?`) so a corrected retry is possible, do NOT apply the tag, and
     return `{ success: false, error: "<step>: <reason>" }`. The
     strategist sees exactly which step failed and nothing partially
-    fired. For the specific case of (8) failing after (7) succeeded,
+    fired. For the specific case of (9) failing after (8) succeeded,
     the error message tells the strategist to apply
     `swot_growth_plan_ready` manually in HL — the writes landed, only
     the tag didn't, and HL has no idempotency on the tag so re-running
     the whole endpoint would re-write the fields.
 
-**Idempotency**: enforced at the D1 lock insert in step 2. A second
+**Idempotency**: enforced at the D1 lock insert in step 3. A second
 click lands within milliseconds of the first and loses the INSERT race;
 hours or days later it still finds a row and returns the same 409.
 Either way, the second request cannot reach the GHL writes, cannot
@@ -917,15 +962,21 @@ Each of these is a test that must stay green on every PR.
     confirms no handler or route named `finalize_and_send`, nor any
     other `/asksolomon/case/*` route that writes `swot_growth_plan`.
 17. **Red-team report is bound to the exact inputs it checked**
-    (Codex P1 on #90). Scenario: run `red_team_check` on a draft
-    with no blockers, confirm the report stores `inputs_checked`
-    hashes for draft/decisions/selections. Then call
-    `update_roadmap_section` to change one section. Attempt
-    `approve_and_send` — must return 409 "red-team report is stale;
-    re-run RUN PRE-SEND QA" naming the changed input. Re-run
-    `red_team_check`; the new report's hashes match; approve now
-    succeeds. Repeat the scenario for a `swot_bga_decisions` edit
-    and a `swot_bga_services_selected` edit.
+    (Codex P1 on #90 + follow-up P1 on #92). Scenario: run
+    `red_team_check` on a draft with no blockers; confirm the
+    report stores `inputs_checked` hashes for all six inputs
+    (`draft_hash`, `decisions_hash`, `selections_hash`,
+    `verified_financials_hash`, `intake_bundle_hash`,
+    `catalog_ref`). Then call `update_roadmap_section` to change
+    one section; attempt `approve_and_send` — must return 409
+    "red-team report is stale; re-run RUN PRE-SEND QA" naming
+    `draft_hash` as the changed input. Re-run `red_team_check`;
+    the new report's hashes match; approve now succeeds. Repeat
+    the scenario for each of: `swot_bga_decisions` edit,
+    `swot_bga_services_selected` edit, `swot_verified_financials`
+    edit, a change to the intake-answer subset the warnings read,
+    and a services-catalog SHA bump — each must trigger the 409
+    naming the specific input that changed.
 18. **`update_roadmap_section` edits only the named section** and
     appends a version-history entry. Scenario: generate a draft with
     8 sections, call `update_roadmap_section(3, new_content)`,
@@ -963,6 +1014,7 @@ I can scaffold.
    ar_30_60_90           (structured object: {d30, d60, d90_plus})
    monthly_debt_service
    outstanding_debt_total
+   debt_terms            (text: rate, maturity, covenants, prepay penalties, personal guarantees)
    working_capital
    tax_status            (enum: current | behind | in_default)
    ```
