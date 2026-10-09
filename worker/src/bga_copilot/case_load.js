@@ -15,6 +15,7 @@
 import {
   fetchGhlContact,
   readCustomField,
+  resolveFieldIdMap,
   json,
 } from "./case_handlers.js";
 import {
@@ -102,14 +103,19 @@ function businessName(contact) {
 }
 
 /**
- * Assembles the bundle. Pure once contact + env are known; split out
+ * Assembles the bundle. Pure once contact + idMap are known; split out
  * so the test suite can exercise the shape without stubbing GHL.
+ *
+ * `idMap` is the inverted catalog from
+ * `resolveFieldIdMap(env)` — e.g. { "business_playbook": "<ghl id>", … }.
+ * Required because GHL's `/contacts/{id}` returns customFields keyed
+ * by id only (Codex P1 on #93).
  */
-export function assembleCaseBundle(contact, env, { contactId }) {
+export function assembleCaseBundle(contact, idMap, { contactId }) {
   const tags = Array.isArray(contact.tags) ? contact.tags : [];
   const rehabFlag =
     tags.includes(REHAB_TAG) ||
-    readCustomField(contact, "swot_rehab_flag", env).trim() === "true";
+    readCustomField(contact, "swot_rehab_flag", idMap).trim() === "true";
   const classification = classify(tags, rehabFlag);
   const opportunityFlags = tags.filter(
     (t) => typeof t === "string" && t.endsWith("_opp"),
@@ -119,20 +125,20 @@ export function assembleCaseBundle(contact, env, { contactId }) {
   // on the contact yet. The console renders "not present" from the
   // empty string; it does not need a separate flag.
   const businessPlaybook = readCustomField(
-    contact, BUNDLE_FIELDS.intake.business_playbook, env,
+    contact, BUNDLE_FIELDS.intake.business_playbook, idMap,
   );
   const strategistBrief = readCustomField(
-    contact, BUNDLE_FIELDS.intake.strategist_brief, env,
+    contact, BUNDLE_FIELDS.intake.strategist_brief, idMap,
   );
   const fullDiagnostic = readCustomField(
-    contact, BUNDLE_FIELDS.intake.full_diagnostic, env,
+    contact, BUNDLE_FIELDS.intake.full_diagnostic, idMap,
   );
 
   // Verified financials: parse the LARGE_TEXT JSON, filter to canonical
   // entries, compute what's missing. The audit endpoint computes the
   // same thing; the case view shows both without a second round-trip.
   const vfRaw = readCustomField(
-    contact, BUNDLE_FIELDS.case_state.verified_financials, env,
+    contact, BUNDLE_FIELDS.case_state.verified_financials, idMap,
   );
   const vfEntries = parseVerifiedFinancials(vfRaw);
   const presentMetricIds = vfEntries
@@ -143,22 +149,22 @@ export function assembleCaseBundle(contact, env, { contactId }) {
   // Case state flags — presence booleans, no content leak. The console
   // uses these to decide which toolkit buttons to show as "ready".
   const financialsRequestList = readCustomField(
-    contact, BUNDLE_FIELDS.case_state.financials_request_list, env,
+    contact, BUNDLE_FIELDS.case_state.financials_request_list, idMap,
   );
   const growthPlanDraft = readCustomField(
-    contact, BUNDLE_FIELDS.case_state.growth_plan_draft, env,
+    contact, BUNDLE_FIELDS.case_state.growth_plan_draft, idMap,
   );
   const decisionsRaw = readCustomField(
-    contact, BUNDLE_FIELDS.case_state.decisions, env,
+    contact, BUNDLE_FIELDS.case_state.decisions, idMap,
   );
   const servicesSelectedRaw = readCustomField(
-    contact, BUNDLE_FIELDS.case_state.services_selected, env,
+    contact, BUNDLE_FIELDS.case_state.services_selected, idMap,
   );
   const prepBrief = readCustomField(
-    contact, BUNDLE_FIELDS.case_state.prep_brief, env,
+    contact, BUNDLE_FIELDS.case_state.prep_brief, idMap,
   );
   const redTeamReport = readCustomField(
-    contact, BUNDLE_FIELDS.case_state.red_team_report, env,
+    contact, BUNDLE_FIELDS.case_state.red_team_report, idMap,
   );
 
   // Decisions / services may be JSON arrays or free text; we only need
@@ -175,7 +181,7 @@ export function assembleCaseBundle(contact, env, { contactId }) {
   //     swot_paid_297 application)
   //   - fallback: null, and the console shows "—"
   const dayStamp =
-    readCustomField(contact, "swot_paid_297_applied_at", env) ||
+    readCustomField(contact, "swot_paid_297_applied_at", idMap) ||
     contact.dateAdded ||
     null;
   const daysSincePaid297 = daysSince(dayStamp);
@@ -283,6 +289,9 @@ export async function handleCaseLoad(request, env, { checkPassword }) {
     }, 400);
   }
 
-  const bundle = assembleCaseBundle(contact, env, { contactId });
+  // Resolve bare {id,value} customFields via the catalog (one cached
+  // /customFields fetch per worker instance). Codex P1 on #93.
+  const idMap = await resolveFieldIdMap(env);
+  const bundle = assembleCaseBundle(contact, idMap, { contactId });
   return json({ success: true, ...bundle });
 }

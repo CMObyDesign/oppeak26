@@ -21,6 +21,10 @@ import {
   parseVerifiedFinancials,
   upsertEntry,
 } from "./metrics.js";
+import {
+  fetchGHLCustomFieldsCatalog,
+  buildFieldKeyToIdMap,
+} from "../ghl_catalog.js";
 
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 const VERIFIED_FINANCIALS_FIELD_KEY = "swot_verified_financials";
@@ -73,15 +77,27 @@ export async function fetchGhlContact(contactId, env) {
 
 /**
  * Reads the value of a named custom field from a GHL contact. GHL's v2
- * API returns customFields keyed by id, not by fieldKey, but the Worker
- * doesn't know every field id yet (per spec BGA_COPILOT_HL_SETUP step 3).
- * This helper looks up by id first (if resolvable), then by fieldKey,
- * then by key, and returns the string value (or empty string).
+ * `/contacts/{id}` endpoint returns customFields keyed by `id` only —
+ * no fieldKey — so the id-lookup path has to work. idMap is the
+ * inverted catalog ({ "business_playbook": "<ghl id>", ... }) built by
+ * the caller from fetchGHLCustomFieldsCatalog + buildFieldKeyToIdMap.
+ *
+ * The fieldKey fallback is kept for tests that stub a contact with
+ * fieldKey on each customField entry, and for the rare case where
+ * GHL does echo a fieldKey back (bulk search endpoints sometimes do).
+ *
+ * (Codex P1 on #93) Before this change the helper took `env` and
+ * looked at `env.REPORT_FIELD_IDS`, which is never populated — the
+ * repo's only field-id map is `CONFIG.REPORT_FIELD_IDS` in
+ * `worker/src/index.js`. In production that meant every BGA case
+ * read landed on the id branch with an empty idMap, fell through to
+ * the fieldKey branch (which GHL doesn't send on contact fetch),
+ * and returned "". The upsert path then silently overwrote the
+ * verified-financials array with just the newly saved metric.
  */
-export function readCustomField(contact, fieldKey, env) {
+export function readCustomField(contact, fieldKey, idMap = {}) {
   const cfs = Array.isArray(contact.customFields) ? contact.customFields : [];
-  const idMap = (env && env.REPORT_FIELD_IDS) || {};
-  const id = idMap[fieldKey];
+  const id = idMap && idMap[fieldKey];
   const found = cfs.find((f) =>
     (id && f.id === id) ||
     (f.fieldKey || f.key || "") === `contact.${fieldKey}` ||
@@ -89,6 +105,27 @@ export function readCustomField(contact, fieldKey, env) {
   );
   const v = found?.value ?? found?.field_value ?? "";
   return typeof v === "string" ? v : String(v || "");
+}
+
+/**
+ * Fetches the GHL custom-field catalog and returns a `fieldKey → id`
+ * lookup. Handlers call this once per request before any readCustomField
+ * so every call that follows resolves ids correctly.
+ *
+ * On GHLCatalogUnavailableError (network / non-ok), returns {} so the
+ * handler can still try the fieldKey-fallback path rather than failing
+ * the whole request. The caller gets a loud "field missing" symptom
+ * instead of a 503 cascade; a 503 on catalog alone would make the whole
+ * case view unusable, which is a worse failure mode for the strategist.
+ */
+export async function resolveFieldIdMap(env) {
+  try {
+    const catalog = await fetchGHLCustomFieldsCatalog(env);
+    return buildFieldKeyToIdMap(catalog);
+  } catch (e) {
+    console.warn(`[bga_copilot] resolveFieldIdMap: ${e?.message || e}`);
+    return {};
+  }
 }
 
 /**
@@ -149,10 +186,13 @@ export async function handleAuditCaseGaps(request, env, { checkPassword }) {
   const { contact, error } = await fetchGhlContact(contactId, env);
   if (!contact) return json({ success: false, error: error || "contact fetch failed" }, 503);
 
-  const playbook = readCustomField(contact, "business_playbook", env);
-  const brief = readCustomField(contact, "swot_strategist_brief", env);
-  const fullDiag = readCustomField(contact, "swot_full_report", env);
-  const vfRaw = readCustomField(contact, VERIFIED_FINANCIALS_FIELD_KEY, env);
+  // Codex P1 on #93: resolve bare {id,value} customFields via the GHL
+  // field catalog (one cached /customFields fetch per worker instance).
+  const idMap = await resolveFieldIdMap(env);
+  const playbook = readCustomField(contact, "business_playbook", idMap);
+  const brief = readCustomField(contact, "swot_strategist_brief", idMap);
+  const fullDiag = readCustomField(contact, "swot_full_report", idMap);
+  const vfRaw = readCustomField(contact, VERIFIED_FINANCIALS_FIELD_KEY, idMap);
   const vfEntries = parseVerifiedFinancials(vfRaw);
 
   const presentIds = vfEntries
@@ -233,7 +273,9 @@ export async function handleVerifiedFinancialsPanel(request, env, { checkPasswor
   const { contact, error } = await fetchGhlContact(contactId, env);
   if (!contact) return json({ success: false, error: error || "contact fetch failed" }, 503);
 
-  const currentRaw = readCustomField(contact, VERIFIED_FINANCIALS_FIELD_KEY, env);
+  // Codex P1 on #93: id-based resolution — see resolveFieldIdMap docstring.
+  const idMap = await resolveFieldIdMap(env);
+  const currentRaw = readCustomField(contact, VERIFIED_FINANCIALS_FIELD_KEY, idMap);
   const current = parseVerifiedFinancials(currentRaw);
   const next = upsertEntry(current, entry);
 
