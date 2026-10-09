@@ -52,8 +52,7 @@
     "name": "PLACEHOLDER — Bookkeeping Cleanup — replace with real service",
     "problem_solved": "Books are behind or miscategorized to the point where no meaningful financial decision can be made from them. The business needs a one-time reset before any ongoing CFO engagement can work.",
     "signals_relevant": [
-      "bookkeeping_cleanup_needed",
-      "books_not_closable"
+      "bookkeeping_cleanup_needed"
     ],
     "when_not_to_recommend": [
       "legal_distress"

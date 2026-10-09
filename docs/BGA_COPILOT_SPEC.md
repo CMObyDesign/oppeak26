@@ -217,12 +217,21 @@ visible "wrote to field X" line in the conversation transcript.
 | [ FIND WHAT'S MISSING ] | `audit_case_gaps` | nothing (read-only) | No |
 | [ RECORD / REVIEW VERIFIED FINANCIALS ] | `verified_financials_panel` | `swot_verified_financials` (JSON array) | No |
 | [ DRAFT ROADMAP ] | `generate_roadmap_draft` | `swot_growth_plan_draft` + applies `swot_growth_plan_drafted` tag | No |
+| ↳ *(inline per-section edit)* | `update_roadmap_section` | `swot_growth_plan_draft` (section N only, in place) | No |
 | [ MATCH CFO BY DESIGN SERVICES ] | `match_services` | adds `SERVICE MATCH` entries to the current draft | No |
 | [ CHALLENGE THIS PLAN ] | `challenge_roadmap` | nothing (read-only adversarial review) | No |
 | [ PREP ME FOR THE CALL ] | `generate_prep_brief` | `swot_bga_prep_brief` | No |
 | [ PROCESS CALL NOTES ] | `extract_call_decisions` | nothing until strategist confirms → then `swot_bga_decisions` + `swot_bga_services_selected` | No |
 | [ RUN PRE-SEND QA ] | `red_team_check` | `swot_bga_red_team_report` | No |
 | [ APPROVE & SEND TO CLIENT ] | `approve_and_send` (the button) | `swot_growth_plan`, `swot_bga_next_steps`, `swot_bga_services_selected_display`, applies `swot_growth_plan_ready` | **YES — Email 04 fires** |
+
+`update_roadmap_section` is not a top-level toolkit button; it's an
+inline "edit this section" action exposed per-section in the DRAFT
+ROADMAP view. The strategist uses it to apply CHALLENGE THIS PLAN
+critiques, fix issues flagged by RUN PRE-SEND QA, and incorporate
+call-time changes — without regenerating the whole draft. See §4.3.1.
+(Codex P1 on #90: without this action in the toolkit, the critique
+and QA workflows had no way to apply a correction.)
 
 **There is no `finalize_and_send` tool.** The LLM has no server
 endpoint for applying `swot_growth_plan_ready` or writing
@@ -253,9 +262,7 @@ Structured per-metric form in the console. The strategist records
 each verified metric with:
 
 ```
-metric_id:    cash_on_hand | revenue_ttm | gross_margin_pct |
-              net_profit | ar_30_60_90 | monthly_debt_service |
-              outstanding_debt | working_capital | tax_status | ...
+metric_id:    one of the canonical IDs in §10 item 2
 value:        <number or structured value for metrics like ar_30_60_90>
 period:       <YYYY-MM-DD or "TTM" or similar>
 source_doc:   <filename or GHL file reference>
@@ -267,21 +274,55 @@ The field `swot_verified_financials` holds a JSON array of these
 objects. The console renders them as a table. Each entry's
 provenance badge is `VERIFIED FACT`.
 
-The canonical metric list lives in §7 of the HL field catalog
-companion doc (`docs/BGA_COPILOT_HL_SETUP.md`) so the two stay in sync.
+**The canonical metric list is pinned in §10 item 2 of this spec.**
+That's the single source of truth. `audit_case_gaps`,
+`verified_financials_panel`, `match_services` dependency checks, and
+the §9 regression tests all read against §10. Any addition requires
+a schema PR that updates §10 AND the detectors in `audit_case_gaps`
+AND adds a regression test; content-only entries using existing IDs
+need no code change. (Codex P2 on #90: eliminated the shadow list
+that previously appeared here with `net_profit` and `outstanding_debt`
+drift from the §10 canonical names, and corrected the broken pointer
+to a nonexistent §7 of the HL setup doc.)
 
 ### 4.3 `generate_roadmap_draft` — DRAFT ROADMAP
 
-Unchanged from the prior spec. Pulls Part 1, strategist brief,
-intake, Full Diagnostic (if present), verified financials, and the
-services catalog. Produces the 8-section draft with "DRAFT · INTERNAL
-PREP ONLY · NOT FOR CUSTOMER DELIVERY" banner. Writes to
-`swot_growth_plan_draft`. Applies `swot_growth_plan_drafted` tag.
+Pulls Part 1, strategist brief, intake, Full Diagnostic (if
+present), verified financials, and the services catalog. Produces
+the 8-section draft with "DRAFT · INTERNAL PREP ONLY · NOT FOR
+CUSTOMER DELIVERY" banner. Writes to `swot_growth_plan_draft`.
+Applies `swot_growth_plan_drafted` tag.
 
 Every claim in the output carries an inline provenance tag per §3.1.
 Section 7 (Service Recommendations) is populated by calling
 `match_services` as a sub-step; if no catalog entry matches, section
 7 says so plainly.
+
+#### 4.3.1 `update_roadmap_section` — inline per-section edit
+
+Not a top-level toolkit button; a per-section action exposed inline
+on each section of the DRAFT ROADMAP view. Takes `(contactId,
+section_number, new_content)` and overwrites only that section of
+`swot_growth_plan_draft` while leaving every other section
+unchanged.
+
+Used in three places in the workflow:
+
+- **After CHALLENGE THIS PLAN (§4.5)** — strategist reads the
+  critique and applies the specific corrections they agree with to
+  the affected sections.
+- **After RUN PRE-SEND QA (§4.8)** — strategist resolves a blocker
+  by editing the section the blocker names (missing provenance tag,
+  internal terminology leak, Miguel-personal pronoun, etc.) and
+  re-runs QA.
+- **During the live call** — strategist records inline edits when
+  priorities change on the call, without regenerating the whole
+  draft.
+
+Written content must preserve inline provenance tags for every
+material claim (§3.1); `red_team_check` catches any that got stripped
+during edit. The edit action appends a `swot_bga_version_history`
+entry per §8 so the audit trail captures every per-section change.
 
 ### 4.4 `match_services` — MATCH CFO BY DESIGN SERVICES
 
@@ -490,14 +531,34 @@ The red-team report writes to `swot_bga_red_team_report` as:
       "detail": "..." }
   ],
   "warnings": [...],
-  "acknowledged_warnings": []
+  "acknowledged_warnings": [],
+  "inputs_checked": {
+    "draft_hash":        "sha256:<hex of swot_growth_plan_draft content at run_at>",
+    "decisions_hash":    "sha256:<hex of swot_bga_decisions content at run_at>",
+    "selections_hash":   "sha256:<hex of swot_bga_services_selected content at run_at>"
+  }
 }
 ```
 
-The button endpoint re-verifies this field at request time. If a
-warning is unacknowledged, the UI shows an acknowledgment checkbox;
-on acknowledgment the `acknowledged_warnings` array updates. If a
-blocker is present, the button stays disabled.
+The button endpoint re-verifies this field at request time with
+**both** checks:
+
+1. **No blockers in the latest report** (same as before).
+2. **The three input hashes still match the current content.** If
+   the strategist edited the draft, confirmed new call decisions,
+   or changed service selections after the last QA run, at least one
+   hash now differs and the report is stale. The endpoint refuses
+   with `409 "red-team report is stale; re-run RUN PRE-SEND QA
+   before sending"` and names which input changed. (Codex P1 on
+   #90: without this binding, the strategist could red-team a clean
+   draft, edit something bad into it, and still ship — because the
+   report no longer reflected the content being sent.)
+
+If a warning is unacknowledged, the UI shows an acknowledgment
+checkbox; on acknowledgment the `acknowledged_warnings` array
+updates. Acknowledging a warning does NOT revalidate the input
+hashes — a content edit after acknowledgment still invalidates the
+report.
 
 ### 5.4 Server endpoint behavior (`handleApproveAndSend` in `worker/src/index.js`)
 
@@ -743,7 +804,7 @@ Every BGA tool call appends an entry:
 ```json
 {
   "at": "2026-10-09T14:32:11Z",
-  "actor": "miguel@cfobydesign.com",  // via CONSOLE_PASSWORD session
+  "actor": "console_session",
   "action": "generate_roadmap_draft",
   "affected_field": "swot_growth_plan_draft",
   "snapshot_hash": "sha256:abc123...",
@@ -751,14 +812,35 @@ Every BGA tool call appends an entry:
 }
 ```
 
-- `snapshot_hash` is a SHA-256 of the field's new content, so the
-  log is tamper-evident without storing full content twice.
-- Full-content snapshots live in the `/asksolomon/history` row
-  for the session; the version-history field is the index.
+Important caveats about what this log IS and ISN'T:
+
+- `actor` is `"console_session"` — a flag that the write came
+  through a `checkConsolePassword`-authenticated request. **The
+  current console auth is a shared password; it does NOT identify
+  which strategist on the team ran the action.** Hard-coding
+  `miguel@cfobydesign.com` would misattribute every teammate's
+  changes. Per-user attribution requires an auth upgrade (per-user
+  console accounts or signed strategist tokens) — tracked as a
+  future revision, not shipped in the toolkit build. (Codex P2 on
+  #90.)
+- `snapshot_hash` is a SHA-256 of the field's new content and is
+  **best-effort audit, not forensic tamper-evidence**. The hash sits
+  next to the content in the same writable HL field, so anyone who
+  can modify the audited content can also recompute the hash and
+  rewrite the history entry. For true tamper-evidence we would
+  need: (a) chained hashes (entry N includes entry N-1's hash),
+  (b) server-side signing with a key not stored in HL, and (c)
+  anchoring hashes in append-only storage. All three are future
+  revisions. For now the log is informative — it shows what
+  happened in the normal course of operation and gives a diffable
+  record for review, but it is not evidence that would survive an
+  adversarial dispute. (Codex P2 on #90.)
+- Full-content snapshots live in the `/asksolomon/history` row for
+  the session; the version-history field is the index.
 - The red-team check and the approve-and-send call both append
-  entries. The approve entry includes the final content hash so a
-  future dispute can be traced to the exact bytes delivered to the
-  client.
+  entries. The approve entry includes the final content hash so
+  routine review can trace the exact bytes delivered to the client
+  under the audit model above.
 
 ### 8.2 Why in the HL field, not a separate DB
 
@@ -834,6 +916,23 @@ Each of these is a test that must stay green on every PR.
 16. **No `finalize_and_send` endpoint exists**: grep-based test
     confirms no handler or route named `finalize_and_send`, nor any
     other `/asksolomon/case/*` route that writes `swot_growth_plan`.
+17. **Red-team report is bound to the exact inputs it checked**
+    (Codex P1 on #90). Scenario: run `red_team_check` on a draft
+    with no blockers, confirm the report stores `inputs_checked`
+    hashes for draft/decisions/selections. Then call
+    `update_roadmap_section` to change one section. Attempt
+    `approve_and_send` — must return 409 "red-team report is stale;
+    re-run RUN PRE-SEND QA" naming the changed input. Re-run
+    `red_team_check`; the new report's hashes match; approve now
+    succeeds. Repeat the scenario for a `swot_bga_decisions` edit
+    and a `swot_bga_services_selected` edit.
+18. **`update_roadmap_section` edits only the named section** and
+    appends a version-history entry. Scenario: generate a draft with
+    8 sections, call `update_roadmap_section(3, new_content)`,
+    confirm section 3's content changed and sections 1-2, 4-8 are
+    byte-identical to before. Confirm the version history grew by
+    one entry with `action: "update_roadmap_section"` and
+    `affected_field: "swot_growth_plan_draft"`.
 
 ---
 
@@ -892,14 +991,14 @@ mergeable independently.
 | **2** | **Services catalog scaffold**: `worker/data/service_catalog.json` with 1-2 placeholder entries + `docs/services/CATALOG_SCHEMA.md` JSON Schema. Content-less structural landing. | Nothing (parallel to PR 1 follow-up) |
 | **3** | **Verified-financials panel**: `verified_financials_panel` tool + UI table + `audit_case_gaps` tool that uses the metric list. First tool with user-visible value. | PR 1 + PR 2 |
 | **4** | **Worker + console scaffolding**: `/asksolomon/case/load` + case view UI (read-only — assembles and displays the bundle, auto-runs `audit_case_gaps` on load). | PR 3 |
-| **5** | **Draft Roadmap**: `generate_roadmap_draft` tool + 8-section prompt + inline provenance tags + "DRAFT · INTERNAL" banner. Uses catalog if content exists, placeholder otherwise. | PR 4 |
+| **5** | **Draft Roadmap**: `generate_roadmap_draft` tool + `update_roadmap_section` inline per-section edit (§4.3.1) + 8-section prompt + inline provenance tags + "DRAFT · INTERNAL" banner. Uses catalog if content exists, placeholder otherwise. | PR 4 |
 | **6** | **Match Services**: `match_services` tool + sub-step inside DRAFT ROADMAP. Depends on catalog having real content for its output to be useful. | PR 5 (works end-to-end once Miguel fills in the catalog) |
 | **7** | **Pre-Call Brief**: `generate_prep_brief` tool + its field write. | PR 5 |
 | **8** | **Challenge My Plan**: `challenge_roadmap` tool (read-only adversarial pass). | PR 5 |
 | **9** | **Call Notes → Decisions**: `extract_call_decisions` tool + "Confirm decisions" action that writes `swot_bga_decisions` and `swot_bga_services_selected`. | PR 5 |
 | **10** | **Version history**: `swot_bga_version_history` write wrapper that every tool call goes through + R2 spillover for overflow entries. Refactor existing tools to use it. | PR 5–9 landed |
 | **11** | **Email 04 template update** (`04_deep_dive_part2.html` + preview mirror) to merge in `{{contact.swot_bga_next_steps}}` and `{{contact.swot_bga_services_selected_display}}`. Pre-condition for PR 12 — template-only, zero fire risk, lands FIRST. | PR 1 |
-| **12** | **Pre-Send QA + Finalize + the button**: `red_team_check` tool + the four blocker and four warning rules + `[Mark Reviewed]` toggle + `[APPROVE & SEND TO CLIENT]` button + modal + D1 migration `bga_send_locks` + `POST /asksolomon/case/approve-and-send` + all 16 regression tests from §9. | PR 10 + PR 11 |
+| **12** | **Pre-Send QA + Finalize + the button**: `red_team_check` tool + **all six blocker rules** and all four warning rules from §5.3 + input-hash binding in the report + `[Mark Reviewed]` toggle + `[APPROVE & SEND TO CLIENT]` button + modal + D1 migration `bga_send_locks` + `POST /asksolomon/case/approve-and-send` (verifies hashes + no blockers + lock + preconditions) + all §9 regression tests. | PR 10 + PR 11 |
 | **13** | **Public copy update** (post-launch, not blocking build): rewrite sales page + FAQ statements promising "written plan before the 50-minute session." Touch at least `app/public/deep-dive-sales/` and any FAQ copy. | PR 12 |
 | **14** | **Document extraction** (optional, later): PDF/Excel parsing of uploaded financial docs with [VERIFY] [EDIT] [REJECT] confirmation flow. Only verified values enter `swot_verified_financials`. | PR 12 |
 
