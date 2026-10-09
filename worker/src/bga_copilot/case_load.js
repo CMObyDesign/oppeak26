@@ -324,6 +324,12 @@ export function assembleCaseBundle(contact, idMap, { contactId, catalog } = { co
       content: growthPlanDraft,
     },
 
+    // (PR 7) Prep brief content for the case view's prep-brief panel.
+    prep_brief: {
+      present: prepBrief.trim().length > 0,
+      content: prepBrief,
+    },
+
     canonical_metrics: canonicalMetricsEcho(),
   };
 }

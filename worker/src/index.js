@@ -33,6 +33,7 @@ import {
   handleUpdateRoadmapSection,
 } from "./bga_copilot/roadmap.js";
 import { handleMatchServices } from "./bga_copilot/match_services.js";
+import { handleGeneratePrepBrief } from "./bga_copilot/prep_brief.js";
 import {
   fetchGHLCustomFieldsCatalog,
   GHLCatalogUnavailableError,
@@ -5661,6 +5662,12 @@ export default {
     // Writes ONLY swot_growth_plan_draft (Section 7 only). No tag writes.
     if (path === "/asksolomon/case/match-services") {
       return handleMatchServices(request, env, { checkPassword: checkConsolePassword });
+    }
+
+    // PR 7 — docs/BGA_COPILOT_SPEC.md §4.6.
+    // Writes ONLY swot_bga_prep_brief. No tag writes.
+    if (path === "/asksolomon/case/generate-prep-brief") {
+      return handleGeneratePrepBrief(request, env, { checkPassword: checkConsolePassword });
     }
 
     // POST /audit — JSON marketing audit. No auth (matches GET /audit).
