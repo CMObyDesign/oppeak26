@@ -40,6 +40,9 @@ import {
   fetchGHLCustomFieldsCatalog,
   buildFieldKeyToIdMap,
 } from "../ghl_catalog.js";
+import {
+  getServicesCatalogVersion,
+} from "./services_catalog.js";
 
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 const DRAFT_FIELD_KEY = "swot_growth_plan_draft";
@@ -365,7 +368,18 @@ export function validateGeneratedDraft(text, stopReason) {
  * path (which adds a tag, not a custom field).
  */
 async function updateGhlCustomField(contactId, fieldKey, value, env) {
+  return updateGhlCustomFields(contactId, [{ key: fieldKey, value }], env);
+}
+
+/**
+ * Atomic multi-field write — same contract as the single-field
+ * helper but takes `[{ key, value }, ...]`. (Codex P2 on #97) Used
+ * when draft + catalog_ref need to land in the same PUT so a partial
+ * write doesn't leave the audit record disagreeing with the content.
+ */
+async function updateGhlCustomFields(contactId, fields, env) {
   if (!env.GHL_API_KEY) return false;
+  if (!Array.isArray(fields) || fields.length === 0) return false;
   try {
     const res = await fetch(`${GHL_API_BASE}/contacts/${encodeURIComponent(contactId)}`, {
       method: "PUT",
@@ -375,7 +389,7 @@ async function updateGhlCustomField(contactId, fieldKey, value, env) {
         Version: "2021-07-28",
       },
       body: JSON.stringify({
-        customFields: [{ key: fieldKey, field_value: value }],
+        customFields: fields.map((f) => ({ key: f.key, field_value: f.value })),
       }),
     });
     return res.ok;
@@ -434,10 +448,14 @@ export async function handleGenerateRoadmapDraft(request, env, { checkPassword }
   const idMap = buildFieldKeyToIdMap(catalog);
   const bundle = assembleCaseBundle(contact, idMap, { contactId, catalog });
 
+  // (Codex P2 on #97) The catalog version used for THIS draft becomes
+  // the authoritative `swot_bga_services_catalog_ref` for the case —
+  // written atomically alongside the draft below so the audit record
+  // is never out of sync with the content it describes.
+  const catalogVersion = await getServicesCatalogVersion();
+
   const systemText = buildRoadmapSystemPrompt();
-  const userText = buildRoadmapUserPrompt(bundle, {
-    catalogVersion: readCustomField(contact, "swot_bga_services_catalog_ref", idMap) || null,
-  });
+  const userText = buildRoadmapUserPrompt(bundle, { catalogVersion });
 
   const claude = await callClaudeForRoadmap(systemText, userText, env);
   if (!claude.ok) return json({ success: false, error: claude.error }, 503);
@@ -449,10 +467,14 @@ export async function handleGenerateRoadmapDraft(request, env, { checkPassword }
   if (!validated.ok) return json({ success: false, error: validated.error }, 502);
   const draft = validated.draft;
 
-  // Write the draft field; apply the drafted tag. Both must succeed
-  // to count as a complete generation; the drafted tag is the signal
-  // HL / other tools use to know "prep done; call-ready."
-  const wroteField = await updateGhlCustomField(contactId, DRAFT_FIELD_KEY, draft, env);
+  // Write the draft field + catalog_ref atomically, then apply the
+  // drafted tag. The field write must succeed to count as a complete
+  // generation; the drafted tag is the signal HL / other tools use
+  // to know "prep done; call-ready."
+  const wroteField = await updateGhlCustomFields(contactId, [
+    { key: DRAFT_FIELD_KEY, value: draft },
+    { key: "swot_bga_services_catalog_ref", value: catalogVersion },
+  ], env);
   if (!wroteField) return json({ success: false, error: "writeback to GHL failed" }, 503);
 
   const taggedOk = await applyGhlTag(contactId, DRAFTED_TAG, env);

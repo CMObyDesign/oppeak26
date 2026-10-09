@@ -667,9 +667,11 @@ async function saveVerifiedFinancial() {
   btn.disabled = true;
   const prevLabel = btn.textContent;
   btn.textContent = "Saving…";
+  // Codex P1 on #98: pin to request-time case.
+  const requestedContactId = currentContactId;
   try {
     const { status, data } = await callApi("/asksolomon/case/verified-financials", {
-      contactId: currentContactId,
+      contactId: requestedContactId,
       entry,
       expected_entries_hash: currentEntriesHash,
     });
@@ -678,6 +680,7 @@ async function saveVerifiedFinancial() {
       showVfError("Unauthorized — password rejected.", false);
       return;
     }
+    if (requestedContactId !== currentContactId) return;
     if (status === 409 || data.conflict === true) {
       // Someone else wrote first — bring the UI back in sync.
       currentEntriesHash = data.current_entries_hash || currentEntriesHash;
@@ -814,14 +817,84 @@ function renderDraftContent(pane, content) {
     }
   }
   chunks.push('<div class="generate-row" style="margin-top:12px;">');
-  chunks.push('<div>Re-generating replaces the entire draft. Match-services replaces only Section 7. Per-section edits above do not touch other sections.</div>');
-  chunks.push('<div style="display:flex; gap:8px;">');
+  chunks.push('<div>Re-generating replaces the entire draft. Match-services replaces only Section 7. Challenge is read-only — a critique only; apply via per-section edit if you agree. Per-section edits do not touch other sections.</div>');
+  chunks.push('<div style="display:flex; gap:8px; flex-wrap:wrap;">');
+  chunks.push('<button onclick="challengeRoadmap()" id="challenge-roadmap-btn">Challenge this plan</button>');
   chunks.push('<button onclick="matchServices()" id="match-services-btn">Match services → Section 7</button>');
   chunks.push('<button onclick="generateRoadmap()" id="generate-roadmap-btn">Re-generate draft</button>');
   chunks.push('</div>');
   chunks.push('</div>');
   chunks.push('<div id="generate-roadmap-error" class="error-banner hidden" style="margin-top:10px;"></div>');
+  // Critique pane — hidden until Challenge returns.
+  chunks.push('<div id="challenge-critique-pane" class="hidden" style="margin-top:16px; padding:12px 14px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:6px;">');
+  chunks.push('<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">');
+  chunks.push('<div style="font-size:12px; text-transform:uppercase; letter-spacing:1.5px; color:#6b7280; font-weight:600;">Critique (read-only, nothing persisted)</div>');
+  chunks.push('<button onclick="hideChallengeCritique()">Close</button>');
+  chunks.push('</div>');
+  chunks.push('<div id="challenge-critique-body" class="section-content"></div>');
+  chunks.push('</div>');
   pane.innerHTML = chunks.join("");
+}
+
+async function challengeRoadmap() {
+  if (!currentContactId) return;
+  const btn = document.getElementById("challenge-roadmap-btn");
+  if (!btn) return;
+  showGenerateRoadmapError(null);
+  hideChallengeCritique();
+  // Codex P1 on #98 pattern: pin to request-time case.
+  const requestedContactId = currentContactId;
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Running critique… (20–40s)";
+  try {
+    const { status, data } = await callApi("/asksolomon/case/challenge-roadmap", {
+      contactId: requestedContactId,
+    });
+    if (status === 401) { logout(); return; }
+    if (requestedContactId !== currentContactId) return;
+    if (!data.success) {
+      showGenerateRoadmapError("Challenge failed: " + (data.error || "unknown"));
+      return;
+    }
+    showChallengeCritique(data.critique, data.verdict);
+  } catch (err) {
+    if (requestedContactId !== currentContactId) return;
+    showGenerateRoadmapError("Request failed: " + (err && err.message ? err.message : String(err)));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
+
+function showChallengeCritique(critique, verdict) {
+  const pane = document.getElementById("challenge-critique-pane");
+  const body = document.getElementById("challenge-critique-body");
+  if (!pane || !body) return;
+  // Light formatting: verdict pill at top, then the markdown critique
+  // as pre-formatted text (we're not pulling in a markdown renderer
+  // for one surface — the headings read fine as-is).
+  const verdictHtml = verdict
+    ? '<div style="margin-bottom:10px;"><span class="pill ' + verdictPillClass(verdict) + '">'
+      + esc(verdict) + '</span></div>'
+    : '';
+  body.innerHTML = verdictHtml + '<pre style="white-space:pre-wrap; margin:0; font-family:inherit; font-size:13px; line-height:1.6;">'
+    + esc(critique || '') + '</pre>';
+  pane.classList.remove("hidden");
+}
+
+function hideChallengeCritique() {
+  const pane = document.getElementById("challenge-critique-pane");
+  if (!pane) return;
+  pane.classList.add("hidden");
+  const body = document.getElementById("challenge-critique-body");
+  if (body) body.innerHTML = "";
+}
+
+function verdictPillClass(verdict) {
+  if (verdict === "BLOCK") return "pill-rehab";
+  if (verdict === "REVISE") return "pill-needs";
+  return "pill-growth"; // SHIP IT
 }
 
 async function matchServices() {
@@ -829,15 +902,19 @@ async function matchServices() {
   const btn = document.getElementById("match-services-btn");
   if (!btn) return;
   showGenerateRoadmapError(null);
+  // Codex P1 on #98: pin to the case at request-time; discard the
+  // response if the strategist moved to a different case.
+  const requestedContactId = currentContactId;
   const prev = btn.textContent;
   btn.disabled = true;
   btn.textContent = "Matching…";
   try {
     const { status, data } = await callApi("/asksolomon/case/match-services", {
-      contactId: currentContactId,
+      contactId: requestedContactId,
       mode: "write",
     });
     if (status === 401) { logout(); return; }
+    if (requestedContactId !== currentContactId) return;
     if (!data.success) {
       showGenerateRoadmapError("Match failed: " + (data.error || "unknown"));
       return;
@@ -850,6 +927,7 @@ async function matchServices() {
       + "Catalog version: " + (data.catalog_version || "unknown") + ".",
     );
   } catch (err) {
+    if (requestedContactId !== currentContactId) return;
     showGenerateRoadmapError("Request failed: " + (err && err.message ? err.message : String(err)));
   } finally {
     btn.disabled = false;
@@ -918,13 +996,16 @@ async function saveEditSection(n) {
   const block = document.querySelector('[data-section-n="' + n + '"]');
   const actions = block.querySelector(".section-actions");
   actions.innerHTML = '<span class="loader">Saving…</span>';
+  // Codex P1 on #98: discard stale response if the case changed mid-save.
+  const requestedContactId = currentContactId;
   try {
     const { status, data } = await callApi("/asksolomon/case/update-roadmap-section", {
-      contactId: currentContactId,
+      contactId: requestedContactId,
       section_number: n,
       new_content: newContent,
     });
     if (status === 401) { logout(); return; }
+    if (requestedContactId !== currentContactId) return;
     if (!data.success) {
       actions.innerHTML = '<button class="primary" onclick="saveEditSection(' + n + ')">Save</button>';
       alert("Save failed: " + (data.error || "unknown"));
@@ -934,6 +1015,7 @@ async function saveEditSection(n) {
     // scratch — simpler and avoids drift if the parse changes.
     renderDraftContent(document.getElementById("roadmap-pane"), data.draft);
   } catch (err) {
+    if (requestedContactId !== currentContactId) return;
     actions.innerHTML = '<button class="primary" onclick="saveEditSection(' + n + ')">Save</button>';
     alert("Request failed: " + (err && err.message ? err.message : String(err)));
   }
@@ -948,14 +1030,21 @@ async function generateRoadmap() {
   // pane. Clear-by-id BEFORE and show-by-id AFTER so the handler
   // writes to whichever banner node is currently in the DOM.
   showGenerateRoadmapError(null);
+  // Codex P1 on #98: capture the contact at request-time. If the
+  // strategist switches cases while the ~30s Claude call is in
+  // flight, we must NOT render case A's result into case B's panel
+  // and claim it was saved. The server did write to case A (correct);
+  // this is purely a UI consistency guard.
+  const requestedContactId = currentContactId;
   const prev = btn.textContent;
   btn.disabled = true;
   btn.textContent = "Generating… (30–60s)";
   try {
     const { status, data } = await callApi("/asksolomon/case/generate-roadmap-draft", {
-      contactId: currentContactId,
+      contactId: requestedContactId,
     });
     if (status === 401) { logout(); return; }
+    if (requestedContactId !== currentContactId) return; // stale response
     if (!data.success) {
       showGenerateRoadmapError("Generate failed: " + (data.error || "unknown"));
       return;
@@ -967,6 +1056,7 @@ async function generateRoadmap() {
       );
     }
   } catch (err) {
+    if (requestedContactId !== currentContactId) return;
     showGenerateRoadmapError("Request failed: " + (err && err.message ? err.message : String(err)));
   } finally {
     btn.disabled = false;
@@ -1024,14 +1114,21 @@ async function generatePrepBrief() {
   const btn = document.getElementById("generate-prep-brief-btn");
   if (!btn) return;
   showGeneratePrepBriefError(null);
+  // Codex P1 on #98: pin to request-time case. If the strategist
+  // switches cases during the ~20-45s Claude call, the server still
+  // writes case A's brief correctly, but the UI would otherwise
+  // overwrite case B's panel with A's content and misreport it as
+  // saved. Discard the stale response.
+  const requestedContactId = currentContactId;
   const prev = btn.textContent;
   btn.disabled = true;
   btn.textContent = "Generating… (20–45s)";
   try {
     const { status, data } = await callApi("/asksolomon/case/generate-prep-brief", {
-      contactId: currentContactId,
+      contactId: requestedContactId,
     });
     if (status === 401) { logout(); return; }
+    if (requestedContactId !== currentContactId) return; // stale
     if (!data.success) {
       showGeneratePrepBriefError("Generate failed: " + (data.error || "unknown"));
       return;
@@ -1044,6 +1141,7 @@ async function generatePrepBrief() {
       + "on catalog " + (data.catalog_version || "unknown") + ".",
     );
   } catch (err) {
+    if (requestedContactId !== currentContactId) return;
     showGeneratePrepBriefError("Request failed: " + (err && err.message ? err.message : String(err)));
   } finally {
     btn.disabled = false;
