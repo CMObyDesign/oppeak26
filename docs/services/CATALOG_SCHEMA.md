@@ -77,14 +77,18 @@ touches `worker/data/service_catalog.json`.
       },
       "signals_relevant": {
         "type": "array",
-        "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
+        "items": {
+          "$ref": "#/$defs/CanonicalSignal"
+        },
         "minItems": 1,
-        "description": "Canonical signal slugs (see §4) that indicate this service applies. `match_services` scores each service's signals against the current case's verified facts + intake answers."
+        "description": "Canonical signal slugs (see §4.1). `match_services` scores each service's signals against the current case's verified facts + intake answers. Only signals in the enumerated vocabulary validate — a misspelled or made-up signal fails CI."
       },
       "when_not_to_recommend": {
         "type": "array",
-        "items": { "type": "string", "pattern": "^[a-z][a-z0-9_]*$" },
-        "description": "Canonical disqualifier slugs (see §4). If any disqualifier currently applies to the case, `match_services` excludes this service even if signals match."
+        "items": {
+          "$ref": "#/$defs/CanonicalDisqualifier"
+        },
+        "description": "Canonical disqualifier slugs (see §4.2). If any disqualifier currently applies to the case, `match_services` excludes this service even if signals match. Only disqualifiers in the enumerated vocabulary validate; signals and disqualifiers are strictly separate — placing a disqualifier in `signals_relevant` (or vice versa) fails CI."
       },
       "deliverables": {
         "type": "array",
@@ -167,9 +171,46 @@ touches `worker/data/service_catalog.json`.
         "description": "Strategist-facing talking points — things Miguel can say during the BGA call about this service. These become part of the `SERVICE MATCH` provenance context."
       }
     }
+  },
+  "$defs": {
+    "CanonicalSignal": {
+      "type": "string",
+      "enum": [
+        "low_margin_visibility",
+        "ar_concentration_risk",
+        "ar_aging_90_plus_present",
+        "no_13_week_cash_forecast",
+        "monthly_close_absent_or_late",
+        "debt_service_pressure",
+        "bookkeeping_cleanup_needed",
+        "hiring_plan_not_supportable",
+        "pricing_review_opportunity",
+        "tax_filings_current_but_strategy_absent",
+        "growth_capital_question"
+      ],
+      "description": "The canonical signal vocabulary from §4.1. Append-only: new signals require a schema PR that adds the enum entry AND lands a `match_services` detector AND a regression test in the same diff."
+    },
+    "CanonicalDisqualifier": {
+      "type": "string",
+      "enum": [
+        "active_tax_default",
+        "legal_distress",
+        "revenue_band_below_500k",
+        "revenue_band_above_10m",
+        "books_not_closable",
+        "owner_not_decision_maker"
+      ],
+      "description": "The canonical disqualifier vocabulary from §4.2. Append-only under the same rules as signals. Disqualifiers and signals are strictly separate: a disqualifier may not appear in `signals_relevant`, and a signal may not appear in `when_not_to_recommend`."
+    }
   }
 }
 ```
+
+(Codex P2 on #91: previously these items used only
+`pattern: "^[a-z][a-z0-9_]*$"`, which validates any snake_case
+string and silently accepted misspelled or made-up signals that
+`match_services` could never recognize. The enum restriction makes
+such entries CI failures.)
 
 ---
 
@@ -192,15 +233,20 @@ touches `worker/data/service_catalog.json`.
 
 ---
 
-## 4. Canonical signal slugs
+## 4. Canonical vocabulary
 
 Signals and disqualifiers are drawn from a shared vocabulary so
 services written at different times still match the same case facts.
+Both lists are append-only; adding a new slug requires a schema PR
+that extends the matching `$defs` enum in §2, lands a detector in
+`match_services`, and adds a regression test.
 
-The current authoritative list (append-only; adding a new slug
-requires a `match_services` update to recognize it):
+**Signals and disqualifiers are disjoint sets.** A slug lives in one
+or the other, never both. Validators enforce this: a disqualifier
+slug in `signals_relevant` fails CI with "unknown signal," and vice
+versa.
 
-### Signals (used in `signals_relevant`)
+### 4.1 Signals (used in `signals_relevant`)
 
 | Slug | Meaning |
 |------|---------|
@@ -216,7 +262,7 @@ requires a `match_services` update to recognize it):
 | `tax_filings_current_but_strategy_absent` | Taxes current but no proactive tax strategy or planning. |
 | `growth_capital_question` | Owner is weighing financing options (debt, equity, SBA) without a decision framework. |
 
-### Disqualifiers (used in `when_not_to_recommend`)
+### 4.2 Disqualifiers (used in `when_not_to_recommend`)
 
 | Slug | Meaning |
 |------|---------|
