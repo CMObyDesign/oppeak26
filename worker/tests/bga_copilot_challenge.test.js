@@ -193,6 +193,29 @@ describe("validateChallengeOutput", () => {
       assert.equal(r.verdict, v);
     }
   });
+
+  it("(Codex P2 on #99) ignores canonical verdict strings that appear in lens prose", () => {
+    // Earlier unscoped regex returned "BLOCK" from a lens that said
+    // the issue "does not merit **BLOCK**". With the scoped parse,
+    // only the Verdict section counts.
+    const withLensMention = sampleCritique("REVISE").replace(
+      "Section 4 commitment on hiring: not supportable from current VF.",
+      "Section 4 commitment on hiring doesn't merit **BLOCK** but is weak.",
+    );
+    const r = validateChallengeOutput(withLensMention, "end_turn");
+    assert.equal(r.ok, true);
+    assert.equal(r.verdict, "REVISE"); // not BLOCK
+  });
+
+  it("(Codex P2 on #99) rejects a Verdict section with conflicting verdicts", () => {
+    const conflicting = sampleCritique("REVISE").replace(
+      "**REVISE** — Section 4 hiring + Section 6 tone.",
+      "**REVISE** on hiring but **BLOCK** on Section 6 — ambiguous.",
+    );
+    const r = validateChallengeOutput(conflicting, "end_turn");
+    assert.equal(r.ok, false);
+    assert.match(r.error, /conflicting values/);
+  });
 });
 
 describe("POST /asksolomon/case/challenge-roadmap — handleChallengeRoadmap", () => {

@@ -201,7 +201,16 @@ export function intakeToSignals(answers) {
     {
       slug: "monthly_close_absent_or_late",
       topic: ["monthly close", "month-end close", "month end close", "closing the books"],
-      condition: ["late", "behind", "absent", "no ", "don't", "do not", "skipped", "quarterly instead"],
+      // (Codex P2 on #99) Bare "no "/"don't"/"do not" fired on
+      // healthy answers like "No issues; books close by day 7".
+      // Keep only absence/lateness-specific terms. The strategist can
+      // still override via a `monthly_close_absent_or_late_opp` tag.
+      condition: [
+        "late", "behind", "absent", "skipped", "quarterly instead",
+        "not closing", "not reconciled", "overdue", "months behind",
+        "no monthly close", "no month-end close", "no month end close",
+        "don't close", "do not close", "haven't closed", "have not closed",
+      ],
     },
     {
       slug: "pricing_review_opportunity",

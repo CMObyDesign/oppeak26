@@ -298,6 +298,11 @@ export const CASE_VIEW_PAGE = `<!DOCTYPE html>
     </div>
 
     <div class="panel">
+      <h2>Process Call Notes</h2>
+      <div id="call-notes-pane"></div>
+    </div>
+
+    <div class="panel">
       <h2>Strategist Brief (internal)</h2>
       <div id="strategist-brief-pane" class="section-content empty">—</div>
     </div>
@@ -709,6 +714,9 @@ async function saveVerifiedFinancial() {
     document.getElementById("vf-note").value = "";
     renderVfValueInput();
   } catch (err) {
+    // (Codex P2 on #99) Guard the catch too — a case-switch mid-flight
+    // mustn't surface A's network error on B's panel.
+    if (requestedContactId !== currentContactId) return;
     showVfError("Request failed: " + (err && err.message ? err.message : String(err)), false);
   } finally {
     btn.disabled = false;
@@ -762,10 +770,175 @@ function renderCase(bundle, auditData) {
   renderCaseState(bundle);
   renderRoadmap(bundle);
   renderPrepBrief(bundle);
+  renderCallNotes();
   const intake = bundle.intake || {};
   renderContentPane("strategist-brief-pane", intake.strategist_brief);
   renderContentPane("business-playbook-pane", intake.business_playbook);
   renderContentPane("full-diagnostic-pane", intake.full_diagnostic);
+}
+
+// -------- Process Call Notes panel (PR 9) --------
+
+// Module state: the latest extracted record from the server, held
+// in memory until the strategist clicks Confirm. Spec §4.7: nothing
+// is committed until the strategist confirms.
+let callDecisionsRecord = null;
+let callDecisionsCatalogIds = [];
+
+function renderCallNotes() {
+  const pane = document.getElementById("call-notes-pane");
+  pane.innerHTML = ''
+    + '<div style="font-size:12px;color:#6b7280;margin-bottom:8px;">Paste the call notes verbatim. The parser produces an 11-section structured record; the strategist reviews it, edits the services_selected list, and clicks Confirm to save. Nothing is written until Confirm.</div>'
+    + '<textarea id="call-notes-textarea" rows="8" style="width:100%;padding:10px;border:1px solid #d1d5db;border-radius:6px;font-family:inherit;font-size:13px;" placeholder="— paste call notes here —"></textarea>'
+    + '<div class="generate-row" style="margin-top:10px;">'
+      + '<div></div>'
+      + '<button class="primary" onclick="extractCallDecisions()" id="extract-call-decisions-btn">Parse call notes</button>'
+    + '</div>'
+    + '<div id="call-decisions-error" class="error-banner hidden" style="margin-top:10px;"></div>'
+    + '<div id="call-decisions-preview" class="hidden" style="margin-top:12px;"></div>';
+  callDecisionsRecord = null;
+  callDecisionsCatalogIds = [];
+}
+
+async function extractCallDecisions() {
+  if (!currentContactId) return;
+  const btn = document.getElementById("extract-call-decisions-btn");
+  if (!btn) return;
+  const notes = document.getElementById("call-notes-textarea").value.trim();
+  if (!notes) { showCallDecisionsError("Paste call notes first."); return; }
+  showCallDecisionsError(null);
+
+  const requestedContactId = currentContactId;
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Parsing… (20–40s)";
+  try {
+    const { status, data } = await callApi("/asksolomon/case/extract-call-decisions", {
+      contactId: requestedContactId,
+      notes,
+    });
+    if (status === 401) { logout(); return; }
+    if (requestedContactId !== currentContactId) return;
+    if (!data.success) {
+      showCallDecisionsError("Parse failed: " + (data.error || "unknown"));
+      return;
+    }
+    callDecisionsRecord = data.record;
+    callDecisionsCatalogIds = Array.isArray(data.catalog_service_ids) ? data.catalog_service_ids : [];
+    renderCallDecisionsPreview();
+  } catch (err) {
+    if (requestedContactId !== currentContactId) return;
+    showCallDecisionsError("Request failed: " + (err && err.message ? err.message : String(err)));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
+
+function renderCallDecisionsPreview() {
+  const preview = document.getElementById("call-decisions-preview");
+  if (!preview || !callDecisionsRecord) return;
+  const r = callDecisionsRecord;
+  const sections = [
+    { slug: "priorities_confirmed", title: "Priorities confirmed" },
+    { slug: "priorities_changed", title: "Priorities changed" },
+    { slug: "client_corrections", title: "Client corrections" },
+    { slug: "ninety_day_commitments", title: "90-day commitments" },
+    { slug: "six_month_direction", title: "6-month direction" },
+    { slug: "twelve_month_goals", title: "12-month goals / reassessment" },
+    { slug: "next_steps", title: "Next steps" },
+    { slug: "services_discussed", title: "Services discussed" },
+    { slug: "services_selected", title: "Services selected" },
+    { slug: "services_declined_or_deferred", title: "Services declined / deferred" },
+    { slug: "follow_up_needed", title: "Follow-up needed" },
+  ];
+  const parts = [];
+  parts.push('<div style="font-size:11px; text-transform:uppercase; letter-spacing:1.5px; color:#6b7280; font-weight:600; margin-bottom:8px;">Parsed record (nothing committed yet)</div>');
+  for (const s of sections) {
+    const items = Array.isArray(r[s.slug]) ? r[s.slug] : [];
+    parts.push('<div class="section-block">');
+    parts.push('<div class="section-header"><div class="title">' + esc(s.title) + '</div></div>');
+    if (items.length === 0) {
+      parts.push('<div class="section-body"><em style="color:#9ca3af;">(empty)</em></div>');
+    } else {
+      parts.push('<ul class="section-body" style="margin:0; padding-left:20px;">');
+      for (const item of items) parts.push('<li>' + esc(item) + '</li>');
+      parts.push('</ul>');
+    }
+    parts.push('</div>');
+  }
+  // Services selected — editable (checkbox grid of catalog_service_ids + the extracted ones).
+  const extractedSelected = new Set(Array.isArray(r.services_selected) ? r.services_selected : []);
+  parts.push('<div class="section-block" style="margin-top:10px;">');
+  parts.push('<div class="section-header"><div class="title">Services selected (edit before Confirm)</div></div>');
+  parts.push('<div class="section-body">');
+  if (callDecisionsCatalogIds.length === 0) {
+    parts.push('<em style="color:#9ca3af;">(catalog empty)</em>');
+  } else {
+    parts.push('<div class="tag-row">');
+    for (const id of callDecisionsCatalogIds) {
+      const checked = extractedSelected.has(id) ? "checked" : "";
+      parts.push('<label style="display:flex;align-items:center;gap:6px;font-size:12px;">');
+      parts.push('<input type="checkbox" class="service-select-cb" value="' + esc(id) + '" ' + checked + '> ' + esc(id));
+      parts.push('</label>');
+    }
+    parts.push('</div>');
+  }
+  parts.push('</div>');
+  parts.push('</div>');
+  parts.push('<div class="generate-row" style="margin-top:12px;">');
+  parts.push('<div>Confirm writes <code>swot_bga_decisions</code> + <code>swot_bga_services_selected</code>. No tags fire.</div>');
+  parts.push('<button class="primary" onclick="confirmCallDecisions()" id="confirm-call-decisions-btn">Confirm and save</button>');
+  parts.push('</div>');
+  preview.innerHTML = parts.join("");
+  preview.classList.remove("hidden");
+}
+
+async function confirmCallDecisions() {
+  if (!currentContactId || !callDecisionsRecord) return;
+  const btn = document.getElementById("confirm-call-decisions-btn");
+  if (!btn) return;
+  showCallDecisionsError(null);
+  const requestedContactId = currentContactId;
+  // Pull the strategist's current selection from the checkbox grid
+  // (overrides the extracted value).
+  const selected = [];
+  for (const cb of document.querySelectorAll(".service-select-cb")) {
+    if (cb.checked) selected.push(cb.value);
+  }
+  const prev = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Saving…";
+  try {
+    const { status, data } = await callApi("/asksolomon/case/confirm-call-decisions", {
+      contactId: requestedContactId,
+      decisions: callDecisionsRecord,
+      services_selected: selected,
+    });
+    if (status === 401) { logout(); return; }
+    if (requestedContactId !== currentContactId) return;
+    if (!data.success) {
+      showCallDecisionsError("Save failed: " + (data.error || "unknown"));
+      return;
+    }
+    callDecisionsRecord = data.decisions;
+    renderCallDecisionsPreview();
+    showCallDecisionsError("Saved. " + data.services_selected.length + " service(s) selected.");
+  } catch (err) {
+    if (requestedContactId !== currentContactId) return;
+    showCallDecisionsError("Request failed: " + (err && err.message ? err.message : String(err)));
+  } finally {
+    btn.disabled = false;
+    btn.textContent = prev;
+  }
+}
+
+function showCallDecisionsError(msg) {
+  const el = document.getElementById("call-decisions-error");
+  if (!el) return;
+  if (!msg) { el.classList.add("hidden"); el.textContent = ""; return; }
+  el.textContent = msg;
+  el.classList.remove("hidden");
 }
 
 // -------- Roadmap panel (PR 5b) --------

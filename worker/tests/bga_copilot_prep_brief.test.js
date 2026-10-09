@@ -305,6 +305,21 @@ describe("extractSmTags + SM provenance validation (Codex P1 on #98)", () => {
     const r = validateGeneratedPrepBrief(sampleGoodBrief(), "end_turn");
     assert.equal(r.ok, true);
   });
+
+  it("(Codex P2 on #99) validator rejects when an included service has NO SM tag in S7", () => {
+    // Catalog has fractional_cfo_core + bookkeeping_cleanup matching,
+    // but the sample brief only tags fractional_cfo_core.
+    const matches = {
+      included: [
+        { service_id: "fractional_cfo_core", matched_signals: ["low_margin_visibility"] },
+        { service_id: "bookkeeping_cleanup", matched_signals: ["bookkeeping_cleanup_needed"] },
+      ],
+      excluded: [],
+    };
+    const r = validateGeneratedPrepBrief(sampleGoodBrief(), "end_turn", { matches });
+    assert.equal(r.ok, false);
+    assert.match(r.error, /missing SM tag\(s\) for included service\(s\): bookkeeping_cleanup/);
+  });
 });
 
 describe("POST /asksolomon/case/generate-prep-brief — handleGeneratePrepBrief", () => {

@@ -288,6 +288,7 @@ export function validateGeneratedPrepBrief(text, stopReason, { matches } = {}) {
       }
     }
     const section7Tags = extractSmTags(section7?.body || "");
+    const taggedServiceIds = new Set();
     for (const tag of section7Tags) {
       const signalsForService = includedById.get(tag.service_id);
       if (!signalsForService) {
@@ -302,6 +303,22 @@ export function validateGeneratedPrepBrief(text, stopReason, { matches } = {}) {
           error: `section 7 SM tag "${tag.service_id}" uses signal "${tag.signal}" which did not match this case`,
         };
       }
+      taggedServiceIds.add(tag.service_id);
+    }
+
+    // (Codex P2 on #99) Coverage check: every included service MUST
+    // appear in Section 7 with an SM tag. If Claude silently drops a
+    // match, the brief would otherwise be accepted and the strategist
+    // loses a recommendation.
+    const missing = [];
+    for (const service_id of includedById.keys()) {
+      if (!taggedServiceIds.has(service_id)) missing.push(service_id);
+    }
+    if (missing.length > 0) {
+      return {
+        ok: false,
+        error: `section 7 missing SM tag(s) for included service(s): ${missing.join(", ")}`,
+      };
     }
   }
 

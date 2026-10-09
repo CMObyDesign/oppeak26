@@ -182,16 +182,44 @@ export function validateChallengeOutput(text, stopReason) {
   for (const h of REQUIRED_LENS_HEADINGS) {
     if (!t.includes(h)) return { ok: false, error: `critique missing lens heading: ${h}` };
   }
-  if (!/##\s+Verdict/.test(t)) {
+  // (Codex P2 on #99) Scope the verdict parse to text AFTER
+  // `## Verdict` only. A lens discussing "does not merit **BLOCK**"
+  // used to leak into the final verdict with the unscoped regex.
+  // Also reject multiple canonical verdict strings in the section
+  // (a critique with a contradictory verdict is wrong, not something
+  // the UI should silently flatten).
+  const verdictSplit = t.split(/##\s+Verdict/);
+  if (verdictSplit.length < 2) {
     return { ok: false, error: "critique missing the '## Verdict' section" };
   }
-  // Verdict value must match exactly one of the three. Preserve the
-  // bold-wrapped strings so a future red-team / audit path can grep.
-  const verdictMatch = /\*\*(SHIP IT \(minor refinements\)|REVISE|BLOCK)\*\*/.exec(t);
-  if (!verdictMatch) {
-    return { ok: false, error: "critique verdict is not one of SHIP IT / REVISE / BLOCK (bolded)" };
+  // The section runs from the ## Verdict heading until EOF (nothing
+  // comes after per the system prompt).
+  const verdictSection = verdictSplit.slice(1).join("## Verdict");
+  const verdictPattern = /\*\*(SHIP IT \(minor refinements\)|REVISE|BLOCK)\*\*/g;
+  const verdictHits = [];
+  let vm;
+  while ((vm = verdictPattern.exec(verdictSection)) !== null) {
+    verdictHits.push(vm[1]);
   }
-  return { ok: true, critique: t.trim(), verdict: verdictMatch[1] };
+  if (verdictHits.length === 0) {
+    return {
+      ok: false,
+      error: "verdict section missing a bolded SHIP IT / REVISE / BLOCK value",
+    };
+  }
+  if (verdictHits.length > 1) {
+    // Multiple distinct verdicts in the same section are a
+    // contradiction. Multiple instances of the SAME verdict are fine
+    // (the model may repeat for emphasis).
+    const unique = new Set(verdictHits);
+    if (unique.size > 1) {
+      return {
+        ok: false,
+        error: `verdict section has conflicting values: ${[...unique].join(", ")}`,
+      };
+    }
+  }
+  return { ok: true, critique: t.trim(), verdict: verdictHits[0] };
 }
 
 export async function callClaudeForChallenge(systemText, userText, env) {
