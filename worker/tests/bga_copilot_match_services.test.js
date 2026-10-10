@@ -329,12 +329,19 @@ describe("POST /asksolomon/case/match-services — handleMatchServices", () => {
       assert.match(body.draft, /\[SM: fractional_cfo_core/);
       // Section 1's body ("intro") still there (unchanged).
       assert.match(body.draft, /intro/);
-      // (Codex P2 on #97) Both swot_growth_plan_draft AND
-      // swot_bga_services_catalog_ref are written in one PUT so the
-      // audit record stays in sync with the content it describes.
-      assert.equal(writeBody.customFields.length, 2);
+      // (Codex P2 on #97) swot_growth_plan_draft AND
+      // swot_bga_services_catalog_ref written in one PUT so the audit
+      // record stays in sync with the content it describes.
+      // (PR 10 / §8) The shared version-history wrapper now also writes
+      // swot_bga_version_history in the same PUT so partial writes
+      // can't leave the audit log disagreeing with the content.
+      assert.equal(writeBody.customFields.length, 3);
       const keys = writeBody.customFields.map((f) => f.key).sort();
-      assert.deepEqual(keys, ["swot_bga_services_catalog_ref", "swot_growth_plan_draft"]);
+      assert.deepEqual(keys, [
+        "swot_bga_services_catalog_ref",
+        "swot_bga_version_history",
+        "swot_growth_plan_draft",
+      ]);
     } finally { cap.restore(); }
   });
 

@@ -22,6 +22,10 @@ import {
   json,
 } from "./case_handlers.js";
 import {
+  HISTORY_FIELD_KEY,
+  writeFieldsAndAppendHistory,
+} from "./version_history.js";
+import {
   parseVerifiedFinancials,
 } from "./metrics.js";
 import {
@@ -173,28 +177,8 @@ export function formatSection7Body(matches, { catalogVersion } = {}) {
   return parts.join("\n").replace(/\s+$/, "");
 }
 
-/**
- * Writes one or more custom fields atomically in a single PUT.
- * Pass `[{ key, value }, ...]`.
- */
-async function updateGhlCustomFields(contactId, fields, env) {
-  if (!env.GHL_API_KEY) return false;
-  if (!Array.isArray(fields) || fields.length === 0) return false;
-  try {
-    const res = await fetch(`${GHL_API_BASE}/contacts/${encodeURIComponent(contactId)}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${env.GHL_API_KEY}`,
-        Version: "2021-07-28",
-      },
-      body: JSON.stringify({
-        customFields: fields.map((f) => ({ key: f.key, field_value: f.value })),
-      }),
-    });
-    return res.ok;
-  } catch { return false; }
-}
+// (PR 10 / §8) The direct GHL custom-field write path is now owned
+// by worker/src/bga_copilot/version_history.js. See writeFieldsAndAppendHistory.
 
 /**
  * POST /asksolomon/case/match-services
@@ -299,13 +283,27 @@ export async function handleMatchServices(request, env, { checkPassword }) {
 
   // (Codex P2 on #97) Persist swot_bga_services_catalog_ref alongside
   // the draft so later red-team / version-history audits can tell
-  // which catalog version produced the recommendations. Written in
-  // the same PUT so a partial-write doesn't leave the fields disagreeing.
-  const wrote = await updateGhlCustomFields(contactId, [
-    { key: DRAFT_FIELD_KEY, value: nextDraft },
-    { key: "swot_bga_services_catalog_ref", value: catalogVersion },
-  ], env);
-  if (!wrote) return json({ success: false, error: "writeback to GHL failed" }, 503);
+  // which catalog version produced the recommendations. Routed through
+  // the shared version-history wrapper (§8 / PR 10) which appends one
+  // audit entry per affected field and PUTs data fields + history
+  // atomically — so a partial write can't leave the fields disagreeing
+  // with each other or with the audit log.
+  const historyRaw = readCustomField(contact, HISTORY_FIELD_KEY, idMap);
+  const wrote = await writeFieldsAndAppendHistory({
+    contactId,
+    fieldWrites: [
+      { key: DRAFT_FIELD_KEY, value: nextDraft },
+      { key: "swot_bga_services_catalog_ref", value: catalogVersion },
+    ],
+    action: "match_services",
+    affectedFields: [DRAFT_FIELD_KEY, "swot_bga_services_catalog_ref"],
+    catalogRef: catalogVersion,
+    historyRaw,
+    env,
+  });
+  if (!wrote.success) {
+    return json({ success: false, error: wrote.error }, wrote.status || 503);
+  }
 
   return json({
     success: true,

@@ -34,6 +34,10 @@ import {
   json,
 } from "./case_handlers.js";
 import {
+  HISTORY_FIELD_KEY,
+  writeFieldsAndAppendHistory,
+} from "./version_history.js";
+import {
   assembleCaseBundle,
 } from "./case_load.js";
 import {
@@ -362,39 +366,11 @@ export function validateGeneratedDraft(text, stopReason) {
   return { ok: true, draft };
 }
 
-/**
- * GHL write helpers. Local copies kept intentionally — case_handlers
- * exports helpers but these two are specific to the draft tag write
- * path (which adds a tag, not a custom field).
- */
-async function updateGhlCustomField(contactId, fieldKey, value, env) {
-  return updateGhlCustomFields(contactId, [{ key: fieldKey, value }], env);
-}
-
-/**
- * Atomic multi-field write — same contract as the single-field
- * helper but takes `[{ key, value }, ...]`. (Codex P2 on #97) Used
- * when draft + catalog_ref need to land in the same PUT so a partial
- * write doesn't leave the audit record disagreeing with the content.
- */
-async function updateGhlCustomFields(contactId, fields, env) {
-  if (!env.GHL_API_KEY) return false;
-  if (!Array.isArray(fields) || fields.length === 0) return false;
-  try {
-    const res = await fetch(`${GHL_API_BASE}/contacts/${encodeURIComponent(contactId)}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${env.GHL_API_KEY}`,
-        Version: "2021-07-28",
-      },
-      body: JSON.stringify({
-        customFields: fields.map((f) => ({ key: f.key, field_value: f.value })),
-      }),
-    });
-    return res.ok;
-  } catch { return false; }
-}
+// (PR 10 / §8) The direct GHL custom-field write path is now owned
+// by worker/src/bga_copilot/version_history.js — every BGA tool write
+// routes through writeFieldsAndAppendHistory so a version-history
+// entry lands in the same PUT. Tag writes still go through the
+// local applyGhlTag below (tags are not audited custom-field writes).
 
 async function applyGhlTag(contactId, tag, env) {
   if (!env.GHL_API_KEY) return false;
@@ -467,15 +443,30 @@ export async function handleGenerateRoadmapDraft(request, env, { checkPassword }
   if (!validated.ok) return json({ success: false, error: validated.error }, 502);
   const draft = validated.draft;
 
-  // Write the draft field + catalog_ref atomically, then apply the
-  // drafted tag. The field write must succeed to count as a complete
-  // generation; the drafted tag is the signal HL / other tools use
-  // to know "prep done; call-ready."
-  const wroteField = await updateGhlCustomFields(contactId, [
-    { key: DRAFT_FIELD_KEY, value: draft },
-    { key: "swot_bga_services_catalog_ref", value: catalogVersion },
-  ], env);
-  if (!wroteField) return json({ success: false, error: "writeback to GHL failed" }, 503);
+  // Write the draft field + catalog_ref atomically via the shared
+  // version-history wrapper (PR 10 / §8): the wrapper appends one
+  // audit entry per affected field to swot_bga_version_history and
+  // PUTs data fields + history in a single GHL request so a partial
+  // write can't leave the audit log disagreeing with the content.
+  // Then apply the drafted tag — the field write must succeed to
+  // count as a complete generation; the tag is the signal HL / other
+  // tools use to know "prep done; call-ready."
+  const historyRaw = readCustomField(contact, HISTORY_FIELD_KEY, idMap);
+  const wrote = await writeFieldsAndAppendHistory({
+    contactId,
+    fieldWrites: [
+      { key: DRAFT_FIELD_KEY, value: draft },
+      { key: "swot_bga_services_catalog_ref", value: catalogVersion },
+    ],
+    action: "generate_roadmap_draft",
+    affectedFields: [DRAFT_FIELD_KEY, "swot_bga_services_catalog_ref"],
+    catalogRef: catalogVersion,
+    historyRaw,
+    env,
+  });
+  if (!wrote.success) {
+    return json({ success: false, error: wrote.error }, wrote.status || 503);
+  }
 
   const taggedOk = await applyGhlTag(contactId, DRAFTED_TAG, env);
   // Tag failure doesn't invalidate the draft itself — the draft is
@@ -535,8 +526,21 @@ export async function handleUpdateRoadmapSection(request, env, { checkPassword }
     return json({ success: false, error: `section ${n} not found in current draft` }, 404);
   }
 
-  const wrote = await updateGhlCustomField(contactId, DRAFT_FIELD_KEY, nextDraft, env);
-  if (!wrote) return json({ success: false, error: "writeback to GHL failed" }, 503);
+  // Route through the shared version-history wrapper (§8). The audit
+  // entry for update_roadmap_section records which section changed
+  // (section_number) alongside the usual snapshot hash of the field.
+  const historyRaw = readCustomField(contact, HISTORY_FIELD_KEY, idMap);
+  const wrote = await writeFieldsAndAppendHistory({
+    contactId,
+    fieldWrites: [{ key: DRAFT_FIELD_KEY, value: nextDraft }],
+    action: "update_roadmap_section",
+    affectedFields: [DRAFT_FIELD_KEY],
+    historyRaw,
+    env,
+  });
+  if (!wrote.success) {
+    return json({ success: false, error: wrote.error }, wrote.status || 503);
+  }
 
   return json({ success: true, contactId, draft: nextDraft, section_number: n });
 }

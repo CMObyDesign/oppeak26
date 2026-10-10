@@ -19,11 +19,20 @@
 
 import {
   fetchGhlContact,
+  readCustomField,
   json,
 } from "./case_handlers.js";
 import {
+  fetchGHLCustomFieldsCatalog,
+  buildFieldKeyToIdMap,
+} from "../ghl_catalog.js";
+import {
   _effectiveCatalog,
 } from "./services_catalog.js";
+import {
+  HISTORY_FIELD_KEY,
+  writeFieldsAndAppendHistory,
+} from "./version_history.js";
 
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 const DECISIONS_FIELD_KEY = "swot_bga_decisions";
@@ -171,24 +180,8 @@ async function callClaudeForCallDecisions(systemText, userText, env) {
   return { ok: true, text, stop_reason: data?.stop_reason || null };
 }
 
-async function updateGhlCustomFields(contactId, fields, env) {
-  if (!env.GHL_API_KEY) return false;
-  if (!Array.isArray(fields) || fields.length === 0) return false;
-  try {
-    const res = await fetch(`${GHL_API_BASE}/contacts/${encodeURIComponent(contactId)}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${env.GHL_API_KEY}`,
-        Version: "2021-07-28",
-      },
-      body: JSON.stringify({
-        customFields: fields.map((f) => ({ key: f.key, field_value: f.value })),
-      }),
-    });
-    return res.ok;
-  } catch { return false; }
-}
+// (PR 10 / §8) The direct GHL custom-field write path is now owned
+// by worker/src/bga_copilot/version_history.js. See writeFieldsAndAppendHistory.
 
 /**
  * POST /asksolomon/case/extract-call-decisions
@@ -386,11 +379,30 @@ export async function handleConfirmCallDecisions(request, env, { checkPassword }
   // Keep the record's own services_declined_or_deferred in sync too.
   record.services_declined_or_deferred = declinedOrDeferred;
 
-  const wrote = await updateGhlCustomFields(contactId, [
-    { key: DECISIONS_FIELD_KEY, value: JSON.stringify(decisionsArray) },
-    { key: SERVICES_SELECTED_FIELD_KEY, value: JSON.stringify(servicesSelectedEntries) },
-  ], env);
-  if (!wrote) return json({ success: false, error: "writeback to GHL failed" }, 503);
+  // Route through the shared version-history wrapper (§8 / PR 10):
+  // one audit entry per affected field, PUT atomic with history.
+  let historyIdMap = {};
+  try {
+    const catalog = await fetchGHLCustomFieldsCatalog(env);
+    historyIdMap = buildFieldKeyToIdMap(catalog);
+  } catch {
+    // non-fatal — wrapper falls back to a fresh history on this write.
+  }
+  const historyRaw = readCustomField(contact, HISTORY_FIELD_KEY, historyIdMap);
+  const wrote = await writeFieldsAndAppendHistory({
+    contactId,
+    fieldWrites: [
+      { key: DECISIONS_FIELD_KEY, value: JSON.stringify(decisionsArray) },
+      { key: SERVICES_SELECTED_FIELD_KEY, value: JSON.stringify(servicesSelectedEntries) },
+    ],
+    action: "confirm_call_decisions",
+    affectedFields: [DECISIONS_FIELD_KEY, SERVICES_SELECTED_FIELD_KEY],
+    historyRaw,
+    env,
+  });
+  if (!wrote.success) {
+    return json({ success: false, error: wrote.error }, wrote.status || 503);
+  }
 
   return json({
     success: true,

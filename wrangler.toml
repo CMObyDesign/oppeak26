@@ -88,3 +88,13 @@ migrations_dir = "worker/migrations"
 [[r2_buckets]]
 binding = "SOLOMON_REPORTS"
 bucket_name = "solomon-reports"
+
+# R2 — BGA Copilot swot_bga_version_history spillover. When the audit
+# log for a contact exceeds HISTORY_CAP (50) entries, the oldest overflow
+# entries are moved to this bucket under bga_audit/{contact_id}/{yyyy-mm}.json
+# so the LARGE_TEXT field stays under its size cap. See BGA_COPILOT_SPEC.md
+# §8.2 and worker/src/bga_copilot/version_history.js. The bucket must exist
+# before the first spillover; create with `wrangler r2 bucket create bga-audit`.
+[[r2_buckets]]
+binding = "BGA_AUDIT"
+bucket_name = "bga-audit"

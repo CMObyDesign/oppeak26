@@ -25,6 +25,10 @@ import {
   json,
 } from "./case_handlers.js";
 import {
+  HISTORY_FIELD_KEY,
+  writeFieldsAndAppendHistory,
+} from "./version_history.js";
+import {
   parseVerifiedFinancials,
 } from "./metrics.js";
 import {
@@ -363,23 +367,8 @@ export async function callClaudeForPrepBrief(systemText, userText, env) {
   return { ok: true, text, stop_reason: data?.stop_reason || null };
 }
 
-async function updateGhlCustomField(contactId, fieldKey, value, env) {
-  if (!env.GHL_API_KEY) return false;
-  try {
-    const res = await fetch(`${GHL_API_BASE}/contacts/${encodeURIComponent(contactId)}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${env.GHL_API_KEY}`,
-        Version: "2021-07-28",
-      },
-      body: JSON.stringify({
-        customFields: [{ key: fieldKey, field_value: value }],
-      }),
-    });
-    return res.ok;
-  } catch { return false; }
-}
+// (PR 10 / §8) The direct GHL custom-field write path is now owned
+// by worker/src/bga_copilot/version_history.js. See writeFieldsAndAppendHistory.
 
 /**
  * POST /asksolomon/case/generate-prep-brief
@@ -461,8 +450,21 @@ export async function handleGeneratePrepBrief(request, env, { checkPassword }) {
   if (!validated.ok) return json({ success: false, error: validated.error }, 502);
 
   const brief = validated.brief;
-  const wroteOk = await updateGhlCustomField(contactId, PREP_BRIEF_FIELD_KEY, brief, env);
-  if (!wroteOk) return json({ success: false, error: "writeback to GHL failed" }, 503);
+  // Route through the shared version-history wrapper (§8 / PR 10):
+  // one audit entry for the prep-brief write, PUT atomic with history.
+  const historyRaw = readCustomField(contact, HISTORY_FIELD_KEY, idMap);
+  const wrote = await writeFieldsAndAppendHistory({
+    contactId,
+    fieldWrites: [{ key: PREP_BRIEF_FIELD_KEY, value: brief }],
+    action: "generate_prep_brief",
+    affectedFields: [PREP_BRIEF_FIELD_KEY],
+    catalogRef: catalogVersion,
+    historyRaw,
+    env,
+  });
+  if (!wrote.success) {
+    return json({ success: false, error: wrote.error }, wrote.status || 503);
+  }
 
   return json({
     success: true,
