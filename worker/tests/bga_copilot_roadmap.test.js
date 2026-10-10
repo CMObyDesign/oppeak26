@@ -423,10 +423,15 @@ describe("POST /asksolomon/case/generate-roadmap-draft — handleGenerateRoadmap
     try {
       const res = await handleGenerateRoadmapDraft(post({ contactId: "c1" }), makeEnv(), { checkPassword });
       assert.equal(res.status, 200);
-      // The PUT body carries BOTH fields in a single atomic write.
+      // The PUT body carries both data fields AND swot_bga_version_history
+      // (PR 10 / §8) in a single atomic write via the shared wrapper.
       assert.ok(writeBody && Array.isArray(writeBody.customFields));
       const keys = writeBody.customFields.map((f) => f.key).sort();
-      assert.deepEqual(keys, ["swot_bga_services_catalog_ref", "swot_growth_plan_draft"]);
+      assert.deepEqual(keys, [
+        "swot_bga_services_catalog_ref",
+        "swot_bga_version_history",
+        "swot_growth_plan_draft",
+      ]);
       const refField = writeBody.customFields.find((f) => f.key === "swot_bga_services_catalog_ref");
       // Content-hash short SHA — 12 lowercase hex chars.
       assert.match(refField.field_value, /^[0-9a-f]{12}$/);
@@ -587,10 +592,13 @@ describe("POST /asksolomon/case/update-roadmap-section — handleUpdateRoadmapSe
       const { sections } = parseDraftSections(body.draft);
       assert.equal(sections.length, 8);
 
-      // PUT body targets swot_growth_plan_draft and no other field.
+      // PUT body targets swot_growth_plan_draft + swot_bga_version_history
+      // (PR 10 / §8). The draft is the only DATA field written.
       const stored = writeBody.customFields.find((f) => f.key === "swot_growth_plan_draft");
       assert.ok(stored);
-      assert.equal(writeBody.customFields.length, 1);
+      assert.equal(writeBody.customFields.length, 2);
+      const keys = writeBody.customFields.map((f) => f.key).sort();
+      assert.deepEqual(keys, ["swot_bga_version_history", "swot_growth_plan_draft"]);
     } finally { cap.restore(); }
   });
 

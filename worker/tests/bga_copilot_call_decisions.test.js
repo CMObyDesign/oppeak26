@@ -316,10 +316,15 @@ describe("POST /asksolomon/case/confirm-call-decisions — handleConfirmCallDeci
         }),
         makeEnv(), { checkPassword });
       assert.equal(res.status, 200);
-      // Both fields in one PUT.
+      // PR 10: data fields + swot_bga_version_history in one PUT via
+      // the shared version-history wrapper.
       assert.ok(writeBody && Array.isArray(writeBody.customFields));
       const keys = writeBody.customFields.map((f) => f.key).sort();
-      assert.deepEqual(keys, ["swot_bga_decisions", "swot_bga_services_selected"]);
+      assert.deepEqual(keys, [
+        "swot_bga_decisions",
+        "swot_bga_services_selected",
+        "swot_bga_version_history",
+      ]);
 
       // Finding 1: swot_bga_decisions is a FLAT ARRAY of
       // { at, category, text } records so case_load's

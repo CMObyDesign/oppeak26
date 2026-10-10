@@ -26,6 +26,10 @@ import {
   buildFieldKeyToIdMap,
 } from "../ghl_catalog.js";
 import { hashVerifiedFinancialsRaw } from "./vf_hash.js";
+import {
+  HISTORY_FIELD_KEY,
+  writeFieldsAndAppendHistory,
+} from "./version_history.js";
 
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 const VERIFIED_FINANCIALS_FIELD_KEY = "swot_verified_financials";
@@ -129,28 +133,8 @@ export async function resolveFieldIdMap(env) {
   }
 }
 
-/**
- * Updates GHL contact custom fields. Thin wrapper around the Worker's
- * existing update pattern. Returns true on success, false on failure.
- */
-async function updateGhlFields(contactId, fields, env) {
-  if (!env.GHL_API_KEY) return false;
-  let res;
-  try {
-    res = await fetch(`${GHL_API_BASE}/contacts/${encodeURIComponent(contactId)}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${env.GHL_API_KEY}`,
-        Version: "2021-07-28",
-      },
-      body: JSON.stringify({ customFields: fields }),
-    });
-  } catch {
-    return false;
-  }
-  return res.ok;
-}
+// (PR 10 / §8) The direct GHL custom-field write path is now owned
+// by worker/src/bga_copilot/version_history.js. See writeFieldsAndAppendHistory.
 
 /**
  * Expected request body shape for /asksolomon/case/audit-gaps:
@@ -323,12 +307,23 @@ export async function handleVerifiedFinancialsPanel(request, env, { checkPasswor
   const next = upsertEntry(current, entry);
   const nextRaw = JSON.stringify(next);
 
-  const ok = await updateGhlFields(
+  // Route through the shared version-history wrapper (§8 / PR 10):
+  // one audit entry for the verified-financials write, PUT atomic with
+  // history. Note: the optimistic-concurrency hash check above (409 on
+  // mismatch) still fires BEFORE the wrapper call; the wrapper only
+  // handles the write path, not the concurrency precondition.
+  const historyRaw = readCustomField(contact, HISTORY_FIELD_KEY, idMap);
+  const wrote = await writeFieldsAndAppendHistory({
     contactId,
-    [{ key: VERIFIED_FINANCIALS_FIELD_KEY, field_value: nextRaw }],
+    fieldWrites: [{ key: VERIFIED_FINANCIALS_FIELD_KEY, value: nextRaw }],
+    action: "verified_financials_panel",
+    affectedFields: [VERIFIED_FINANCIALS_FIELD_KEY],
+    historyRaw,
     env,
-  );
-  if (!ok) return json({ success: false, error: "writeback to GHL failed" }, 503);
+  });
+  if (!wrote.success) {
+    return json({ success: false, error: wrote.error }, wrote.status || 503);
+  }
 
   const nextHash = await hashVerifiedFinancialsRaw(nextRaw);
 

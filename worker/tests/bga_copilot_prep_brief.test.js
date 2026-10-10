@@ -421,10 +421,12 @@ describe("POST /asksolomon/case/generate-prep-brief — handleGeneratePrepBrief"
       const body = await res.json();
       assert.equal(body.success, true);
       assert.ok(body.brief.startsWith(PREP_BRIEF_BANNER));
-      // PUT body carries ONLY swot_bga_prep_brief.
+      // PUT body carries swot_bga_prep_brief + swot_bga_version_history
+      // (PR 10 / §8). No other data fields written.
       assert.ok(writeBody && Array.isArray(writeBody.customFields));
-      assert.equal(writeBody.customFields.length, 1);
-      assert.equal(writeBody.customFields[0].key, PREP_BRIEF_FIELD_KEY);
+      assert.equal(writeBody.customFields.length, 2);
+      const keys = writeBody.customFields.map((f) => f.key).sort();
+      assert.deepEqual(keys, [PREP_BRIEF_FIELD_KEY, "swot_bga_version_history"]);
       // No /tags call fired.
       for (const c of cap.calls) assert.ok(!c.url.endsWith("/tags"), "prep-brief must not apply tags");
     } finally { cap.restore(); }
