@@ -24,27 +24,27 @@ export function getServicesCatalog() {
  * Hash of the catalog's JSON string, used as the catalog version SHA
  * recorded in `swot_bga_services_catalog_ref` per spec §7.1 so
  * red-team / version-history audits know which catalog revision a
- * given draft was built against. Lazily computed per worker instance.
+ * given draft was built against. The hash reflects the EFFECTIVE
+ * catalog, so a test override changes it (and §9/17 can verify the
+ * approve endpoint refuses when catalog_ref changes between QA and
+ * send). In production the bundled catalog is immutable per deploy,
+ * so this is a per-deploy-stable value.
  */
-let _versionPromise = null;
-export function getServicesCatalogVersion() {
-  if (_versionPromise) return _versionPromise;
-  _versionPromise = (async () => {
-    try {
-      const text = JSON.stringify(CATALOG);
-      const bytes = new TextEncoder().encode(text);
-      const buf = await crypto.subtle.digest("SHA-256", bytes);
-      const arr = new Uint8Array(buf);
-      let out = "";
-      for (let i = 0; i < arr.length; i++) out += arr[i].toString(16).padStart(2, "0");
-      // Short form: first 12 hex chars reads like a git short-SHA, which is what
-      // operators already compare against in commit logs.
-      return out.slice(0, 12);
-    } catch {
-      return "unknown";
-    }
-  })();
-  return _versionPromise;
+export async function getServicesCatalogVersion() {
+  try {
+    const effective = _effectiveCatalog();
+    const text = JSON.stringify(effective);
+    const bytes = new TextEncoder().encode(text);
+    const buf = await crypto.subtle.digest("SHA-256", bytes);
+    const arr = new Uint8Array(buf);
+    let out = "";
+    for (let i = 0; i < arr.length; i++) out += arr[i].toString(16).padStart(2, "0");
+    // Short form: first 12 hex chars reads like a git short-SHA, which is what
+    // operators already compare against in commit logs.
+    return out.slice(0, 12);
+  } catch {
+    return "unknown";
+  }
 }
 
 /**

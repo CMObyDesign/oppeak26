@@ -40,6 +40,11 @@ import {
   handleConfirmCallDecisions,
 } from "./bga_copilot/call_decisions.js";
 import {
+  handleRedTeamCheck,
+  handleAcknowledgeWarning,
+} from "./bga_copilot/red_team_check.js";
+import { handleApproveAndSend } from "./bga_copilot/approve_and_send.js";
+import {
   fetchGHLCustomFieldsCatalog,
   GHLCatalogUnavailableError,
 } from "./ghl_catalog.js";
@@ -5689,6 +5694,29 @@ export default {
     }
     if (path === "/asksolomon/case/confirm-call-decisions") {
       return handleConfirmCallDecisions(request, env, { checkPassword: checkConsolePassword });
+    }
+
+    // PR 12 — docs/BGA_COPILOT_SPEC.md §4.8, §5.3.
+    // Pre-Send QA checker. Writes swot_bga_red_team_report with the
+    // 6-blocker/4-warning results and input hashes (§5.3) so the
+    // approve endpoint can refuse stale reports.
+    if (path === "/asksolomon/case/red-team-check") {
+      return handleRedTeamCheck(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/case/acknowledge-warning") {
+      return handleAcknowledgeWarning(request, env, { checkPassword: checkConsolePassword });
+    }
+
+    // PR 12 — docs/BGA_COPILOT_SPEC.md §4.9 + §5. THE BUTTON.
+    // The ONLY code path in the Worker that writes `swot_growth_plan`
+    // or applies the `swot_growth_plan_ready` tag. All preconditions
+    // (password, reviewed=true, draft present, swot_paid_297, no
+    // blockers in the latest red-team report, every warning
+    // acknowledged, every input hash still matches current content,
+    // ready tag not already present, D1 lock not already held) are
+    // enforced on this handler, in that order.
+    if (path === "/asksolomon/case/approve-and-send") {
+      return handleApproveAndSend(request, env, { checkPassword: checkConsolePassword });
     }
 
     // POST /audit — JSON marketing audit. No auth (matches GET /audit).
