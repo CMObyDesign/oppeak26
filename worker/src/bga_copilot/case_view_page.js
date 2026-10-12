@@ -303,6 +303,11 @@ export const CASE_VIEW_PAGE = `<!DOCTYPE html>
     </div>
 
     <div class="panel">
+      <h2>Pre-Send QA &amp; Deliver</h2>
+      <div id="approve-and-send-pane"></div>
+    </div>
+
+    <div class="panel">
       <h2>Strategist Brief (internal)</h2>
       <div id="strategist-brief-pane" class="section-content empty">—</div>
     </div>
@@ -771,6 +776,7 @@ function renderCase(bundle, auditData) {
   renderRoadmap(bundle);
   renderPrepBrief(bundle);
   renderCallNotes();
+  renderApproveAndSend();
   const intake = bundle.intake || {};
   renderContentPane("strategist-brief-pane", intake.strategist_brief);
   renderContentPane("business-playbook-pane", intake.business_playbook);
@@ -1337,6 +1343,241 @@ function showGeneratePrepBriefError(msg) {
   if (!msg) { el.classList.add("hidden"); el.textContent = ""; return; }
   el.textContent = msg;
   el.classList.remove("hidden");
+}
+
+// -------- Approve & Send panel (PR 12) --------
+//
+// Three UI stages:
+//   1. Run Pre-Send QA → red_team_check → updates the pane with
+//      blockers/warnings. The button disables until blockers=0 AND
+//      every warning is acknowledged.
+//   2. Mark Reviewed toggle → UI-only flag (also enforced server-side).
+//   3. Approve & Send → confirmation modal → POST /approve-and-send.
+//
+// Case-switch race guard: every network call captures
+// requestedContactId = currentContactId and bails on mismatch.
+
+let approveReportState = null;  // { blockers, warnings, acknowledged_warnings, run_at }
+let approveReviewed = false;
+
+function renderApproveAndSend() {
+  const pane = document.getElementById("approve-and-send-pane");
+  if (!pane) return;
+  approveReportState = null;
+  approveReviewed = false;
+  const parts = [];
+  parts.push('<p style="color:#374151; margin:0 0 10px;">Required before every send: run QA → acknowledge any warnings → mark reviewed → send.</p>');
+  parts.push('<button class="primary" onclick="runRedTeamCheck()" id="run-red-team-btn">Run Pre-Send QA</button>');
+  parts.push(' <button onclick="toggleReviewed()" id="mark-reviewed-btn" disabled>Mark Reviewed</button>');
+  parts.push(' <button class="primary" onclick="openApproveModal()" id="approve-send-btn" disabled>Approve &amp; Send to Client</button>');
+  parts.push('<div id="red-team-error" class="error-banner hidden" style="margin-top:10px;"></div>');
+  parts.push('<div id="red-team-report" style="margin-top:12px;"></div>');
+  pane.innerHTML = parts.join("");
+}
+
+async function runRedTeamCheck() {
+  if (!currentContactId) return;
+  const requestedContactId = currentContactId;
+  const btn = document.getElementById("run-red-team-btn");
+  const errEl = document.getElementById("red-team-error");
+  if (errEl) errEl.classList.add("hidden");
+  if (btn) { btn.disabled = true; btn.textContent = "Running QA…"; }
+  try {
+    const { status, data } = await callApi("/asksolomon/case/red-team-check", {
+      contactId: requestedContactId,
+    });
+    if (requestedContactId !== currentContactId) return;
+    if (status === 200 && data && data.success) {
+      approveReportState = data.report || null;
+      renderRedTeamReport();
+      updateApproveButtons();
+    } else {
+      showRedTeamError((data && data.error) || "red_team_check failed");
+    }
+  } catch (err) {
+    if (requestedContactId !== currentContactId) return;
+    showRedTeamError(err && err.message ? err.message : "network error");
+  } finally {
+    if (requestedContactId === currentContactId && btn) {
+      btn.disabled = false;
+      btn.textContent = "Run Pre-Send QA";
+    }
+  }
+}
+
+function showRedTeamError(msg) {
+  const el = document.getElementById("red-team-error");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove("hidden");
+}
+
+function renderRedTeamReport() {
+  const el = document.getElementById("red-team-report");
+  if (!el) return;
+  if (!approveReportState) { el.innerHTML = ""; return; }
+  const blockers = approveReportState.blockers || [];
+  const warnings = approveReportState.warnings || [];
+  const acked = approveReportState.acknowledged_warnings || [];
+  const parts = [];
+  parts.push('<div style="padding:12px; background:#f9fafb; border:1px solid #e5e7eb; border-radius:8px;">');
+  parts.push('<div style="font-size:12px; letter-spacing:1.2px; text-transform:uppercase; color:#374151; font-weight:600; margin-bottom:8px;">Red-Team Report · ' + escapeHtml(approveReportState.run_at || "") + '</div>');
+  if (blockers.length === 0 && warnings.length === 0) {
+    parts.push('<p style="color:#065f46; margin:0;">0 blockers · 0 warnings — ready to send.</p>');
+  } else {
+    parts.push('<p style="margin:0 0 8px;"><strong style="color:' + (blockers.length ? "#991b1b" : "#065f46") + ';">' + blockers.length + ' blocker' + (blockers.length === 1 ? "" : "s") + '</strong> · <strong>' + warnings.length + ' warning' + (warnings.length === 1 ? "" : "s") + '</strong></p>');
+    if (blockers.length) {
+      parts.push('<p style="color:#991b1b; margin:0 0 4px; font-weight:600;">Blockers (must fix):</p>');
+      parts.push('<ul style="margin:0 0 10px; padding-left:20px; color:#991b1b;">');
+      for (const b of blockers) {
+        parts.push('<li><code>' + escapeHtml(b.id || "") + '</code> — ' + escapeHtml(b.where || "") + ': ' + escapeHtml(b.detail || "") + '</li>');
+      }
+      parts.push('</ul>');
+    }
+    if (warnings.length) {
+      parts.push('<p style="color:#92400e; margin:0 0 4px; font-weight:600;">Warnings (acknowledge to proceed):</p>');
+      parts.push('<ul style="margin:0; padding-left:20px; color:#92400e;">');
+      for (const w of warnings) {
+        const isAcked = acked.includes(w.id);
+        parts.push('<li><code>' + escapeHtml(w.id || "") + '</code> — ' + escapeHtml(w.where || "") + ': ' + escapeHtml(w.detail || "") + ' ');
+        if (isAcked) {
+          parts.push('<span style="color:#065f46;">(acknowledged)</span>');
+        } else {
+          parts.push('<button onclick="acknowledgeWarning(\'' + escapeHtml(w.id) + '\')">Acknowledge</button>');
+        }
+        parts.push('</li>');
+      }
+      parts.push('</ul>');
+    }
+  }
+  parts.push('</div>');
+  el.innerHTML = parts.join("");
+}
+
+async function acknowledgeWarning(warningId) {
+  if (!currentContactId) return;
+  const requestedContactId = currentContactId;
+  try {
+    const { status, data } = await callApi("/asksolomon/case/acknowledge-warning", {
+      contactId: requestedContactId,
+      warning_id: warningId,
+    });
+    if (requestedContactId !== currentContactId) return;
+    if (status === 200 && data && data.success) {
+      if (approveReportState) {
+        approveReportState.acknowledged_warnings = data.acknowledged_warnings || [];
+        renderRedTeamReport();
+        updateApproveButtons();
+      }
+    } else {
+      showRedTeamError((data && data.error) || "acknowledge failed");
+    }
+  } catch (err) {
+    if (requestedContactId !== currentContactId) return;
+    showRedTeamError(err && err.message ? err.message : "network error");
+  }
+}
+
+function allWarningsAcknowledged() {
+  if (!approveReportState) return false;
+  const warnings = approveReportState.warnings || [];
+  const acked = approveReportState.acknowledged_warnings || [];
+  return warnings.every((w) => acked.includes(w.id));
+}
+
+function reportIsSendReady() {
+  if (!approveReportState) return false;
+  const blockers = approveReportState.blockers || [];
+  return blockers.length === 0 && allWarningsAcknowledged();
+}
+
+function toggleReviewed() {
+  if (!reportIsSendReady()) return;
+  approveReviewed = !approveReviewed;
+  updateApproveButtons();
+}
+
+function updateApproveButtons() {
+  const markBtn = document.getElementById("mark-reviewed-btn");
+  const sendBtn = document.getElementById("approve-send-btn");
+  const ready = reportIsSendReady();
+  if (markBtn) {
+    markBtn.disabled = !ready;
+    markBtn.textContent = approveReviewed ? "Reviewed ✓" : "Mark Reviewed";
+  }
+  if (sendBtn) {
+    sendBtn.disabled = !(ready && approveReviewed);
+  }
+}
+
+function openApproveModal() {
+  if (!reportIsSendReady() || !approveReviewed) return;
+  const overlay = document.createElement("div");
+  overlay.id = "approve-modal-overlay";
+  overlay.style.cssText = "position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:9999; display:flex; align-items:center; justify-content:center;";
+  overlay.innerHTML = ''
+    + '<div style="background:#fff; padding:28px 32px; border-radius:10px; max-width:520px; width:92%; box-shadow:0 20px 50px rgba(0,0,0,0.3);">'
+    + '<h2 style="margin:0 0 12px; font-size:18px;">Send Business Growth Plan?</h2>'
+    + '<p style="margin:0 0 10px; color:#374151;">This will:</p>'
+    + '<ul style="margin:0 0 20px; color:#374151;">'
+    + '<li>Write final roadmap → <code>swot_growth_plan</code></li>'
+    + '<li>Write next-steps block → <code>swot_bga_next_steps</code></li>'
+    + '<li>Write service selections → <code>swot_bga_services_selected_display</code></li>'
+    + '<li>Apply <code>swot_growth_plan_ready</code> tag → <strong>Email 04 fires to the client</strong></li>'
+    + '</ul>'
+    + '<div style="display:flex; gap:12px; justify-content:flex-end;">'
+    + '<button onclick="closeApproveModal()">Cancel</button>'
+    + '<button class="primary" onclick="confirmApproveAndSend()" id="confirm-send-btn">Confirm and Send</button>'
+    + '</div>'
+    + '</div>';
+  document.body.appendChild(overlay);
+}
+
+function closeApproveModal() {
+  const overlay = document.getElementById("approve-modal-overlay");
+  if (overlay) overlay.remove();
+}
+
+async function confirmApproveAndSend() {
+  if (!currentContactId) return;
+  const requestedContactId = currentContactId;
+  const btn = document.getElementById("confirm-send-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "Sending…"; }
+  try {
+    const { status, data } = await callApi("/asksolomon/case/approve-and-send", {
+      contactId: requestedContactId,
+      reviewed: true,
+    });
+    if (requestedContactId !== currentContactId) {
+      closeApproveModal();
+      return;
+    }
+    closeApproveModal();
+    if (status === 200 && data && data.success) {
+      alert("Sent. Email 04 is queued; the ready tag applied at " + (data.acquired_at || "now") + ".");
+      // Disable the send button post-success; the ready tag now
+      // guards the endpoint anyway.
+      const sendBtn = document.getElementById("approve-send-btn");
+      if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = "Sent"; }
+    } else {
+      showRedTeamError((data && data.error) || "approve_and_send failed");
+    }
+  } catch (err) {
+    if (requestedContactId !== currentContactId) return;
+    closeApproveModal();
+    showRedTeamError(err && err.message ? err.message : "network error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Confirm and Send"; }
+  }
+}
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
 document.getElementById("password-input")?.addEventListener("keydown", (e) => {
