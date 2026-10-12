@@ -82,6 +82,46 @@ describe("Email 04 — Deep Dive Part 2 template (PR 11)", () => {
           "services-selected block missing its header",
         );
       });
+
+      // PR 13 (post-call reality): Email 04 fires AFTER the 50-minute
+      // session via the APPROVE & SEND button (PR 12). The template
+      // must not carry pre-call CTAs — a recipient who already finished
+      // the call would be told to book or prep for a session that
+      // already happened. Pins the fix for the Codex P2 finding on #103.
+      it("contains no pre-call CTAs (post-call delivery framing)", () => {
+        const html = readTemplate(relPath);
+        const bannedPhrases = [
+          /bring this plan to your 50-minute session/i,
+          /book my 50-min bga session/i,
+          /BOOK MY 50-MIN BGA SESSION/,
+          /before the call/i,
+          /if you are not booked yet/i,
+          /choose a time below/i,
+        ];
+        for (const re of bannedPhrases) {
+          assert.ok(
+            !re.test(html),
+            `${relPath} still carries a pre-call phrase matching ${re}`,
+          );
+        }
+      });
+
+      it("frames the plan as a post-call record (positive signal)", () => {
+        const html = readTemplate(relPath);
+        // At least one of these post-call-reality phrases should be
+        // present so the recipient knows this plan is the record of a
+        // call that already happened.
+        const postCallSignals = [
+          /finalized from our 50-minute session/i,
+          /the written record/i,
+          /you committed to on the call/i,
+        ];
+        const matched = postCallSignals.some((re) => re.test(html));
+        assert.ok(
+          matched,
+          `${relPath} is missing any post-call-framing signal (${postCallSignals.join(", ")})`,
+        );
+      });
     });
   }
 
