@@ -280,6 +280,23 @@ export const CASE_VIEW_PAGE = `<!DOCTYPE html>
         <div id="vf-form-error" class="error-banner hidden" style="margin-top:10px;"></div>
         <div id="vf-form-success" class="hint hidden" style="margin-top:8px; color:#065f46;"></div>
       </div>
+
+      <!-- Document extraction (PR 14). Upload a PDF or CSV; Claude
+           returns candidate values for the canonical metrics. Each
+           candidate shows VERIFY / EDIT / REJECT. VERIFY and EDIT
+           both route through the existing /case/verified-financials
+           endpoint (same hash-concurrency guard, same
+           provenance="verified" stamp). REJECT is a UI-only no-op. -->
+      <div id="vf-upload-wrap" style="margin-top:16px; padding-top:16px; border-top:1px solid #e5e7eb;">
+        <h3 style="font-size:12px; text-transform:uppercase; letter-spacing:1.2px; color:#374151; margin:0 0 10px; font-weight:600;">Extract from an uploaded document</h3>
+        <p style="color:#374151; font-size:13px; margin:0 0 10px;">Upload a client P&amp;L, balance sheet, or AR aging as PDF (or an exported CSV). Candidates are reviewed below — nothing is saved until you click VERIFY or EDIT.</p>
+        <div class="form-row">
+          <input id="vf-upload-file" type="file" accept=".pdf,.csv,application/pdf,text/csv">
+          <button class="primary" onclick="extractFinancialsFromDocument()" id="vf-extract-btn">Extract candidates</button>
+        </div>
+        <div id="vf-upload-error" class="error-banner hidden" style="margin-top:10px;"></div>
+        <div id="vf-candidates-pane" style="margin-top:12px;"></div>
+      </div>
     </div>
 
     <div class="panel">
@@ -1578,6 +1595,197 @@ function escapeHtml(s) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+// -------- Document extraction (PR 14) --------
+//
+// Upload a PDF or CSV; the handler returns candidate values. The UI
+// shows each candidate with VERIFY / EDIT / REJECT. VERIFY and EDIT
+// route through saveVerifiedFinancial() (the existing hash-concurrent
+// write path). REJECT drops the row from the pane and does nothing
+// server-side.
+
+let extractedCandidates = [];
+
+async function extractFinancialsFromDocument() {
+  if (!currentContactId) return;
+  const requestedContactId = currentContactId;
+  const input = document.getElementById("vf-upload-file");
+  const errEl = document.getElementById("vf-upload-error");
+  if (errEl) errEl.classList.add("hidden");
+  const file = input && input.files && input.files[0];
+  if (!file) {
+    showVfUploadError("Pick a PDF or CSV file first.");
+    return;
+  }
+  const btn = document.getElementById("vf-extract-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "Extracting…"; }
+  try {
+    const bodyBase = { contactId: requestedContactId, filename: file.name };
+    const mime = (file.type || "").toLowerCase();
+    let body;
+    if (mime === "application/pdf" || /\.pdf$/i.test(file.name)) {
+      const buf = await file.arrayBuffer();
+      const b64 = arrayBufferToBase64(buf);
+      body = { ...bodyBase, mime_type: "application/pdf", document_base64: b64 };
+    } else if (mime === "text/csv" || /\.csv$/i.test(file.name)) {
+      const csv_text = await file.text();
+      body = { ...bodyBase, mime_type: "text/csv", csv_text };
+    } else {
+      showVfUploadError("Unsupported file type — pick a PDF or CSV.");
+      return;
+    }
+    const { status, data } = await callApi("/asksolomon/case/extract-financials-from-document", body);
+    if (requestedContactId !== currentContactId) return;
+    if (status === 200 && data && data.success) {
+      extractedCandidates = Array.isArray(data.candidates) ? data.candidates : [];
+      renderCandidatesTable();
+    } else {
+      showVfUploadError((data && data.error) || "extract_financials failed");
+    }
+  } catch (err) {
+    if (requestedContactId !== currentContactId) return;
+    showVfUploadError(err && err.message ? err.message : "network error");
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Extract candidates"; }
+  }
+}
+
+function arrayBufferToBase64(buf) {
+  const bytes = new Uint8Array(buf);
+  let binary = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  }
+  return btoa(binary);
+}
+
+function showVfUploadError(msg) {
+  const el = document.getElementById("vf-upload-error");
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove("hidden");
+}
+
+function renderCandidatesTable() {
+  const pane = document.getElementById("vf-candidates-pane");
+  if (!pane) return;
+  if (extractedCandidates.length === 0) {
+    pane.innerHTML = '<p style="color:#6b7280; font-size:13px; margin:0;">No candidates found in that document.</p>';
+    return;
+  }
+  const rows = extractedCandidates.map((c, idx) => {
+    const valuePreview = formatCandidateValue(c);
+    const conf = (c.confidence || "medium");
+    const confColor = conf === "high" ? "#065f46" : conf === "low" ? "#991b1b" : "#92400e";
+    return (
+      '<tr>'
+      + '<td><code>' + escapeHtml(c.metric_id) + '</code></td>'
+      + '<td>' + escapeHtml(valuePreview) + '</td>'
+      + '<td>' + escapeHtml(c.period) + '</td>'
+      + '<td style="color:' + confColor + ';">' + escapeHtml(conf) + '</td>'
+      + '<td>'
+      +   '<button class="primary" onclick="verifyCandidate(' + idx + ')">Verify</button> '
+      +   '<button onclick="editCandidate(' + idx + ')">Edit</button> '
+      +   '<button onclick="rejectCandidate(' + idx + ')">Reject</button>'
+      + '</td>'
+      + '</tr>'
+    );
+  }).join("");
+  pane.innerHTML = ''
+    + '<p style="color:#374151; font-size:13px; margin:0 0 8px;"><strong>Candidates (unverified):</strong> each becomes a verified-financials entry only when you click Verify or Edit.</p>'
+    + '<table style="width:100%; border-collapse:collapse; font-size:13px;">'
+    + '<thead><tr style="background:#f9fafb;">'
+    +   '<th style="text-align:left; padding:6px;">Metric</th>'
+    +   '<th style="text-align:left; padding:6px;">Value</th>'
+    +   '<th style="text-align:left; padding:6px;">Period</th>'
+    +   '<th style="text-align:left; padding:6px;">Confidence</th>'
+    +   '<th style="text-align:left; padding:6px;">Action</th>'
+    + '</tr></thead>'
+    + '<tbody>' + rows + '</tbody>'
+    + '</table>';
+}
+
+function formatCandidateValue(c) {
+  if (c == null) return "";
+  const v = c.value;
+  if (v && typeof v === "object" && !Array.isArray(v)) {
+    return "d30=" + v.d30 + " d60=" + v.d60 + " d90+=" + v.d90_plus;
+  }
+  return String(v);
+}
+
+function rejectCandidate(idx) {
+  if (idx < 0 || idx >= extractedCandidates.length) return;
+  extractedCandidates.splice(idx, 1);
+  renderCandidatesTable();
+}
+
+async function verifyCandidate(idx) {
+  const c = extractedCandidates[idx];
+  if (!c) return;
+  await persistCandidateAsVerified(idx, c);
+}
+
+async function editCandidate(idx) {
+  const c = extractedCandidates[idx];
+  if (!c) return;
+  const edited = window.prompt(
+    "Edit the value for " + c.metric_id + " (" + formatCandidateValue(c) + "):",
+    typeof c.value === "object" ? JSON.stringify(c.value) : String(c.value),
+  );
+  if (edited === null) return;
+  let next = edited.trim();
+  // Try to coerce back to the expected shape.
+  if (c.value && typeof c.value === "object" && !Array.isArray(c.value)) {
+    try { next = JSON.parse(next); }
+    catch { showVfUploadError("Edited value must be valid JSON for " + c.metric_id); return; }
+  } else if (typeof c.value === "number") {
+    const n = Number(next.replace(/[$,]/g, ""));
+    if (!Number.isFinite(n)) { showVfUploadError("Edited value must be a number for " + c.metric_id); return; }
+    next = n;
+  }
+  await persistCandidateAsVerified(idx, { ...c, value: next });
+}
+
+async function persistCandidateAsVerified(idx, c) {
+  if (!currentContactId) return;
+  const requestedContactId = currentContactId;
+  if (!currentEntriesHash) {
+    showVfUploadError("No entries_hash yet — reload the case and try again.");
+    return;
+  }
+  try {
+    const { status, data } = await callApi("/asksolomon/case/verified-financials", {
+      contactId: requestedContactId,
+      expected_entries_hash: currentEntriesHash,
+      entry: {
+        metric_id: c.metric_id,
+        value: c.value,
+        period: c.period,
+        source_doc: c.source_doc,
+        note: c.note || "extracted via document upload",
+      },
+    });
+    if (requestedContactId !== currentContactId) return;
+    if (status === 200 && data && data.success) {
+      // Advance the shared hash so a second verify in a row works
+      // without a full reload. Mirrors how saveVerifiedFinancial
+      // threads the hash forward after a successful save.
+      if (data.entries_hash) currentEntriesHash = data.entries_hash;
+      extractedCandidates.splice(idx, 1);
+      renderCandidatesTable();
+    } else if (status === 409) {
+      showVfUploadError("Someone else saved a verified financial since this page loaded. Reload the case and re-extract.");
+      if (data && data.current_entries_hash) currentEntriesHash = data.current_entries_hash;
+    } else {
+      showVfUploadError((data && data.error) || "save failed");
+    }
+  } catch (err) {
+    if (requestedContactId !== currentContactId) return;
+    showVfUploadError(err && err.message ? err.message : "network error");
+  }
 }
 
 document.getElementById("password-input")?.addEventListener("keydown", (e) => {

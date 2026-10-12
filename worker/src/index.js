@@ -44,6 +44,7 @@ import {
   handleAcknowledgeWarning,
 } from "./bga_copilot/red_team_check.js";
 import { handleApproveAndSend } from "./bga_copilot/approve_and_send.js";
+import { handleExtractFinancialsFromDocument } from "./bga_copilot/document_extraction.js";
 import {
   fetchGHLCustomFieldsCatalog,
   GHLCatalogUnavailableError,
@@ -5717,6 +5718,16 @@ export default {
     // enforced on this handler, in that order.
     if (path === "/asksolomon/case/approve-and-send") {
       return handleApproveAndSend(request, env, { checkPassword: checkConsolePassword });
+    }
+
+    // PR 14 — docs/BGA_COPILOT_SPEC.md §11 row 14 (optional).
+    // Reads an uploaded PDF / CSV and returns candidate verified-
+    // financials values for the strategist to review. NEVER writes
+    // any field — accepted candidates post through
+    // /case/verified-financials, which runs the §4.2 hash concurrency
+    // guard and stamps provenance="verified".
+    if (path === "/asksolomon/case/extract-financials-from-document") {
+      return handleExtractFinancialsFromDocument(request, env, { checkPassword: checkConsolePassword });
     }
 
     // POST /audit — JSON marketing audit. No auth (matches GET /audit).
