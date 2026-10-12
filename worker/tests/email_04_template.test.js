@@ -87,16 +87,21 @@ describe("Email 04 — Deep Dive Part 2 template (PR 11)", () => {
       // session via the APPROVE & SEND button (PR 12). The template
       // must not carry pre-call CTAs — a recipient who already finished
       // the call would be told to book or prep for a session that
-      // already happened. Pins the fix for the Codex P2 finding on #103.
-      it("contains no pre-call CTAs (post-call delivery framing)", () => {
+      // already happened. Pins the fix for the Codex P2 finding on #103
+      // and the preheader follow-up P2 on #105 (the hidden preheader
+      // div feeds inbox preview text in most clients, so it has to
+      // read as post-call too — the broader "bring the plan" match
+      // covers the preheader's "Then bring the plan" wording).
+      it("contains no pre-call CTAs (post-call delivery framing, body AND preheader)", () => {
         const html = readTemplate(relPath);
         const bannedPhrases = [
-          /bring this plan to your 50-minute session/i,
-          /book my 50-min bga session/i,
+          /bring\s+the\s+plan\s+to\s+your\s+50-minute\s+(?:strategy\s+)?session/i,
+          /bring\s+this\s+plan\s+to\s+your\s+50-minute\s+session/i,
+          /book\s+my\s+50-min\s+bga\s+session/i,
           /BOOK MY 50-MIN BGA SESSION/,
-          /before the call/i,
-          /if you are not booked yet/i,
-          /choose a time below/i,
+          /before\s+the\s+call/i,
+          /if\s+you\s+are\s+not\s+booked\s+yet/i,
+          /choose\s+a\s+time\s+below/i,
         ];
         for (const re of bannedPhrases) {
           assert.ok(
@@ -104,6 +109,27 @@ describe("Email 04 — Deep Dive Part 2 template (PR 11)", () => {
             `${relPath} still carries a pre-call phrase matching ${re}`,
           );
         }
+      });
+
+      // Scoped preheader check — the hidden preview-text div feeds
+      // inbox preview text in most email clients, so it has to carry
+      // the post-call framing too. Scan ONLY the preheader div so
+      // this test isn't satisfied by body copy that happens to match.
+      it("preheader (hidden preview-text div) uses post-call wording", () => {
+        const html = readTemplate(relPath);
+        const match = html.match(
+          /<div[^>]*mso-hide:all[^>]*>([\s\S]*?)<\/div>/i,
+        );
+        assert.ok(match, `${relPath} missing the hidden preheader div`);
+        const preheader = match[1].toLowerCase();
+        assert.ok(
+          !/bring\s+the\s+plan|strategy\s+session|before\s+the\s+call/.test(preheader),
+          `${relPath} preheader still carries pre-call language: "${match[1].trim()}"`,
+        );
+        assert.ok(
+          /finalized|growth\s+plan|the\s+written\s+record/.test(preheader),
+          `${relPath} preheader must signal post-call delivery; got: "${match[1].trim()}"`,
+        );
       });
 
       it("frames the plan as a post-call record (positive signal)", () => {
