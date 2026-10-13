@@ -349,9 +349,18 @@ export async function handleExtractFinancialsFromDocument(request, env, { checkP
   // hallucinated or document-internal filename ("Statement_Final.pdf"
   // that doesn't match what the strategist actually uploaded). If the
   // model named a different source_doc than what was uploaded, we
-  // preserve that detail in `note` prefixed with "model_source_doc:"
-  // so the strategist still has the context for review but the
+  // preserve that detail in note prefixed with "model_source_doc:" so
+  // the strategist still has the context for review but the
   // authoritative provenance recorded is the file they handed us.
+  //
+  // (Codex P2 fixup on #109) The note returned here is EXACTLY what
+  // the strategist sees in the candidate review table AND exactly
+  // what gets persisted on Verify. If there's no model note and no
+  // carried model_source_doc, we fall back to a human-readable
+  // extraction origin string so swot_verified_financials.note always
+  // records provenance context ("extracted via document upload") —
+  // but the client is forwarding c.note unchanged, so WYSIWYG holds.
+  const FALLBACK_NOTE = "extracted via document upload";
   const candidates = validated.candidates.map((c) => {
     const modelSourceDoc = typeof c.source_doc === "string" ? c.source_doc.trim() : "";
     const existingNote = typeof c.note === "string" ? c.note.trim() : "";
@@ -359,7 +368,8 @@ export async function handleExtractFinancialsFromDocument(request, env, { checkP
     const carried = needsCarry
       ? `model_source_doc: ${modelSourceDoc}`
       : "";
-    const nextNote = [existingNote, carried].filter(Boolean).join(" · ");
+    const merged = [existingNote, carried].filter(Boolean).join(" · ");
+    const nextNote = merged || FALLBACK_NOTE;
     return {
       ...c,
       source_doc: filename,

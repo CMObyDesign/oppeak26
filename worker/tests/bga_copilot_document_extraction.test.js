@@ -338,6 +338,34 @@ describe("POST /asksolomon/case/extract-financials-from-document — preconditio
 });
 
 describe("POST /asksolomon/case/extract-financials-from-document — happy path", () => {
+  it("(Codex P2 fixup on #109) empty-note candidate gets 'extracted via document upload' fallback so Note column display matches persisted value", async () => {
+    const cap = stubFetch((url) => {
+      const u = String(url);
+      if (u.includes("api.anthropic.com")) {
+        // Claude returned no note AND a matching source_doc, so there's
+        // nothing to carry forward. Fallback should kick in so the
+        // Note column shows exactly what will persist.
+        return claudeExtractionRes([
+          { metric_id: "cash_on_hand", value: 12000, period: "2026-09",
+            source_doc: "actual.pdf", confidence: "high" },
+        ]);
+      }
+      if (u.includes("/customFields") && !u.includes("/contacts/")) return emptyCatalogRes();
+      return ghlContactRes();
+    });
+    try {
+      const res = await handleExtractFinancialsFromDocument(
+        post({ contactId: "c1", filename: "actual.pdf",
+          mime_type: "application/pdf", document_base64: SMALL_B64 }),
+        makeEnv(), { checkPassword },
+      );
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.equal(body.candidates.length, 1);
+      assert.equal(body.candidates[0].note, "extracted via document upload");
+    } finally { cap.restore(); }
+  });
+
   it("(Codex P2 fixup on #106) source_doc is ALWAYS the uploaded filename; a Claude-returned differing label is carried into note", async () => {
     const cap = stubFetch((url) => {
       const u = String(url);
