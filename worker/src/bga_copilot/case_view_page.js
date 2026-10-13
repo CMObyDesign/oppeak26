@@ -1703,12 +1703,25 @@ function renderCandidatesTable() {
     const valuePreview = formatCandidateValue(c);
     const conf = (c.confidence || "medium");
     const confColor = conf === "high" ? "#065f46" : conf === "low" ? "#991b1b" : "#92400e";
+    // (Codex P2 fixup on #108) The handler carries any differing
+    // Claude-returned source_doc into the note field prefixed with
+    // "model_source_doc:" so the audit trail does not lose what the
+    // model actually read. That note is persisted on Verify, so the
+    // strategist MUST see it in the review table before clicking —
+    // otherwise a hallucinated label would land in
+    // swot_verified_financials.note without approval and get consumed
+    // by downstream roadmap generation.
+    const noteText = typeof c.note === "string" ? c.note.trim() : "";
+    const noteDisplay = noteText
+      ? escapeHtml(noteText)
+      : '<span style="color:#9ca3af;">(none)</span>';
     return (
       '<tr>'
       + '<td><code>' + escapeHtml(c.metric_id) + '</code></td>'
       + '<td>' + escapeHtml(valuePreview) + '</td>'
       + '<td>' + escapeHtml(c.period) + '</td>'
       + '<td style="color:' + confColor + ';">' + escapeHtml(conf) + '</td>'
+      + '<td style="font-size:12px; max-width:280px; word-break:break-word;">' + noteDisplay + '</td>'
       + '<td>'
       +   '<button class="primary" onclick="verifyCandidate(' + idx + ')">Verify</button> '
       +   '<button onclick="editCandidate(' + idx + ')">Edit</button> '
@@ -1718,13 +1731,14 @@ function renderCandidatesTable() {
     );
   }).join("");
   pane.innerHTML = ''
-    + '<p style="color:#374151; font-size:13px; margin:0 0 8px;"><strong>Candidates (unverified):</strong> each becomes a verified-financials entry only when you click Verify or Edit.</p>'
+    + '<p style="color:#374151; font-size:13px; margin:0 0 8px;"><strong>Candidates (unverified):</strong> each becomes a verified-financials entry only when you click Verify or Edit. The Note column shows the strategist-visible context that will land on <code>swot_verified_financials.note</code> — review before clicking Verify.</p>'
     + '<table style="width:100%; border-collapse:collapse; font-size:13px;">'
     + '<thead><tr style="background:#f9fafb;">'
     +   '<th style="text-align:left; padding:6px;">Metric</th>'
     +   '<th style="text-align:left; padding:6px;">Value</th>'
     +   '<th style="text-align:left; padding:6px;">Period</th>'
     +   '<th style="text-align:left; padding:6px;">Confidence</th>'
+    +   '<th style="text-align:left; padding:6px;">Note (will persist)</th>'
     +   '<th style="text-align:left; padding:6px;">Action</th>'
     + '</tr></thead>'
     + '<tbody>' + rows + '</tbody>'
