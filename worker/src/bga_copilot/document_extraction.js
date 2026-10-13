@@ -343,13 +343,29 @@ export async function handleExtractFinancialsFromDocument(request, env, { checkP
     return json({ success: false, error: validated.error }, 502);
   }
 
-  // Attach the uploaded filename as the authoritative source_doc so a
-  // strategist viewing the candidate sees the file they actually
-  // uploaded, not whatever label Claude guessed.
-  const candidates = validated.candidates.map((c) => ({
-    ...c,
-    source_doc: c.source_doc || filename,
-  }));
+  // (Codex P2 fixup on #106) The uploaded filename is the authoritative
+  // provenance — assign it unconditionally. Validation only checks that
+  // source_doc is nonempty, so Claude's returned value could be a
+  // hallucinated or document-internal filename ("Statement_Final.pdf"
+  // that doesn't match what the strategist actually uploaded). If the
+  // model named a different source_doc than what was uploaded, we
+  // preserve that detail in `note` prefixed with "model_source_doc:"
+  // so the strategist still has the context for review but the
+  // authoritative provenance recorded is the file they handed us.
+  const candidates = validated.candidates.map((c) => {
+    const modelSourceDoc = typeof c.source_doc === "string" ? c.source_doc.trim() : "";
+    const existingNote = typeof c.note === "string" ? c.note.trim() : "";
+    const needsCarry = modelSourceDoc && modelSourceDoc !== filename;
+    const carried = needsCarry
+      ? `model_source_doc: ${modelSourceDoc}`
+      : "";
+    const nextNote = [existingNote, carried].filter(Boolean).join(" · ");
+    return {
+      ...c,
+      source_doc: filename,
+      note: nextNote,
+    };
+  });
 
   return json({
     success: true,

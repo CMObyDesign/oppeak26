@@ -338,6 +338,39 @@ describe("POST /asksolomon/case/extract-financials-from-document — preconditio
 });
 
 describe("POST /asksolomon/case/extract-financials-from-document — happy path", () => {
+  it("(Codex P2 fixup on #106) source_doc is ALWAYS the uploaded filename; a Claude-returned differing label is carried into note", async () => {
+    const cap = stubFetch((url) => {
+      const u = String(url);
+      if (u.includes("api.anthropic.com")) {
+        // Claude returned an INCORRECT filename — a hallucinated one
+        // that happens to look like a plausible document.
+        return claudeExtractionRes([
+          { metric_id: "cash_on_hand", value: 12000, period: "2026-09",
+            source_doc: "Statement_Final.pdf", note: "Section 1, line 4",
+            confidence: "high" },
+        ]);
+      }
+      if (u.includes("/customFields") && !u.includes("/contacts/")) return emptyCatalogRes();
+      return ghlContactRes();
+    });
+    try {
+      const res = await handleExtractFinancialsFromDocument(
+        post({ contactId: "c1", filename: "actual_balance_sheet_2026-09.pdf",
+          mime_type: "application/pdf", document_base64: SMALL_B64 }),
+        makeEnv(), { checkPassword },
+      );
+      assert.equal(res.status, 200);
+      const body = await res.json();
+      assert.equal(body.candidates.length, 1);
+      // Authoritative provenance is the uploaded filename, unconditionally.
+      assert.equal(body.candidates[0].source_doc, "actual_balance_sheet_2026-09.pdf");
+      // Claude's label is preserved in note for strategist context.
+      assert.match(body.candidates[0].note, /model_source_doc:\s*Statement_Final\.pdf/);
+      // Original note content is preserved too.
+      assert.match(body.candidates[0].note, /Section 1, line 4/);
+    } finally { cap.restore(); }
+  });
+
   it("200 returns candidates and the source_doc defaults to the uploaded filename", async () => {
     const cap = stubFetch((url) => {
       const u = String(url);
@@ -362,10 +395,14 @@ describe("POST /asksolomon/case/extract-financials-from-document — happy path"
       const body = await res.json();
       assert.equal(body.success, true);
       assert.equal(body.candidates.length, 1);
-      // The first candidate had an empty source_doc → should be the required-field reject.
-      // The second is kept with its explicit source_doc.
+      // First candidate had an empty source_doc from Claude → gets
+      // rejected by validateExtractionResponse as a required-field miss.
+      // Second is kept, with source_doc overridden to the uploaded
+      // filename (not Claude's "pnl.pdf" label) per the P2 fixup.
       assert.equal(body.candidates[0].metric_id, "revenue_ttm");
-      assert.equal(body.candidates[0].source_doc, "pnl.pdf");
+      assert.equal(body.candidates[0].source_doc, "balance_sheet_2026-09.pdf");
+      // Claude's "pnl.pdf" is carried into note.
+      assert.match(body.candidates[0].note, /model_source_doc:\s*pnl\.pdf/);
     } finally { cap.restore(); }
   });
 

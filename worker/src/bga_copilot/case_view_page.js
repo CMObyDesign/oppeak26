@@ -786,6 +786,15 @@ function renderContentPane(id, content) {
 function renderCase(bundle, auditData) {
   document.getElementById("case-content").classList.remove("hidden");
   currentContactId = bundle.contactId || "";
+  // (Codex P1 fixup on #106) Per-case state resets. Any strategist
+  // workflow that holds unsent state in a module variable keyed to
+  // the previously-loaded contact MUST clear it before we render the
+  // new case — otherwise clicking Verify/Confirm on a leftover row
+  // would submit the old contact's extracted data against the new
+  // contactId. The document-extraction candidate list is the
+  // concrete offender today; call-decisions and approve-and-send
+  // reset via their own render functions below.
+  resetDocumentExtractionState();
   renderHeader(bundle);
   renderAudit(bundle, auditData);
   renderVerifiedFinancials(bundle);
@@ -1606,6 +1615,21 @@ function escapeHtml(s) {
 // server-side.
 
 let extractedCandidates = [];
+
+// (Codex P1 fixup on #106) Called by renderCase() on every case load.
+// Without this reset, candidates extracted for contact A would still
+// be visible after switching to contact B, and a stale Verify click
+// would POST A's extracted value against B's contactId + hash — a
+// silent cross-contact write to the wrong record.
+function resetDocumentExtractionState() {
+  extractedCandidates = [];
+  const pane = document.getElementById("vf-candidates-pane");
+  if (pane) pane.innerHTML = "";
+  const err = document.getElementById("vf-upload-error");
+  if (err) err.classList.add("hidden");
+  const fileInput = document.getElementById("vf-upload-file");
+  if (fileInput) fileInput.value = "";
+}
 
 async function extractFinancialsFromDocument() {
   if (!currentContactId) return;
