@@ -74,11 +74,11 @@ describe("Email 04 — Deep Dive Part 2 template (PR 11)", () => {
         // ever contains plain prose.
         const html = readTemplate(relPath);
         assert.ok(
-          html.includes("WHAT YOU COMMITTED TO ON THE CALL"),
+          html.includes("NEXT STEPS FROM YOUR SESSION"),
           "next-steps block missing its header",
         );
         assert.ok(
-          html.includes("SERVICES YOU SELECTED"),
+          html.includes("CFO BY DESIGN SERVICES SELECTED"),
           "services-selected block missing its header",
         );
       });
@@ -141,6 +141,7 @@ describe("Email 04 — Deep Dive Part 2 template (PR 11)", () => {
           /finalized from our 50-minute session/i,
           /the written record/i,
           /you committed to on the call/i,
+          /finalized roadmap from your business growth analysis/i,
         ];
         const matched = postCallSignals.some((re) => re.test(html));
         assert.ok(
