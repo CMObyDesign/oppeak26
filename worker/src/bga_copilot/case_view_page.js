@@ -1803,7 +1803,12 @@ async function persistCandidateAsVerified(idx, c) {
         value: c.value,
         period: c.period,
         source_doc: c.source_doc,
-        note: c.note || "extracted via document upload",
+        // (Codex P2 fixup on #109) Forward c.note exactly as the
+        // handler returned it. The handler now sets a FALLBACK_NOTE
+        // when both the model note and the carried model_source_doc
+        // are empty, so WYSIWYG holds: what the Note column shows is
+        // what lands on swot_verified_financials.note.
+        note: c.note,
       },
     });
     if (requestedContactId !== currentContactId) return;
