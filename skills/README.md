@@ -1,6 +1,28 @@
 # CFO ByDesign Skills
 
-7 CFO-specific skills the Solomon SWOT Engine loads to produce CFO-grade outputs. Each skill is a workflow contract — when to load, what to ask for, how to act, what to return.
+> **Status: DESIGNED / DOCUMENTED / NOT YET WIRED INTO RUNTIME.**
+>
+> These files are workflow specifications ("skill contracts"), **not**
+> runtime capabilities the Worker loads automatically. Nothing in
+> `worker/src/` imports from `skills/`. The Solomon prompt stack built
+> by `worker/src/index.js:buildPrompt()` does not read these files;
+> they do not change what Solomon returns in production.
+>
+> The language below ("skills the Solomon SWOT Engine loads") describes
+> the **intended** Phase-2 architecture, not the current state. Treat
+> each skill here as documentation of a workflow the strategist (or a
+> future automated loader) is expected to follow — not as a function
+> that fires on its own today.
+>
+> The BGA Copilot strategist console (`worker/src/bga_copilot/`) is
+> where the equivalent production tooling lives: deterministic service
+> matching, roadmap generation, document extraction, pre-send QA, and
+> approve-and-send are all shipped modules, each with its own test
+> file.
+
+---
+
+7 CFO-specific skills the Solomon SWOT Engine [will load, once Phase 2 wires them in] to produce CFO-grade outputs. Each skill is a workflow contract — when to load, what to ask for, how to act, what to return.
 
 Mirrors the SKILL-AUTHORING-STANDARD pattern from the parent Spark Operations skills library.
 
