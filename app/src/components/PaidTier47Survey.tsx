@@ -11,6 +11,7 @@ import {
   PaidTier47Question,
 } from "@/data/paidTier47Questions";
 import { SaveForLater } from "@/components/SaveForLater";
+import { requestParentScrollToTop } from "@/lib/iframe-resize";
 
 interface Props {
   contact: { name: string; email: string; contactId?: string };
@@ -49,8 +50,16 @@ export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props
   //     before the user sees the page)
   //   - next/back navigation (replaces the ad-hoc scrollTo calls that used to
   //     live inside handleNext/handleBack)
+  //
+  // Fires BOTH window.scrollTo (standalone deploy) AND the parent-scroll
+  // bridge (HL iframe deploy — initIframeResize disables the iframe's own
+  // scrollbar, so the inner window.scrollTo can't move the viewport the
+  // customer actually sees; the parent page owns scrolling and only responds
+  // to the postMessage bridge). requestParentScrollToTop no-ops when not
+  // embedded.
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
+    requestParentScrollToTop();
   }, [sectionIdx]);
 
   const questionSections = getPaid47Sections();
