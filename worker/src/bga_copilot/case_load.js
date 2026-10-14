@@ -1,16 +1,17 @@
 // BGA Copilot — case load endpoint.
 //
-// PR 4 of the build (docs/BGA_COPILOT_SPEC.md §11 row 4): assembles the
-// case bundle at load time from GHL state. Everything in the bundle is
-// internal (strategist-facing); nothing here is customer-visible.
+// Assembles the case bundle at load time from GHL state. Everything in
+// the bundle is internal (strategist-facing); nothing here is
+// customer-visible.
 //
-// Spec reference: §2.1 "Loading a case" — the bundle shape this
-// endpoint produces IS the system context the console shows to the
-// strategist when they pick a swot_paid_297 contact.
+// Spec reference: docs/BGA_COPILOT_SPEC.md §2.1 "Loading a case" — the
+// bundle shape this endpoint produces IS the system context the console
+// shows to the strategist when they pick a swot_paid_297 contact.
 //
 // Read-only. This endpoint never issues a PUT to GHL. Writes are the
-// job of the individual toolkit handlers (verified_financials_panel,
-// generate_roadmap_draft, …).
+// job of the individual toolkit handlers (verified-financial writes in
+// case_handlers.js, generate_roadmap_draft, match_services, etc.);
+// customer-facing delivery is the exclusive job of approve_and_send.js.
 
 import {
   fetchGhlContact,

@@ -1,6 +1,11 @@
-// BGA Copilot — case view HTML page (PR 4 of the build, docs/BGA_COPILOT_SPEC.md §11 row 4).
+// BGA Copilot — case view HTML page (docs/BGA_COPILOT_SPEC.md §2.1 and §11).
 //
-// Read-only strategist view. Served at GET /asksolomon/case.
+// Strategist console. Served at GET /asksolomon/case. The initial case
+// bundle load is read-only; the full BGA Copilot toolkit (verified-
+// financial writes, roadmap draft + section edits, service match, prep
+// brief, challenge, call-decisions, pre-send QA, document extraction,
+// and the APPROVE & SEND delivery boundary) all write back to GHL from
+// this view through their respective handlers.
 //
 // What it does today:
 //   - Password gate (shared with /asksolomon via sessionStorage key).
@@ -213,7 +218,7 @@ export const CASE_VIEW_PAGE = `<!DOCTYPE html>
       </div>
       <button id="load-button" class="primary" onclick="loadCase()">Load case</button>
     </div>
-    <div class="hint">The contact must carry the <code>swot_paid_297</code> tag. The bundle and gap audit load in parallel; this view is read-only (PR 4 scaffolding — no writes from here yet).</div>
+    <div class="hint">The contact must carry the <code>swot_paid_297</code> tag. The bundle and gap audit load in parallel. The full toolkit (verified-financial writes, roadmap draft, service match, prep brief, challenge, call-decisions, pre-send QA, approve &amp; send, document extraction) is live from this view.</div>
     <div id="load-error" class="error-banner hidden"></div>
   </div>
 
@@ -221,11 +226,16 @@ export const CASE_VIEW_PAGE = `<!DOCTYPE html>
   <div id="case-content" class="hidden">
 
     <div class="scaffolding-note">
-      <strong>PR 4 scaffolding.</strong> This view assembles and
-      displays the case bundle (spec §2.1) and runs the
-      <code>audit_case_gaps</code> report on load. The roadmap draft,
-      verified-financials form, service match and other toolkit
-      actions land in later PRs.
+      <strong>Strategist console.</strong> Assembles the case bundle
+      (spec §2.1), runs <code>audit_case_gaps</code> on load, and
+      exposes the full BGA Copilot toolkit: verified-financial writes
+      with optimistic-concurrency protection, roadmap draft generation
+      + per-section edits, deterministic service matching with
+      provenance, prep brief, 5-lens challenge, call-decisions
+      extraction + human confirmation, pre-send red-team QA, and the
+      human-controlled APPROVE &amp; SEND delivery boundary (writes
+      the three customer-facing fields and applies
+      <code>swot_growth_plan_ready</code> last to trigger Email 04).
     </div>
 
     <div class="panel">

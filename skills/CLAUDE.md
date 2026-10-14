@@ -1,6 +1,27 @@
 # CFO ByDesign Skills
 
-Skills the Solomon SWOT Engine loads to produce CFO-grade outputs. Each skill is a workflow contract: when to load, what to ask for, how to act, what to return.
+> **Status: DESIGNED / DOCUMENTED / NOT YET WIRED INTO RUNTIME.**
+>
+> The phrase *"Skills the Solomon SWOT Engine loads"* below describes
+> the **intended** Phase-2 architecture — not the current state.
+> Nothing in `worker/src/` imports or references `skills/*`. The
+> Solomon prompt built by `worker/src/index.js:buildPrompt()` does not
+> read these files; the "When to load which skill by SWOT path" and
+> "Skill graph" sections below do not fire automatically in production.
+>
+> Each file here is a **workflow specification** the strategist (or a
+> future automated loader) is expected to follow — not a function that
+> runs on its own today.
+>
+> The equivalent live tooling is in `worker/src/bga_copilot/*` (every
+> module has its own test file): document extraction, verified-
+> financial writes, roadmap generation, service matching, prep brief,
+> challenge, call-decisions extraction, pre-send QA, and
+> approve-and-send. Those ARE wired into the Worker.
+
+---
+
+Skills the Solomon SWOT Engine [will load, once Phase 2 wires them in] to produce CFO-grade outputs. Each skill is a workflow contract: when to load, what to ask for, how to act, what to return.
 
 ## When to load which skill by SWOT path
 
