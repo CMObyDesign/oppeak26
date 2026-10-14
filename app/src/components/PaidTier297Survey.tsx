@@ -179,7 +179,7 @@ export const PaidTier297Survey = ({ contact, onComplete }: Props) => {
   return (
     <div className="w-full max-w-3xl mx-auto pt-48 md:pt-64 pb-32 px-4 space-y-8">
       <div className="text-center space-y-2">
-        <p className="text-xs font-bold text-accent uppercase tracking-[0.3em]">$297 DEEP DIVE</p>
+        <p className="text-xs font-bold text-accent uppercase tracking-[0.3em]">$297 BUSINESS GROWTH ANALYSIS</p>
         <h2 className="font-display text-3xl md:text-4xl font-bold">{currentSection.name}</h2>
         <p className="text-sm text-muted-foreground">
           {contact.name ? `${contact.name.split(" ")[0]} · ` : ""}Section {sectionIdx + 1} of {sections.length}
@@ -224,7 +224,7 @@ export const PaidTier297Survey = ({ contact, onComplete }: Props) => {
           </Button>
         ) : <div />}
         <Button onClick={handleNext} disabled={uploading} className="h-14 px-8 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl">
-          {isLast ? "Generate My Deep Dive →" : "Continue →"}
+          {isLast ? "Generate My Business Growth Analysis →" : "Continue →"}
         </Button>
       </div>
 
