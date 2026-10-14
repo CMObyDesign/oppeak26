@@ -25,7 +25,7 @@ fulfillment) once BGA access is granted. Lane 5 is independent.
    /deep-dive-preview → /deeper-analysis → $150 → /audit-confirmed
 
 3. STANDALONE
-   /deep-dive-sales/ → PAYMENT_LINK_297 → /audit-confirmed
+   /bga-upgrade → PAYMENT_LINK_297 → /audit-confirmed
 
 4. BGA FULFILLMENT (shared sink for lanes 1–3)
    /audit-confirmed
@@ -111,14 +111,15 @@ Taker funnel.
 
 | Step | Destination | Wrangler var |
 |------|-------------|--------------|
-| 1 | `deepdive.cfobydesign.com/deep-dive-sales/` (static page in `app/public/deep-dive-sales/`) | `DEEP_DIVE_SALES_URL` |
+| 1 | `success.cfobydesign.com/bga-upgrade` (HL-hosted funnel; `app/public/deep-dive-sales/index.html` is the repo-tracked fallback / copy reference) | `DEEP_DIVE_SALES_URL` |
 | 2 | `PAYMENT_LINK_297` | — |
 | 3 | → `/audit-confirmed` → joins Lane 4 | — |
 
-**`deepdive.cfobydesign.com/deep-dive-sales/` is NOT the same thing as
-`/deeper-analysis`.** The former is the standalone $297 sales page; the
-latter is the Action Taker $150 funnel. Both eventually sell access to
-the same BGA fulfillment, but they are not interchangeable paths.
+**`success.cfobydesign.com/bga-upgrade` is NOT the same thing as
+`/deeper-analysis`.** The former is the standalone $297 sales page
+(HL-hosted); the latter is the Action Taker $150 funnel. Both
+eventually sell access to the same BGA fulfillment, but they are not
+interchangeable paths.
 
 ---
 
@@ -215,7 +216,7 @@ BGA_INTAKE_ORIGIN       optional override; defaults to https://success.cfobydesi
 
 ### Standalone BGA sales page
 ```
-DEEP_DIVE_SALES_URL     https://deepdive.cfobydesign.com/deep-dive-sales/
+DEEP_DIVE_SALES_URL     https://success.cfobydesign.com/bga-upgrade
 ```
 
 ### Marketing Audit
