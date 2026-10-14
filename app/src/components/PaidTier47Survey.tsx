@@ -42,6 +42,17 @@ export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props
     } catch { /* localStorage disabled — skip */ }
   }, [PROGRESS_KEY, answers, sectionIdx]);
 
+  // Scroll to top on mount and on every section change. Covers:
+  //   - initial load (otherwise the pt-48/pt-64 container renders below the
+  //     fold and the first question gets cut off, especially on the final step)
+  //   - resume-from-localStorage (sectionIdx may restore to a non-zero value
+  //     before the user sees the page)
+  //   - next/back navigation (replaces the ad-hoc scrollTo calls that used to
+  //     live inside handleNext/handleBack)
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [sectionIdx]);
+
   const questionSections = getPaid47Sections();
   // Business info is the first section
   const allSections = [
@@ -62,14 +73,12 @@ export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props
       onComplete(answers);
     } else {
       setSectionIdx(i => i + 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
   const handleBack = () => {
     if (!isFirst) {
       setSectionIdx(i => i - 1);
-      window.scrollTo({ top: 0, behavior: "smooth" });
     }
   };
 
@@ -121,7 +130,9 @@ export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props
   return (
     <div className="w-full max-w-3xl mx-auto pt-48 md:pt-64 pb-32 px-4 space-y-8">
       <div className="text-center space-y-2">
-        <p className="text-xs font-bold text-accent uppercase tracking-[0.3em]">$47 FULL DIAGNOSTIC</p>
+        <p className="text-xs font-bold text-accent uppercase tracking-[0.3em]">
+          {isLast ? "LAST STEP" : "$47 FULL DIAGNOSTIC"}
+        </p>
         <h2 className="font-display text-3xl md:text-4xl font-bold">{currentSection.name}</h2>
         <p className="text-sm text-muted-foreground">Section {sectionIdx + 1} of {allSections.length}</p>
       </div>
