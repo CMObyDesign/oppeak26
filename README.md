@@ -138,12 +138,34 @@ is not part of the production surface; see `logic/README.md`.
 npx wrangler deploy
 ```
 
-## Three Diagnostic Paths
+## Diagnostic classifications (production)
 
-- **CRITICAL_EXPOSURE** (free: 5-12 / full: 14-28)
-- **HIDDEN_LIABILITY** (free: 13-18 / full: 29-41)
-- **UNTAPPED_CAPACITY** (free: 19-25 / full: 42-54)
-- **REHAB_REQUIRED** (triggered by Q11_D regardless of score)
+Every assessment Solomon runs — free Health Check, $47 Full Diagnostic, and
+$297 Business Growth Analysis — assigns the contact to one of exactly three
+customer-facing paths, enforced by the `ASSESSMENT_RUBRIC` in
+`worker/src/index.js`:
+
+- **`growth`** — the business is in good enough shape to focus on growing;
+  signals suggest the owner is ready for proactive moves.
+- **`needs-attention`** — real signals of risk or inefficiency that deserve
+  focused work, but not a crisis. The default classification for most
+  diagnostic buyers.
+- **`rehab`** — serious financial distress is confirmed by the intake
+  (debt subtype matters: active judgment, lien, or unfiled taxes
+  qualifies; "actively managing debt" alone does not). Triggers the
+  Spark rehab path.
+
+The customer-facing report always surfaces exactly one of these three
+labels; the Worker rejects anything Solomon returns outside this set.
+
+> **Legacy / historical note:** earlier project drafts described a
+> pre-LLM scoring system with four categories (CRITICAL_EXPOSURE,
+> HIDDEN_LIABILITY, UNTAPPED_CAPACITY, REHAB_REQUIRED) and numeric
+> thresholds (free 5-25, full 14-54). That scorer lives orphaned at
+> `logic/scoring_logic.js` and is not wired into the Worker. The
+> `logic/README.md` has the full status note. New integrations should
+> use the three production classifications above, not the legacy
+> four-category scheme.
 
 ## Maintainer
 
