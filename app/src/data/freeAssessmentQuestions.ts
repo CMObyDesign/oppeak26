@@ -48,10 +48,17 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
       {
         id: 3,
         fieldKey: "nbPL6APmjrjr43J6urVb",
-        type: "text",
+        type: "select",
         title: "Industry/Vertical",
         text: "What industry or vertical best describes your business?",
-        required: false
+        options: [
+          { value: "hvac", label: "HVAC / Trades" },
+          { value: "construction", label: "Construction" },
+          { value: "professional-services", label: "Professional services" },
+          { value: "ecommerce", label: "E-commerce" },
+          { value: "other", label: "Other" }
+        ],
+        required: true
       }
     ]
   },
@@ -78,7 +85,7 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         title: "Decision Making Basis",
         text: "When you make business decisions, are you basing them on your actual numbers or on what is in your bank account?",
         options: [
-          { value: "numbers", label: "I run on numbers I have clean financials" },
+          { value: "numbers", label: "I run on my numbers. I have clean financials." },
           { value: "bank-balance", label: "Mostly my bank balance" },
           { value: "in-between", label: "Somewhere in between" },
           { value: "not-sure", label: "Honestly not sure" }
@@ -118,7 +125,12 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         title: "Revenue Leaks",
         text: "Where does revenue most often leak in your business?",
         required: false
-      },
+      }
+    ]
+  },
+  {
+    title: "Opportunities & Threats",
+    questions: [
       {
         id: 9,
         fieldKey: "cvuAgfuL94eBahOrnTY0",
@@ -126,12 +138,7 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         title: "Hidden Profit Opportunity",
         text: "What would change in your business if you had 20% more profit on the same revenue?",
         required: false
-      }
-    ]
-  },
-  {
-    title: "Opportunities & Threats",
-    questions: [
+      },
       {
         id: 10,
         fieldKey: "cdlV9zqJxztcxfXgD4J0",
