@@ -98,9 +98,21 @@ These come AFTER the SKILL.md contracts are stable and the Solomon console is li
 
 ## Related (outside this folder)
 
-- Worker: `worker/src/index.js` — Solomon backend; loads relevant skills based on SWOT path
-- Prompts: `prompts/*.md` — free / paid_47 / paid_297 generation prompts; skills supplement, not replace
-- Logic: `logic/scoring_logic.js` — path scoring; determines which skills auto-load
+> **Note:** Every "load" / "determines which skills auto-load" / "runs
+> alongside" claim in this section describes Phase-2 intent, not what
+> runs today. The current Worker does not import or reference any file
+> under `skills/*`.
+
+- Worker: `worker/src/index.js` — Solomon backend. [Phase 2 plan: load
+  relevant skills based on SWOT path.] Current state: `buildPrompt()`
+  does not read anything from this folder.
+- Prompts: `prompts/*.md` — reference-only drafts, not wired into the
+  Worker (see `prompts/README.md`). Production tier prompts are built
+  inline in `worker/src/index.js` via `ASSESSMENT_RUBRIC`, `TIER_GUIDE`,
+  and `buildPrompt()`.
+- Logic: `logic/scoring_logic.js` — orphaned pre-LLM scoring scaffold,
+  not wired into the Worker (see `logic/README.md`). Scoring now runs
+  inside Solomon per the `ASSESSMENT_RUBRIC`.
 
 ---
 
@@ -108,11 +120,25 @@ These come AFTER the SKILL.md contracts are stable and the Solomon console is li
 
 This `skills/` folder also contains:
 
-- [`taste-skill/`](taste-skill/SKILL.md) — `design-taste-frontend`. **Part of the Solomon ecosystem** — loaded when generating reports and visual deliverables so output stays on-brand and visually tasteful. Pair with `proposal-drafter` and the worker's `buildReportHtml` / `buildReportPage` rendering.
-- [`review-response-reputation/`](review-response-reputation/SKILL.md) — placeholder skill (separate workstream, pre-dates the CFO toolkit).
+- [`taste-skill/`](taste-skill/SKILL.md) — `design-taste-frontend`.
+  [Phase 2 plan: loaded when generating reports and visual deliverables
+  so output stays on-brand.] Not currently invoked by the Worker's
+  report-render path. Treat as design-system reference for a human
+  reviewer today.
+- [`review-response-reputation/`](review-response-reputation/SKILL.md)
+  — placeholder skill (separate workstream, pre-dates the CFO toolkit).
 
-The 7 CFO skills above form the coordinated analyst toolkit for the SWOT Engine. The `taste-skill` is the visual/design counterpart that runs alongside them.
+The 7 CFO skills above are the designed analyst toolkit for the SWOT
+Engine; the `taste-skill` is the visual/design counterpart. Neither
+group fires automatically from the Worker today — the "runs alongside"
+and "loaded when" phrasing describes the Phase-2 target, not the
+current runtime.
+
+For the shipped equivalent tooling (deterministic service matching,
+roadmap generation, document extraction, pre-send QA, approve-and-send,
+etc.), see `worker/src/bga_copilot/*` — each module there is wired into
+the Worker and has its own test file.
 
 ---
 
-**Drafted:** 2026-06-22 · **CFO Skills count:** 7 (Phase 1 contracts) · **Status:** Production-ready spec
+**Drafted:** 2026-06-22 · **CFO Skills count:** 7 (Phase 1 contracts) · **Status:** Phase-1 specifications (contracts drafted; Phase-2 runtime integration not yet built)
