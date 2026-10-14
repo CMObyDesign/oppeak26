@@ -99,10 +99,12 @@ export const QuestionCard = ({ question, selectedOption, onSelect }: QuestionCar
         )}
       </div>
 
-      <div className="flex items-center justify-center gap-2 text-[10px] text-muted-foreground uppercase tracking-widest pt-4">
-        <Info className="h-3 w-3" />
-        <span>Your answer is anonymous until you choose to share it.</span>
-      </div>
+      {question.id <= 3 && (
+        <div className="flex items-center justify-center gap-2 text-[10px] text-muted-foreground uppercase tracking-widest pt-4">
+          <Info className="h-3 w-3" />
+          <span>Your answer is anonymous until you choose to share it.</span>
+        </div>
+      )}
     </div>
   );
 };

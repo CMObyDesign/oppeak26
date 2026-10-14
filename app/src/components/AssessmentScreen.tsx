@@ -255,8 +255,8 @@ export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
               className="bg-card border border-border rounded-2xl p-8 md:p-12 shadow-xl"
             >
               <div className="text-center space-y-4 mb-8">
-                <h2 className="font-display text-3xl font-bold text-foreground">Where should we send your results?</h2>
-                <p className="text-muted-foreground">Enter your details to continue your personalized business health assessment.</p>
+                <h2 className="font-display text-3xl font-bold text-foreground">Where should we send your report?</h2>
+                <p className="text-muted-foreground">Your free Business Health Report is yours — tell us where to send it and we'll keep building it as you finish the remaining questions.</p>
               </div>
               
               <form onSubmit={handleSubmitLead} className="space-y-6">
