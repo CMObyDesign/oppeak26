@@ -29,6 +29,12 @@ const PaidTier297 = () => {
     city?: string;
     state?: string;
     country?: string;
+    // Codex P2 on #129: the $47 → $297 handoff was adding annualRevenue
+    // to the localStorage stash but never reading it back here, so the
+    // BGA buyer was still being asked for the same number twice. Loaded
+    // in both the verifyPayment path and the email-resume path, then
+    // handed to PaidTier297Survey as an initialAnswers seed below.
+    annualRevenue?: string;
   }>({});
 
   const [report, setReport] = useState<AgentReport | null>(null);
@@ -81,12 +87,17 @@ const PaidTier297 = () => {
         } catch {}
 
         setBusinessProfile({
-          businessName: params.get("businessName") || stored.businessName || "",
-          website:      params.get("website")      || stored.website      || "",
-          industry:     params.get("industry")     || stored.industry     || "",
-          city:         params.get("city")         || stored.city         || "",
-          state:        params.get("state")        || stored.state        || "",
-          country:      params.get("country")      || stored.country      || "",
+          businessName:  params.get("businessName")  || stored.businessName  || "",
+          website:       params.get("website")       || stored.website       || "",
+          industry:      params.get("industry")      || stored.industry      || "",
+          city:          params.get("city")          || stored.city          || "",
+          state:         params.get("state")         || stored.state         || "",
+          country:       params.get("country")       || stored.country       || "",
+          // Prefills the BGA survey's annual_revenue answer so the
+          // buyer isn't asked for the same number twice. URL param
+          // wins (support deeplink); fallback is the stash from
+          // the paid_47 run.
+          annualRevenue: params.get("annualRevenue") || stored.annualRevenue || "",
         });
 
         setScreen("survey");
@@ -197,9 +208,14 @@ const PaidTier297 = () => {
           )}
           {screen === "survey" && (
             <motion.div key="survey" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.5 }}>
-              <PaidTier297Survey 
-                contact={contact} 
-                onComplete={handleSurveyComplete} 
+              <PaidTier297Survey
+                contact={contact}
+                onComplete={handleSurveyComplete}
+                initialAnswers={
+                  businessProfile.annualRevenue
+                    ? { annual_revenue: businessProfile.annualRevenue }
+                    : undefined
+                }
               />
             </motion.div>
           )}
