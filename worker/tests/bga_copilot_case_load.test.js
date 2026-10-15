@@ -661,5 +661,20 @@ describe("GET /asksolomon/case — route reachability (Codex P1 on #94)", () => 
     assert.match(body, /data-contact-id="/);
     // And MUST NOT embed a JSON.stringify'd contactId inside an onclick.
     assert.doesNotMatch(body, /onclick="openCase\(/);
+
+    // The script tag MUST actually parse as JavaScript. A long-
+    // standing bug (PR #96 line, surfaced in prod only when BGA
+    // Copilot became Miguel's primary embed) wrote regex escapes
+    // like `/^[ \t]*\n/` inside the outer template literal, which
+    // interpolate to literal tab/newline characters at serve time —
+    // the regex ends mid-literal, the whole <script> fails to
+    // parse, and the entire page renders blank below the topbar.
+    // new Function() parses the string the same way a browser would.
+    const scriptMatch = /<script>([\s\S]*?)<\/script>/.exec(body);
+    assert.ok(scriptMatch, "page must have a <script> tag");
+    assert.doesNotThrow(
+      () => new Function(scriptMatch[1]),
+      "the served <script> body must parse as JavaScript — if this fails, somebody introduced a template-literal escape bug (likely a single-backslash \\t/\\n/\\r inside a regex literal that gets interpolated to the raw character)",
+    );
   });
 });
