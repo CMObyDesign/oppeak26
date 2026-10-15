@@ -391,14 +391,64 @@ describe("$47 → $297 handoff actually prefills annual_revenue (Codex P2 on #12
     assert.match(src, /PaidTier297Survey\s*=\s*\(\{[\s\S]{0,200}initialAnswers\s*\}:/);
     assert.match(src, /useState<Record<string,\s*any>>\(\(\)\s*=>\s*\(\{\s*\.\.\.\(initialAnswers\s*\|\|\s*\{\}\)/);
   });
-  it("PaidTier297Survey resume merge treats seed values as a floor, not an override — mid-survey draft wins", () => {
-    const src = readApp("components/PaidTier297Survey.tsx");
-    // The resume effect must NOT blindly setAnswers(s.answers) because
-    // that would drop the initialAnswers seed. It must merge and only
-    // let non-empty stored values overwrite the seed.
-    assert.doesNotMatch(src, /setAnswers\(s\.answers\)/,
-      "a bare setAnswers(s.answers) would wipe the initialAnswers seed — merge instead");
-    assert.match(src, /if \(v !== undefined && v !== null && v !== ""\) merged\[k\] = v/);
+});
+
+describe("Prefill is scoped to the verified owner (Codex P2 on #130)", () => {
+  it("paid_47 stash now carries ownerContactId AND ownerEmail", () => {
+    const src = readApp("pages/PaidTier47.tsx");
+    assert.match(src, /ownerContactId:\s*contact\.contactId/);
+    assert.match(src, /ownerEmail:\s*\(contact\.email\s*\|\|\s*""\)\.toLowerCase\(\)/);
+  });
+  it("PaidTier297 defines an ownerMatches helper", () => {
+    const src = readApp("pages/PaidTier297.tsx");
+    assert.match(src, /function ownerMatches\(/);
+    // Must consider both the contactId path and the email path.
+    assert.match(src, /storedContactId === verifiedContactId/);
+    assert.match(src, /storedEmail && storedEmail === em/);
+  });
+  it("verifyPayment path only reads the stash when ownerMatches returns true", () => {
+    const src = readApp("pages/PaidTier297.tsx");
+    assert.match(src, /if \(ownerMatches\(parsed, contactId,/);
+  });
+  it("email-resume path only reads the stash when ownerMatches returns true", () => {
+    const src = readApp("pages/PaidTier297.tsx");
+    assert.match(src, /if \(ownerMatches\(stored, r\.contact\.contactId, em\)\)/);
+  });
+  it("legacy stashes without owner fields fall through (no prefill)", () => {
+    const src = readApp("pages/PaidTier297.tsx");
+    // ownerMatches reads ownerContactId / ownerEmail; a stash with
+    // neither set must NOT be trusted (both branches require their
+    // respective verified-id value to be non-empty).
+    assert.match(src, /if \(verifiedContactId && storedContactId && storedContactId === verifiedContactId\)/);
+  });
+});
+
+describe("Resume merge preserves explicit clears (Codex P2 on #130)", () => {
+  const src = (() => readApp("components/PaidTier297Survey.tsx"))();
+
+  it("merge is a plain spread — present keys overwrite the seed even when empty", () => {
+    // The merge must be `{ ...prev, ...s.answers }` (or equivalent).
+    // Previous attempt filtered v !== "", which silently resurrected
+    // the prefilled value after a buyer actively cleared it. Spread
+    // honours the explicit clear because the key IS present in
+    // s.answers with value "".
+    assert.match(src, /setAnswers\(\(prev\)\s*=>\s*\(\{\s*\.\.\.prev,\s*\.\.\.s\.answers\s*\}\)\)/);
+    assert.doesNotMatch(
+      src,
+      /v !== "" .* merged\[k\] = v/,
+      "the v !== \"\" filter wipes explicit clears — see Codex P2 on #130",
+    );
+  });
+
+  it("absent keys preserve the seed (merge-of-missing-key is a no-op by construction)", () => {
+    // Nothing to assert in source — the spread's semantics guarantee
+    // this. We spell it out in a comment on the resume effect so the
+    // next person touching it doesn't 'optimise' back to the old
+    // filtered merge.
+    assert.match(
+      src,
+      /A KEY that was never typed into isn't in s\.answers at all/,
+    );
   });
 });
 

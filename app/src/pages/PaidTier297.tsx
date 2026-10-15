@@ -15,6 +15,35 @@ import { PAYMENT_LINK_297, IMAGE_LOGO } from "@/lib/ghl-config";
 
 type ScreenState = "verifying" | "not-paid" | "survey" | "analyzing" | "results";
 
+/**
+ * True when the paid_47 → paid_297 localStorage stash was written by
+ * the contact we just verified on this page. The stash carries both
+ * ownerContactId and ownerEmail; either match proves ownership, so a
+ * verifyPayment path (contactId) and an email-resume path (email) can
+ * both use the same gate without needing a schema change.
+ *
+ * Case-insensitive email match — HL normalises to lowercase in the
+ * stash write, and the resume form may receive a mixed-case email
+ * from the buyer. Legacy stashes (written before Codex P2 on #130
+ * added the owner fields) have no ownerContactId / ownerEmail, so
+ * they fall through to the no-prefill path — safer than guessing.
+ */
+function ownerMatches(
+  stored: any,
+  verifiedContactId: string | undefined,
+  verifiedEmail: string | undefined,
+): boolean {
+  if (!stored || typeof stored !== "object") return false;
+  const storedContactId = (stored.ownerContactId || "").toString();
+  const storedEmail     = (stored.ownerEmail     || "").toString().toLowerCase();
+  if (verifiedContactId && storedContactId && storedContactId === verifiedContactId) {
+    return true;
+  }
+  const em = (verifiedEmail || "").toLowerCase();
+  if (em && storedEmail && storedEmail === em) return true;
+  return false;
+}
+
 const PaidTier297 = () => {
   const [screen, setScreen] = useState<ScreenState>("verifying");
 
@@ -55,9 +84,19 @@ const PaidTier297 = () => {
     setResuming(false);
     if (r.verified && r.contact) {
       setContact({ name: r.contact.name || "", email: r.contact.email || em, contactId: r.contact.contactId });
+      // Only trust the stash when its owner matches the just-verified
+      // contact — Codex P2 on #130. A browser can accumulate a stash
+      // from a previous session's paid_47 run (different buyer); without
+      // this gate, the stale revenue would silently seed B's required
+      // answer and ship to B's report.
       try {
         const raw = localStorage.getItem("swot_business_info");
-        if (raw) setBusinessProfile(JSON.parse(raw));
+        if (raw) {
+          const stored = JSON.parse(raw);
+          if (ownerMatches(stored, r.contact.contactId, em)) {
+            setBusinessProfile(stored);
+          }
+        }
       } catch { /* ignore — survey still works without it */ }
       setScreen("survey");
     } else {
@@ -79,11 +118,21 @@ const PaidTier297 = () => {
           contactId,
         });
 
-        // Build businessProfile — URL params win if present, else localStorage.
+        // Build businessProfile — URL params always win (support deeplink
+        // handoffs), and the localStorage stash is only consulted when
+        // the stash was written by the same contact we just verified.
+        // Codex P2 on #130: without this scoping, a browser that
+        // retained a stash from contact A would silently prefill B's
+        // required revenue answer and ship A's number in B's report.
         let stored: any = {};
         try {
           const raw = localStorage.getItem("swot_business_info");
-          if (raw) stored = JSON.parse(raw);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (ownerMatches(parsed, contactId, r.contact.email || params.get("email") || "")) {
+              stored = parsed;
+            }
+          }
         } catch {}
 
         setBusinessProfile({
@@ -95,8 +144,8 @@ const PaidTier297 = () => {
           country:       params.get("country")       || stored.country       || "",
           // Prefills the BGA survey's annual_revenue answer so the
           // buyer isn't asked for the same number twice. URL param
-          // wins (support deeplink); fallback is the stash from
-          // the paid_47 run.
+          // wins (support deeplink); fallback is the owner-matched
+          // stash from the paid_47 run.
           annualRevenue: params.get("annualRevenue") || stored.annualRevenue || "",
         });
 
