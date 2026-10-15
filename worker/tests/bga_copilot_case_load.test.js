@@ -647,5 +647,19 @@ describe("GET /asksolomon/case — route reachability (Codex P1 on #94)", () => 
     assert.match(body, /Active BGA cases/);
     assert.match(body, /Advanced — load by contact ID/);
     assert.match(body, /id="contact-id"/);
+
+    // Open-button click handling — Codex P1 on #125. Must use data-*
+    // attributes + a delegated listener, NEVER an inline onclick
+    // whose argument is JSON.stringify()-interpolated into the
+    // attribute (JSON embeds literal double-quotes, which the HTML
+    // parser truncates the attribute at — breaking every button).
+    assert.match(body, /function wireCardOpenDelegation\(/);
+    // The delegated listener is wired up at script bottom.
+    assert.match(body, /wireCardOpenDelegation\(\);/);
+    // Open buttons MUST carry data-contact-id. If this starts failing,
+    // somebody re-introduced the inline-onclick pattern.
+    assert.match(body, /data-contact-id="/);
+    // And MUST NOT embed a JSON.stringify'd contactId inside an onclick.
+    assert.doesNotMatch(body, /onclick="openCase\(/);
   });
 });

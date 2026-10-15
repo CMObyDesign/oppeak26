@@ -594,6 +594,13 @@ function renderRecentCases() {
     return;
   }
   section.classList.remove("hidden");
+  // Open buttons carry data-* attributes read by a delegated click
+  // handler (wireCardOpenDelegation below). We MUST NOT embed
+  // JSON-stringified values directly into an onclick="…" attribute
+  // the way an earlier revision did — JSON.stringify("abc") emits
+  // "abc" (with the quotes), which the HTML parser treats as the
+  // attribute's closing quote and truncates everything after it,
+  // breaking every Open button. See Codex P1 on #125.
   list.innerHTML = recents.map(function (r) {
     var company = esc(r.company || "(no company)");
     var person = esc(r.name || "(no name)") + (r.email ? " · " + esc(r.email) : "");
@@ -603,7 +610,12 @@ function renderRecentCases() {
           '<div class="case-card-company">' + company + '</div>' +
           '<div class="case-card-person">' + person + '</div>' +
         '</div>' +
-        '<button class="case-card-open" onclick="openCase(' + JSON.stringify(r.contactId) + ', ' + JSON.stringify({ name: r.name, company: r.company, email: r.email }) + ')">Open →</button>' +
+        '<button class="case-card-open" type="button"' +
+          ' data-contact-id="' + esc(r.contactId) + '"' +
+          ' data-name="' + esc(r.name || "") + '"' +
+          ' data-company="' + esc(r.company || "") + '"' +
+          ' data-email="' + esc(r.email || "") + '"' +
+        '>Open →</button>' +
       '</div>'
     );
   }).join("");
@@ -670,7 +682,8 @@ function renderCaseCard(c) {
   var badgeHtml = (c.badges || []).map(function (b) {
     return '<span class="status-badge ' + esc(b) + '">' + esc(badgeLabel(b)) + '</span>';
   }).join("");
-  var payload = JSON.stringify({ name: c.name, company: c.company, email: c.email });
+  // See the note on wireCardOpenDelegation / Codex P1 on #125 — Open
+  // buttons carry data-* attributes, never an inline JSON onclick.
   return (
     '<div class="case-card" data-status="' + esc(c.status || "") + '">' +
       '<div class="case-card-main">' +
@@ -678,9 +691,48 @@ function renderCaseCard(c) {
         '<div class="case-card-person">' + person + '</div>' +
         (badgeHtml ? '<div class="case-card-badges">' + badgeHtml + '</div>' : '') +
       '</div>' +
-      '<button class="case-card-open" onclick="openCase(' + JSON.stringify(c.contactId) + ', ' + payload + ')">Open →</button>' +
+      '<button class="case-card-open" type="button"' +
+        ' data-contact-id="' + esc(c.contactId) + '"' +
+        ' data-name="' + esc(c.name || "") + '"' +
+        ' data-company="' + esc(c.company || "") + '"' +
+        ' data-email="' + esc(c.email || "") + '"' +
+      '>Open →</button>' +
     '</div>'
   );
+}
+
+// Delegated click handler for every Open button rendered inside the
+// search-results and recent-cases-list containers. One listener per
+// container, wired once; subsequent innerHTML updates don't need
+// re-wiring because the listener lives on the container element,
+// not on the buttons.
+//
+// Why delegation and not inline onclick: inline onclick attributes
+// require the HTML attribute to carry a JS literal that is also safe
+// inside its own double-quoted enclosure. JSON.stringify() emits
+// "..." (with the quotes), which the HTML parser treats as the
+// attribute's closing quote and truncates everything after it. See
+// Codex P1 on #125 — every Open button was unclickable in prod
+// until this landed.
+function wireCardOpenDelegation() {
+  ["search-results", "recent-cases-list"].forEach(function (id) {
+    var container = document.getElementById(id);
+    if (!container || container.__wiredOpenDelegate) return;
+    container.__wiredOpenDelegate = true;
+    container.addEventListener("click", function (e) {
+      var tgt = e.target;
+      if (!tgt || !tgt.closest) return;
+      var btn = tgt.closest(".case-card-open[data-contact-id]");
+      if (!btn || !container.contains(btn)) return;
+      var contactId = btn.getAttribute("data-contact-id") || "";
+      if (!contactId) return;
+      openCase(contactId, {
+        name:    btn.getAttribute("data-name")    || "",
+        company: btn.getAttribute("data-company") || "",
+        email:   btn.getAttribute("data-email")   || "",
+      });
+    });
+  });
 }
 function badgeLabel(status) {
   switch (status) {
@@ -2200,6 +2252,13 @@ document.getElementById("contact-id")?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") loadCase();
 });
 document.getElementById("case-search")?.addEventListener("input", onSearchInput);
+
+// Wire the delegated "Open →" click handlers once. The two card
+// containers exist in the static HTML from first paint; the delegated
+// listener survives every innerHTML replacement runSearch /
+// renderRecentCases does afterward. See Codex P1 on #125 for why
+// click handling is done this way and not via inline onclick.
+wireCardOpenDelegation();
 
 // Sticky embed-mode flag — mirrors console_page.js. When ?token= is
 // present on the URL on first load, stash the embed-mode flag in
