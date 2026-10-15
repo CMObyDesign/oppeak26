@@ -56,14 +56,15 @@ export const CASE_VIEW_PAGE = `<!DOCTYPE html>
      CONSOLE_EMBED_TOKEN in sessionStorage carries across same-origin
      navigation (both routes read asksolomon_password). */
   .app-nav { display: flex; gap: 4px; margin-left: 24px; margin-right: auto; }
-  .app-nav a {
+  .app-nav a, .app-nav span.active {
+    display: inline-block;
     padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 500;
     color: #6b7280; text-decoration: none; border: 1px solid transparent;
   }
   .app-nav a:hover { background: #f3f4f6; color: #1a1a1a; }
-  .app-nav a.active {
+  .app-nav span.active {
     background: #fef3c7; color: #92400e; border-color: #fde68a;
-    cursor: default; pointer-events: none;
+    cursor: default;
   }
   button, .btn {
     padding: 8px 14px; border-radius: 6px; border: 1px solid #d1d5db;
@@ -194,6 +195,92 @@ export const CASE_VIEW_PAGE = `<!DOCTYPE html>
     display: flex; justify-content: space-between; align-items: center;
     gap: 12px; font-size: 12px; color: #6b7280;
   }
+
+  /* Search landing — PR 125. Replaces the raw "paste a GHL Contact ID"
+     loader with a case picker. Keeps the raw-ID loader behind an
+     Advanced disclosure for support/debug. */
+  .section-subhead {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
+    color: #6b7280; margin: 16px 0 8px; font-weight: 600;
+  }
+  .section-subhead:first-child { margin-top: 0; }
+  .case-card {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 14px; background: #ffffff; border: 1px solid #e5e7eb;
+    border-radius: 6px; margin-bottom: 6px; gap: 12px;
+  }
+  .case-card:hover { background: #fafafa; border-color: #d1d5db; }
+  .case-card-main { flex: 1; min-width: 0; }
+  .case-card-company {
+    font-size: 13px; font-weight: 600; color: #1a1a1a;
+    text-overflow: ellipsis; overflow: hidden; white-space: nowrap;
+  }
+  .case-card-person {
+    font-size: 12px; color: #6b7280; margin-top: 2px;
+    text-overflow: ellipsis; overflow: hidden; white-space: nowrap;
+  }
+  .case-card-badges { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+  .case-card-open {
+    font-size: 12px; padding: 6px 12px; white-space: nowrap;
+  }
+  .case-card-open.primary { background: #1a1a1a; color: #ffffff; border-color: #1a1a1a; }
+  .case-card-open.primary:hover { background: #374151; }
+
+  .status-badge {
+    display: inline-block; padding: 3px 8px; border-radius: 10px;
+    font-size: 10px; font-weight: 600; letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .status-badge.needs-financials { background: #fee2e2; color: #991b1b; }
+  .status-badge.needs-roadmap    { background: #fef3c7; color: #92400e; }
+  .status-badge.ready-for-call   { background: #dbeafe; color: #1e40af; }
+  .status-badge.ready-to-finalize{ background: #e9d5ff; color: #6b21a8; }
+  .status-badge.sent             { background: #d1fae5; color: #065f46; }
+
+  .advanced-disclosure {
+    margin-top: 16px; border-top: 1px solid #f3f4f6; padding-top: 12px;
+  }
+  .advanced-disclosure > summary {
+    cursor: pointer; font-size: 12px; color: #6b7280;
+    user-select: none;
+  }
+  .advanced-disclosure > summary:hover { color: #1a1a1a; }
+  .advanced-disclosure[open] > summary { margin-bottom: 10px; }
+
+  /* Clean client header on the opened case — replaces the "contactId:
+     <code>...</code>" line Miguel doesn't need to see in his workflow. */
+  .client-header-eyebrow {
+    font-size: 10px; letter-spacing: 2px; text-transform: uppercase;
+    color: #92400e; font-weight: 700;
+  }
+  .client-header-name {
+    font-size: 20px; font-weight: 700; color: #1a1a1a;
+    margin: 4px 0 2px;
+  }
+  .client-header-contact {
+    font-size: 13px; color: #374151;
+  }
+  .client-header-contact a { color: inherit; text-decoration: none; border-bottom: 1px dotted #9ca3af; }
+  .client-header-contact a:hover { color: #1a1a1a; border-bottom-color: #1a1a1a; }
+  .client-header-badges { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+  .client-header-meta {
+    font-size: 11px; color: #9ca3af; margin-top: 10px;
+    display: flex; gap: 16px; align-items: center;
+  }
+  .client-header-meta details { margin: 0; }
+  .client-header-meta details summary {
+    cursor: pointer; font-size: 11px; color: #9ca3af; user-select: none;
+  }
+  .client-header-meta details[open] summary { margin-bottom: 6px; }
+  .client-header-id-box {
+    display: inline-flex; gap: 6px; align-items: center;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px; color: #374151;
+  }
+  .client-header-id-box code {
+    background: #f3f4f6; padding: 2px 6px; border-radius: 4px;
+  }
+  .client-header-id-box button { font-size: 10px; padding: 2px 8px; }
 </style>
 </head>
 <body>
@@ -203,7 +290,11 @@ export const CASE_VIEW_PAGE = `<!DOCTYPE html>
     <span class="brand">Ask <span>Solomon</span></span>
   </div>
   <nav class="app-nav">
-    <a href="/asksolomon/case" class="active" aria-current="page">BGA Copilot</a>
+    <!-- Active tab is a <span>, not an <a> — Codex P2 on #124: an <a href>
+         with pointer-events:none is still keyboard-focusable and Enter
+         follows the href, which reloads the current route and loses the
+         loaded case state. A <span> has no href to activate. -->
+    <span class="active" aria-current="page">BGA Copilot</span>
     <a href="/asksolomon">Solomon Lab</a>
   </nav>
   <div class="topbar-right">
@@ -226,18 +317,45 @@ export const CASE_VIEW_PAGE = `<!DOCTYPE html>
     <div id="gate-error" class="hint"></div>
   </div>
 
-  <!-- Load panel -->
+  <!-- Load panel (search landing — PR 125). Replaces the old
+       paste-a-contactId loader with a strategist-friendly BGA case
+       picker. The raw-ID loader is preserved behind an Advanced
+       disclosure for support and debug. -->
   <div id="load-panel" class="panel hidden">
-    <h2>Load a case</h2>
+    <h2>Find a client</h2>
     <div class="form-row">
       <div>
-        <label for="contact-id">GHL contact ID</label>
-        <input id="contact-id" type="text" placeholder="e.g. a1B2c3D4e5F6g7H8i9J0" autocomplete="off">
+        <input id="case-search" type="text"
+               placeholder="Search name, company, or email…"
+               autocomplete="off" autofocus>
       </div>
-      <button id="load-button" class="primary" onclick="loadCase()">Load case</button>
     </div>
-    <div class="hint">The contact must carry the <code>swot_paid_297</code> tag. The bundle and gap audit load in parallel. The full toolkit (verified-financial writes, roadmap draft, service match, prep brief, challenge, call-decisions, pre-send QA, approve &amp; send, document extraction) is live from this view.</div>
-    <div id="load-error" class="error-banner hidden"></div>
+
+    <!-- Recent cases — populated client-side from localStorage. Hidden
+         when there are no recents yet. -->
+    <div id="recent-cases-section" class="hidden">
+      <h3 class="section-subhead">Recently opened</h3>
+      <div id="recent-cases-list"></div>
+    </div>
+
+    <h3 class="section-subhead">Active BGA cases</h3>
+    <div id="search-status" class="hint">Loading cases…</div>
+    <div id="search-results"></div>
+    <div id="search-empty" class="hint hidden"></div>
+    <div id="search-error" class="error-banner hidden"></div>
+
+    <details class="advanced-disclosure">
+      <summary>Advanced — load by contact ID</summary>
+      <div class="form-row">
+        <div>
+          <label for="contact-id">GHL contact ID</label>
+          <input id="contact-id" type="text" placeholder="e.g. a1B2c3D4e5F6g7H8i9J0" autocomplete="off">
+        </div>
+        <button id="load-button" class="primary" onclick="loadCase()">Load case</button>
+      </div>
+      <div class="hint">The contact must carry the <code>swot_paid_297</code> tag. Use the search above for day-to-day work; this input is for support and debug.</div>
+      <div id="load-error" class="error-banner hidden"></div>
+    </details>
   </div>
 
   <!-- Case content -->
@@ -404,7 +522,196 @@ function showGateOrLoad() {
     document.getElementById("case-content").classList.add("hidden");
     const pwInput = document.getElementById("password-input");
     if (pwInput) pwInput.focus();
+    return;
   }
+
+  // Only initialise the search landing when we're on it; if a case
+  // is already loaded (?contactId= short-circuit, or opened via the
+  // picker earlier) leave it alone.
+  if (!document.getElementById("case-content").classList.contains("hidden")) return;
+
+  // ?contactId= in the URL → load that case directly, skipping search.
+  // Used by support links and by the strategist pasting an ID into the
+  // URL bar. Only trips once per page load.
+  if (!window.__caseShortCircuitChecked) {
+    window.__caseShortCircuitChecked = true;
+    try {
+      var urlParams = new URLSearchParams(window.location.search);
+      var qsContactId = urlParams.get("contactId");
+      if (qsContactId) {
+        document.getElementById("contact-id").value = qsContactId;
+        loadCase();
+        return;
+      }
+    } catch { /* URLSearchParams not supported — fall through to search */ }
+  }
+
+  renderRecentCases();
+  runSearch("");
+}
+
+// --- Recent-cases management (localStorage) ---------------------------
+// Keyed by origin + password-key so a strategist using multiple HL
+// locations in the same browser (unlikely but possible) sees separate
+// recents. localStorage can throw in private mode or when the storage
+// quota is exhausted; every read and write is try/catch'd so the main
+// UI never breaks because of it.
+var RECENT_KEY = "asksolomon_recent_bga_cases";
+var RECENT_MAX = 5;
+
+function readRecentCases() {
+  try {
+    var raw = localStorage.getItem(RECENT_KEY);
+    if (!raw) return [];
+    var parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
+}
+function writeRecentCases(arr) {
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify(arr.slice(0, RECENT_MAX))); }
+  catch { /* ignore */ }
+}
+function pushRecentCase(entry) {
+  if (!entry || !entry.contactId) return;
+  var list = readRecentCases().filter(function (r) { return r && r.contactId !== entry.contactId; });
+  list.unshift({
+    contactId: entry.contactId,
+    name: entry.name || "",
+    company: entry.company || "",
+    email: entry.email || "",
+    openedAt: new Date().toISOString(),
+  });
+  writeRecentCases(list);
+}
+function renderRecentCases() {
+  var section = document.getElementById("recent-cases-section");
+  var list = document.getElementById("recent-cases-list");
+  if (!section || !list) return;
+  var recents = readRecentCases();
+  if (!recents.length) {
+    section.classList.add("hidden");
+    list.innerHTML = "";
+    return;
+  }
+  section.classList.remove("hidden");
+  list.innerHTML = recents.map(function (r) {
+    var company = esc(r.company || "(no company)");
+    var person = esc(r.name || "(no name)") + (r.email ? " · " + esc(r.email) : "");
+    return (
+      '<div class="case-card">' +
+        '<div class="case-card-main">' +
+          '<div class="case-card-company">' + company + '</div>' +
+          '<div class="case-card-person">' + person + '</div>' +
+        '</div>' +
+        '<button class="case-card-open" onclick="openCase(' + JSON.stringify(r.contactId) + ', ' + JSON.stringify({ name: r.name, company: r.company, email: r.email }) + ')">Open →</button>' +
+      '</div>'
+    );
+  }).join("");
+}
+
+// --- Search ----------------------------------------------------------
+// Debounced free-text search over swot_paid_297 contacts. The server
+// does the GHL fetch + tag filter + badge computation; this file is
+// just the renderer.
+var __searchDebounceTimer = null;
+var __searchSeq = 0;
+function onSearchInput() {
+  var q = document.getElementById("case-search").value;
+  clearTimeout(__searchDebounceTimer);
+  __searchDebounceTimer = setTimeout(function () { runSearch(q); }, 250);
+}
+async function runSearch(q) {
+  var mySeq = ++__searchSeq;
+  var statusEl = document.getElementById("search-status");
+  var resultsEl = document.getElementById("search-results");
+  var emptyEl = document.getElementById("search-empty");
+  var errEl = document.getElementById("search-error");
+  if (!statusEl || !resultsEl) return;
+  errEl.classList.add("hidden");
+  emptyEl.classList.add("hidden");
+  statusEl.classList.remove("hidden");
+  statusEl.textContent = "Loading cases…";
+
+  var r;
+  try {
+    r = await callApi("/asksolomon/case/search", { q: q || "", limit: 25 });
+  } catch (err) {
+    if (mySeq !== __searchSeq) return;
+    statusEl.classList.add("hidden");
+    errEl.textContent = "Search failed: " + (err && err.message ? err.message : String(err));
+    errEl.classList.remove("hidden");
+    return;
+  }
+  if (mySeq !== __searchSeq) return;
+  if (r.status === 401) { logout(); return; }
+  statusEl.classList.add("hidden");
+  if (!r.data.success) {
+    errEl.textContent = "Search failed: " + (r.data.error || "unknown");
+    errEl.classList.remove("hidden");
+    return;
+  }
+  var contacts = Array.isArray(r.data.contacts) ? r.data.contacts : [];
+  if (!contacts.length) {
+    resultsEl.innerHTML = "";
+    emptyEl.classList.remove("hidden");
+    emptyEl.textContent = q
+      ? ("No BGA cases match “" + q + "”.")
+      : "No active BGA cases yet. Buy signals apply the swot_paid_297 tag; cases appear once that fires.";
+    return;
+  }
+  resultsEl.innerHTML = contacts.map(renderCaseCard).join("");
+}
+function renderCaseCard(c) {
+  var company = esc(c.company || "(no company)");
+  var personBits = [];
+  if (c.name) personBits.push(esc(c.name));
+  if (c.email) personBits.push(esc(c.email));
+  var person = personBits.length ? personBits.join(" · ") : "(no contact details)";
+  var badgeHtml = (c.badges || []).map(function (b) {
+    return '<span class="status-badge ' + esc(b) + '">' + esc(badgeLabel(b)) + '</span>';
+  }).join("");
+  var payload = JSON.stringify({ name: c.name, company: c.company, email: c.email });
+  return (
+    '<div class="case-card" data-status="' + esc(c.status || "") + '">' +
+      '<div class="case-card-main">' +
+        '<div class="case-card-company">' + company + '</div>' +
+        '<div class="case-card-person">' + person + '</div>' +
+        (badgeHtml ? '<div class="case-card-badges">' + badgeHtml + '</div>' : '') +
+      '</div>' +
+      '<button class="case-card-open" onclick="openCase(' + JSON.stringify(c.contactId) + ', ' + payload + ')">Open →</button>' +
+    '</div>'
+  );
+}
+function badgeLabel(status) {
+  switch (status) {
+    case "needs-financials": return "Needs financials";
+    case "needs-roadmap":    return "Needs roadmap";
+    case "ready-for-call":   return "Ready for call";
+    case "ready-to-finalize":return "Ready to finalize";
+    case "sent":             return "Sent";
+    default: return status || "";
+  }
+}
+
+// --- openCase: open a case from the picker --------------------------
+// Wraps the existing loadCase() flow: writes the chosen contactId into
+// the (hidden) raw-id input, records the open in the Recent cases
+// list, then delegates to loadCase() for the actual bundle fetch. The
+// display info (name/company/email) is handed to renderClientHeader
+// via a module-scoped stash so the clean header can read it even if
+// the bundle doesn't carry it.
+var __pendingDisplayInfo = null;
+function openCase(contactId, displayInfo) {
+  if (!contactId) return;
+  __pendingDisplayInfo = displayInfo || null;
+  pushRecentCase({
+    contactId: contactId,
+    name: displayInfo && displayInfo.name,
+    company: displayInfo && displayInfo.company,
+    email: displayInfo && displayInfo.email,
+  });
+  document.getElementById("contact-id").value = contactId;
+  loadCase();
 }
 
 async function callApi(path, body) {
@@ -486,21 +793,48 @@ function renderHeader(bundle) {
   const oppFlags = Array.isArray(bundle.opportunity_flags) && bundle.opportunity_flags.length
     ? bundle.opportunity_flags.map(t => '<span class="tag opp">' + esc(t) + '</span>').join(" ")
     : '<span class="tag">none</span>';
-  const name = bundle.business_name || "(no business name set)";
+
+  // Clean client header — PR 125. Reads from the bundle's new
+  // contact_name / contact_email fields, falling back to the stashed
+  // display info from the picker if the bundle didn't carry them
+  // (older bundles, URL short-circuit before case_load caught up).
+  const businessName = bundle.business_name || (__pendingDisplayInfo && __pendingDisplayInfo.company) || "(no business name set)";
+  const personName = bundle.contact_name || (__pendingDisplayInfo && __pendingDisplayInfo.name) || "";
+  const personEmail = bundle.contact_email || (__pendingDisplayInfo && __pendingDisplayInfo.email) || "";
+  __pendingDisplayInfo = null;
+
+  const contactLine = [
+    personName ? esc(personName) : "",
+    personEmail ? '<a href="mailto:' + esc(personEmail) + '">' + esc(personEmail) + '</a>' : "",
+  ].filter(Boolean).join(" · ") || '<span style="color:#9ca3af;">(no contact details on file)</span>';
+
+  const idJson = JSON.stringify(bundle.contactId || "");
   const html = \`
-    <div style="font-size:18px;font-weight:700;margin-bottom:6px;">\${esc(name)}</div>
-    <div style="font-size:12px;color:#6b7280;margin-bottom:12px;">contactId: <code>\${esc(bundle.contactId)}</code></div>
-    <div class="status-row">
+    <div class="client-header-eyebrow">\${esc(businessName)}</div>
+    <div class="client-header-name">\${classificationPill(bundle.classification)}</div>
+    <div class="client-header-contact">\${contactLine}</div>
+    <div class="status-row" style="margin-top:12px;">
       <div class="status-item"><span class="k">Day since paid_297</span><span class="v">\${d}</span></div>
-      <div class="status-item"><span class="k">Classification</span><span class="v">\${classificationPill(bundle.classification)}</span></div>
       <div class="status-item"><span class="k">Rehab flag</span><span class="v">\${bundle.rehab_flag ? "true" : "false"}</span></div>
     </div>
     <div style="margin-top:12px;">
       <div class="status-item" style="margin-bottom:4px;"><span class="k">Opportunity flags</span></div>
       <div class="tag-row">\${oppFlags}</div>
     </div>
+    <div class="client-header-meta">
+      <details>
+        <summary>Advanced · contact ID</summary>
+        <div class="client-header-id-box">
+          <code>\${esc(bundle.contactId)}</code>
+          <button onclick="copyText(\${idJson})">Copy</button>
+        </div>
+      </details>
+    </div>
   \`;
   document.getElementById("case-header").innerHTML = html;
+}
+function copyText(s) {
+  try { navigator.clipboard.writeText(String(s)); } catch { /* ignore */ }
 }
 
 function renderAudit(bundle, auditData) {
@@ -1865,6 +2199,23 @@ document.getElementById("password-input")?.addEventListener("keydown", (e) => {
 document.getElementById("contact-id")?.addEventListener("keydown", (e) => {
   if (e.key === "Enter") loadCase();
 });
+document.getElementById("case-search")?.addEventListener("input", onSearchInput);
+
+// Sticky embed-mode flag — mirrors console_page.js. When ?token= is
+// present on the URL on first load, stash the embed-mode flag in
+// sessionStorage so same-origin navigation to the Solomon Lab tab
+// and back preserves the embedded context even though the query
+// string is dropped. See Codex P2 on #124.
+(function stickyEmbedFlag() {
+  try {
+    var urlParams = new URLSearchParams(window.location.search);
+    var embedToken = urlParams.get("token");
+    if (embedToken) {
+      sessionStorage.setItem("asksolomon_password", embedToken);
+      sessionStorage.setItem("asksolomon_embed_mode", "1");
+    }
+  } catch { /* URLSearchParams or sessionStorage unavailable */ }
+})();
 
 showGateOrLoad();
 </script>
