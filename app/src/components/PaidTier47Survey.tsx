@@ -193,7 +193,7 @@ export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props
                 <h3 className="font-display text-lg font-bold">Business</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {PAID_TIER_47_BUSINESS_INFO.map((f) => {
-                    const wide = f.id === "organization" || f.id === "website" || f.id === "industry";
+                    const wide = f.id === "organization" || f.id === "website" || f.id === "industry" || f.id === "annual_revenue";
                     return (
                       <div key={f.id} className={wide ? "md:col-span-2" : ""}>
                         <Label htmlFor={f.id}>{f.label}{f.required && " *"}</Label>
@@ -202,8 +202,10 @@ export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props
                           value={answers[f.id] || ""}
                           onChange={(e) => setAnswer(f.id, e.target.value)}
                           placeholder={f.placeholder}
+                          inputMode={f.inputMode}
                           className="h-12 bg-secondary/40 mt-1"
                         />
+                        {f.helper && <p className="text-xs text-muted-foreground mt-1">{f.helper}</p>}
                       </div>
                     );
                   })}

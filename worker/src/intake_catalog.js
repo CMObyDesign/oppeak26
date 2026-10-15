@@ -25,10 +25,10 @@ export const INTAKE_CATALOG = Object.freeze({
       hint: "Local presence / Statewide / Regional / National / E-commerce" },
     { key: "Q3",  text: "What industry or vertical best describes your business?",
       hint: "HVAC/Trades / Construction / Professional services / E-commerce / Other" },
-    // Q4 just moved to the six-state option set — see
-    // ASSESSMENT_RUBRIC Q4 discipline in index.js.
-    { key: "Q4",  text: "Which best describes your business's current debt, tax, and legal standing?",
-      hint: "No debt or issues / Managed debt / Tax balance / Unfiled taxes / Lien or judgment / Not sure" },
+    // Q4 six-state option set — see ASSESSMENT_RUBRIC Q4 discipline
+    // in index.js.
+    { key: "Q4",  text: "Which best describes your current situation with business debt, tax liens, or judgments?",
+      hint: "None / Debt — current and manageable / Debt — stretched or being reworked / Active tax lien or judgment / Debt + tax lien or judgment / Not sure" },
     { key: "Q5",  text: "When you make business decisions, are you basing them on your actual numbers or on what is in your bank account?",
       hint: "Clean numbers / Bank balance / In between / Not sure" },
     { key: "Q6",  text: "What does your business consistently deliver that your clients say they cannot get anywhere else?" },
@@ -64,16 +64,16 @@ export const INTAKE_CATALOG = Object.freeze({
     // ASSESSMENT_RUBRIC Q19/Q23 discipline block that explains why
     // legacy historical values must never be reinterpreted as the
     // new concepts.
-    { key: "Q19", text: "How consistently do you close your books every month — meaning your P&L, balance sheet, and cash figures are reconciled and finalized?",
-      hint: "Monthly timely / Monthly slow / Quarterly or tax / No close" },
+    { key: "Q19", text: "How current and reconciled are your books today?",
+      hint: "Current + reconciled monthly / Current, reconciliation unclear / ~1 month behind / 2–3 months behind / 3+ months behind / Not sure" },
     { key: "Q20", text: "Can you state your monthly break-even number right now?",
       hint: "Yes monitored / Yes rough / No / Confused" },
     { key: "Q21", text: "Do you know your profit margins by product, service, or client segment?",
       hint: "By segment / Overall / Rough / No" },
     { key: "Q22", text: "Do you have the capital you'd need to fund the next 12 months of growth as you'd plan it?",
       hint: "Fully / Partially / Need funding / No plan" },
-    { key: "Q23", text: "If revenue stopped tomorrow, how many months of operating expenses could you cover from cash on hand (not including a line of credit)?",
-      hint: "6+ / 3-6 / 1-3 / <1 / Not sure" },
+    { key: "Q23", text: "Based on the cash currently available to the business, how long could you cover payroll and fixed operating obligations if revenue or collections slowed materially — without taking on new debt?",
+      hint: "<30 days / 1–2 months / 3–6 months / 6+ months / Not sure" },
     { key: "Q24", text: "When did you last review your major vendor and supplier costs for value and competitiveness?",
       hint: "6 months / 12 months / 1-3 years / Never" },
     { key: "Q25", text: "What is the status of your business tax returns for the last two years — are they filed and current?",
@@ -89,28 +89,28 @@ export const INTAKE_CATALOG = Object.freeze({
   // Mirrors app/src/data/paidTier297Questions.ts. Order follows the
   // production survey (Q_A..Q_L, Q_N, Q_M, Q_O) — Q_M and Q_O are
   // "The Bridge Question" section in the real UI, which runs AFTER
-  // Growth & Threats (Q_N comes before Q_M in file order). Guided
+  // Growth & Risk (Q_N comes before Q_M in file order). Guided
   // mode preserves that ordering so the strategist's test runs match
   // what the customer actually filled.
   paid_297: Object.freeze([
     { key: "Q_A", text: "Walk through your top 3 client engagements or revenue wins in the last 12 months — what was the revenue, the margin, and what made each one work?" },
     { key: "Q_B", text: "What are your gross and net margins by product, service line, or client segment? Which is your most profitable, and which is costing you the most to deliver?" },
-    { key: "Q_C", text: "Which unit economics do you actually track for your business today — e.g. CAC, LTV, payback period, gross margin per client — and what are the numbers?",
+    { key: "Q_C", text: "Which unit-economics metrics do you currently track — such as customer acquisition cost (CAC), lifetime value (LTV), payback period, gross margin, contribution margin, or others — and what are the current numbers?",
       hint: "Or answer 'Not tracked' — treated as a visibility gap, not a weakness." },
     { key: "Q_D", text: "What is your current cash position and runway — and how would three consecutive months of below-average revenue impact the business?" },
     { key: "Q_E", text: "Walk us through your current debt stack: total corporate debt, monthly debt service, and how comfortable you are with that level of leverage right now." },
     { key: "Q_F", text: "What does your accounts receivable aging look like in detail — total AR, amount 30+ days overdue, and amount 60+ days overdue?" },
-    { key: "Q_G", text: "If you run a staged sales process, roughly what share of leads turn into qualified prospects, proposals, and closed clients — and where do you lose the most?",
+    { key: "Q_G", text: "If you use a defined sales process, what are your current close rates by stage — for example, lead → qualified → proposal → closed — and where does the process leak the most?",
       hint: "Optional. Or answer 'Not applicable' — not a weakness, just a different acquisition model." },
     { key: "Q_H", text: "What is the single biggest \"we should have fixed this years ago\" problem still on your list — and what has kept it there?" },
     { key: "Q_I", text: "If you had to cut 20% of your services, clients, or overhead tomorrow, what would go first — and why hasn't it gone already?" },
-    { key: "Q_J", text: "If you track revenue by client, what share of total revenue comes from your top handful — and what would your business look like if the single largest left in the next 6 months?",
-      hint: "Optional. Or answer 'Not applicable' if client-level revenue isn't meaningful." },
+    { key: "Q_J", text: "If customer concentration is meaningful in your business, approximately what percentage of revenue comes from your largest client and from your top three clients combined?",
+      hint: "Optional. Or answer 'Not applicable' if you serve a broad consumer base." },
     { key: "Q_K", text: "What regulatory, tax, compliance, or technology changes on the horizon could materially impact how your business operates or gets paid?" },
     { key: "Q_L", text: "What geographic or vertical expansion has the lowest barrier to entry based on what you already do today — and what would it take to move on it?" },
     { key: "Q_N", text: "Who are your top 2–3 competitors right now, and what are they doing that you'd rather they weren't?" },
     { key: "Q_M", text: "What does success look like for your business three years from now — and what is the single biggest financial or operational obstacle standing between you and that picture today?" },
-    { key: "Q_O", text: "What are the specific decisions you need to be able to make better after our BGA session? (Pricing, hiring, debt, growth bet, exit timing — anything you need the numbers to help you decide.)",
+    { key: "Q_O", text: "What are the 2–3 financial or growth decisions you most want clarity on during your 50-minute Business Growth Analysis session?",
       hint: "Required in production — the single most important input for Miguel's call." },
   ]),
 });

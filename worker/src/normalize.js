@@ -194,8 +194,22 @@ function normFinancialDecisionBasis(raw) {
 // judgments_or_liens where it is unambiguous) and let the paid-tier
 // debt detail disambiguate the specific category.
 const Q4_SLUG_CLASSIFICATION = Object.freeze({
-  // New six-state slugs.
-  none:             { subtypes: [],                              judgments_or_liens: false     },
+  // Approved six-state slugs (current production option set).
+  none:                           { subtypes: [],                 judgments_or_liens: false     },
+  debt_current_manageable:        { subtypes: ["managed_debt"],   judgments_or_liens: false     },
+  // "Stretched or being reworked" is the owner's own words about
+  // their debt — it's the one Q4 state that may support a
+  // debt-pressure reading, but it says nothing about tax or legal
+  // distress.
+  debt_stretched_or_reworking:    { subtypes: ["stretched_debt"], judgments_or_liens: false     },
+  // Tax lien OR judgment — the option does not say which, so no
+  // specific subtype is claimed (same discipline as the interim
+  // lien_or_judgment slug below).
+  active_tax_lien_or_judgment:    { subtypes: [],                 judgments_or_liens: true      },
+  debt_plus_tax_lien_or_judgment: { subtypes: ["business_debt"],  judgments_or_liens: true      },
+  // `none` and `not_sure` are shared with the interim set.
+  // Interim six-state slugs shipped briefly in #128 — contacts
+  // captured in that window may still carry them.
   managed_debt:     { subtypes: ["managed_debt"],                judgments_or_liens: false     },
   tax_balance:      { subtypes: ["tax_debt"],                    judgments_or_liens: false     },
   unfiled_taxes:    { subtypes: ["unfiled_taxes"],               judgments_or_liens: false     },
@@ -220,6 +234,20 @@ const Q4_SLUG_CLASSIFICATION = Object.freeze({
 // matcher below (which would, for example, see "legal actions" in the
 // "none" label and wrongly add a "judgment" subtype).
 const Q4_LABEL_CLASSIFICATION = Object.freeze({
+  // Current production labels. The "none" label mentions "tax liens"
+  // and "judgments", so without this short-circuit the keyword
+  // matcher below would flag it as a lien/judgment.
+  "no active business debt, tax liens, or judgments":
+    Q4_SLUG_CLASSIFICATION.none,
+  "business debt only — current and manageable":
+    Q4_SLUG_CLASSIFICATION.debt_current_manageable,
+  "business debt only — stretched or actively being reworked":
+    Q4_SLUG_CLASSIFICATION.debt_stretched_or_reworking,
+  "active tax lien or judgment":
+    Q4_SLUG_CLASSIFICATION.active_tax_lien_or_judgment,
+  "both business debt and an active tax lien or judgment":
+    Q4_SLUG_CLASSIFICATION.debt_plus_tax_lien_or_judgment,
+  // Interim #128 labels.
   "no business debt, taxes current, no legal actions against the business":
     Q4_SLUG_CLASSIFICATION.none,
   "business loans or credit i'm actively managing in good standing (current, not stretched)":

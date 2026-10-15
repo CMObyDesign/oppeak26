@@ -104,6 +104,8 @@ ${PREP_BRIEF_SECTIONS.map((s) => `## Section ${s.n} — ${s.title}`).join("\n")}
 7. Do NOT use first-person claims like "I will…" or "my team will…" — the firm name is "CFO By Design", not a person. Second-person "you/your" is for prep notes about the client; keep it concise.
 
 8. Output ONLY the brief starting with the banner. No preamble, no explanation, no post-script.
+
+9. The user prompt may include a "CLIENT'S DECLARED CALL AGENDA (Q_O)" block — the decisions the client said they most want clarity on. That is the client's own agenda for the call. Section 9 ("Decisions the call needs to produce") MUST address each declared decision by name (with a CS tag), and Section 4 should include at least one question that moves each one forward. If the block says no agenda was provided, say so in Section 9.
 `;
 }
 
@@ -126,6 +128,15 @@ export function buildPrepBriefUserPrompt(bundle, { draft, matches, catalogVersio
   if (Array.isArray(bundle?.opportunity_flags) && bundle.opportunity_flags.length) {
     parts.push(`Opportunity flags: ${bundle.opportunity_flags.join(", ")}`);
   }
+  parts.push("");
+
+  // Q_O is the client's declared agenda for the call — surface it
+  // first so it can't get lost in the full intake dump below.
+  const agenda = findCallAgendaAnswer(answers);
+  parts.push("── CLIENT'S DECLARED CALL AGENDA (Q_O — decisions they want clarity on) ──");
+  parts.push(agenda
+    ? `[field_key=${agenda.fieldKey}] ${agenda.value}`
+    : "(no call agenda provided — Section 9 says so plainly)");
   parts.push("");
 
   parts.push("── Current Draft Roadmap (source of truth for priorities + 90-day) ──");
@@ -169,6 +180,24 @@ export function buildPrepBriefUserPrompt(bundle, { draft, matches, catalogVersio
   if (catalogVersion) parts.push(`catalog_version=${catalogVersion}`);
 
   return parts.join("\n");
+}
+
+// Q_O ("Decisions to Work Through on Your BGA Call"). The HL field's
+// fieldKey predates the rename, so match the stable id-derived key, the
+// semantic key, and either label.
+const Q_O_FIELD_KEYS = new Set([
+  "qo_focus_areas",
+  "anything_youd_like_to_focus_on_on_our_call_or_our_research",
+]);
+export function findCallAgendaAnswer(answers) {
+  if (!Array.isArray(answers)) return null;
+  return answers.find((a) => {
+    if (!a || !String(a.value || "").trim()) return false;
+    if (Q_O_FIELD_KEYS.has(a.fieldKey)) return true;
+    const label = String(a.label || "").toLowerCase();
+    return label.startsWith("decisions to work through") ||
+      label.startsWith("anything you'd like to focus on");
+  }) || null;
 }
 
 function formatVfForPrompt(entry) {

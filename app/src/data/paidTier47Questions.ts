@@ -13,6 +13,10 @@ export interface BusinessInfoField {
   label: string;
   placeholder?: string;
   required?: boolean;
+  /** Optional helper text rendered under the field. */
+  helper?: string;
+  /** Renders a numeric keypad on mobile (dollar-style input). */
+  inputMode?: "numeric" | "decimal" | "text";
 }
 
 export interface PaidTier47Question {
@@ -41,7 +45,11 @@ export const PAID_TIER_47_BUSINESS_INFO: BusinessInfoField[] = [
   // guess at scale from narrative. Backfilled on existing
   // contacts by the BGA intake; new paid_47 buyers populate it
   // here on first run.
-  { id: "annual_revenue",  label: "Trailing 12-Month Revenue",    placeholder: "$2,400,000 (or your best estimate)" },
+  // Optional: a missing value is "unknown" — the report still
+  // generates and Solomon must not invent revenue-based ratios.
+  { id: "annual_revenue",  label: "Trailing 12-Month Revenue",    placeholder: "$2,400,000",
+    helper: "Approximately how much revenue did your business generate over the last 12 months? Use your best current number. If the business is newer than 12 months, enter revenue to date.",
+    inputMode: "decimal" },
 ];
 
 export const PAID_TIER_47_QUESTIONS: PaidTier47Question[] = [
@@ -152,17 +160,23 @@ export const PAID_TIER_47_QUESTIONS: PaidTier47Question[] = [
     // explicit guard in buildPrompt() around q19_* keys so an old
     // "within-2" value is never silently reinterpreted as the new
     // monthly-close vocabulary.
+    // Option set revised to the approved six-state reconciliation
+    // ladder (values current_reconciled_monthly … not_sure). Interim
+    // values from #128 (monthly-timely / monthly-slow /
+    // quarterly-or-tax / no-close) are still read by the rubric.
     id: "q19_monthly_close_status",
     qNumber: "Q19",
     section: "Reporting & Audit",
-    title: "Monthly Close Status",
-    text: "How consistently do you close your books every month — meaning your P&L, balance sheet, and cash figures are reconciled and finalized?",
+    title: "Monthly Close / Book Reconciliation Status",
+    text: "How current and reconciled are your books today?",
     type: "select",
     options: [
-      { value: "monthly-timely",    label: "Yes — closed every month, finalized within ~15 days of month-end" },
-      { value: "monthly-slow",      label: "Yes — closed monthly but typically 30+ days behind" },
-      { value: "quarterly-or-tax",  label: "No — books get closed quarterly, or only at tax time" },
-      { value: "no-close",          label: "No — there's no formal month-end close process" },
+      { value: "current_reconciled_monthly",     label: "Current, reconciled, and closed monthly" },
+      { value: "current_reconciliation_unclear", label: "Current, but I am not sure they are consistently reconciled" },
+      { value: "one_month_behind",               label: "About 1 month behind" },
+      { value: "two_three_months_behind",        label: "2–3 months behind" },
+      { value: "more_than_three_months_behind",  label: "More than 3 months behind" },
+      { value: "not_sure",                       label: "Not sure" },
     ],
   },
   {
@@ -222,18 +236,21 @@ export const PAID_TIER_47_QUESTIONS: PaidTier47Question[] = [
     // explicitly guards against mapping any old "comprehensive" /
     // "insurance-only" / "informal" / "none" value onto the new
     // runway vocabulary. See buildPrompt() in worker/src/index.js.
+    // Option set revised to the approved five buckets (under_30_days
+    // … not_sure). Interim #128 values (six-plus-months … unknown)
+    // are still read by the rubric.
     id: "q23_operating_runway",
     qNumber: "Q23",
     section: "Growth & Risk",
-    title: "Operating Runway",
-    text: "If revenue stopped tomorrow, how many months of operating expenses could you cover from cash on hand (not including a line of credit)?",
+    title: "Operating Cash Runway",
+    text: "Based on the cash currently available to the business, how long could you cover payroll and fixed operating obligations if revenue or collections slowed materially — without taking on new debt?",
     type: "select",
     options: [
-      { value: "six-plus-months",   label: "6+ months of operating expenses covered" },
-      { value: "three-to-six",      label: "3–6 months" },
-      { value: "one-to-three",      label: "1–3 months" },
-      { value: "less-than-one",     label: "Less than one month" },
-      { value: "unknown",           label: "Not sure" },
+      { value: "under_30_days",    label: "Less than 30 days" },
+      { value: "one_two_months",   label: "1–2 months" },
+      { value: "three_six_months", label: "3–6 months" },
+      { value: "over_six_months",  label: "More than 6 months" },
+      { value: "not_sure",         label: "Not sure" },
     ],
   },
 

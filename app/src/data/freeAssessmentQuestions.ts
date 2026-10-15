@@ -80,14 +80,14 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         // DEBT SUBTYPE DISCIPLINE block in worker/src/index.js and
         // normDebtSummary() in normalize.js.
         title: "Debt / Tax Lien / Judgment Status",
-        text: "Which best describes your business's current debt, tax, and legal standing?",
+        text: "Which best describes your current situation with business debt, tax liens, or judgments?",
         options: [
-          { value: "none",             label: "No business debt, taxes current, no legal actions against the business" },
-          { value: "managed_debt",     label: "Business loans or credit I'm actively managing in good standing (current, not stretched)" },
-          { value: "tax_balance",      label: "Outstanding tax balance or payment plan with the IRS or state" },
-          { value: "unfiled_taxes",    label: "One or more years of business tax returns unfiled" },
-          { value: "lien_or_judgment", label: "Active tax lien, judgment, or legal action against the business" },
-          { value: "not_sure",         label: "Not sure" },
+          { value: "none",                           label: "No active business debt, tax liens, or judgments" },
+          { value: "debt_current_manageable",        label: "Business debt only — current and manageable" },
+          { value: "debt_stretched_or_reworking",    label: "Business debt only — stretched or actively being reworked" },
+          { value: "active_tax_lien_or_judgment",    label: "Active tax lien or judgment" },
+          { value: "debt_plus_tax_lien_or_judgment", label: "Both business debt and an active tax lien or judgment" },
+          { value: "not_sure",                       label: "Not sure" },
         ],
         required: true,
       },

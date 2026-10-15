@@ -240,6 +240,7 @@ export const PaidTier297Survey = ({ contact, onComplete }: Props) => {
                   <p className="text-xs text-accent font-mono uppercase tracking-widest">{q.qNumber}</p>
                 )}
                 <p className="text-base text-foreground font-medium">{q.text}</p>
+                {q.helper && <p className="text-sm text-muted-foreground">{q.helper}</p>}
               </div>
               {renderQuestion(q)}
             </div>

@@ -8,6 +8,8 @@ export interface PaidTier297Question {
   text: string;
   type: "text" | "textarea" | "file";
   placeholder?: string;
+  /** Optional helper text rendered under the question. */
+  helper?: string;
   options?: QuestionOption[];
   required?: boolean;
   acceptFileTypes?: string;
@@ -23,7 +25,7 @@ export const PAID_TIER_297_QUESTIONS: PaidTier297Question[] = [
     type: "text", placeholder: "e.g. $1.8M, or your exact figure", required: true,
   },
 
-  // ─── FINANCIAL PERFORMANCE — DEEP DIVE ────────────────────
+  // ─── FINANCIAL PERFORMANCE ────────────────────────────────
   {
     id: "qa_top_engagements", qNumber: "Q_A",
     section: "Financial Performance",
@@ -41,7 +43,7 @@ export const PAID_TIER_297_QUESTIONS: PaidTier297Question[] = [
   {
     id: "qc_unit_economics", qNumber: "Q_C",
     section: "Financial Performance",
-    title: "Unit Economics You Actually Track",
+    title: "Unit Economics You Track",
     // Revised: previously asked how numbers compared to industry
     // benchmarks, which encouraged customers to invent plausible-
     // sounding figures. The new ask is strictly about what the
@@ -50,12 +52,13 @@ export const PAID_TIER_297_QUESTIONS: PaidTier297Question[] = [
     // tracked" as a visibility gap worth addressing, NOT as proof of
     // financial weakness. See the UNIT ECONOMICS DISCIPLINE rule in
     // worker/src/index.js ASSESSMENT_RUBRIC.
-    text: "Which unit economics do you actually track for your business today — e.g. CAC, LTV, payback period, gross margin per client — and what are the numbers?",
-    placeholder: "e.g. CAC ~ $800, LTV ~ $18,000 on a 24-month retention; gross margin per client 42%.\n\nIf you don't measure these yet, answer: Not tracked.",
+    text: "Which unit-economics metrics do you currently track — such as customer acquisition cost (CAC), lifetime value (LTV), payback period, gross margin, contribution margin, or others — and what are the current numbers?",
+    helper: "If you do not track these today, say \"Not tracked.\" Do not guess.",
+    placeholder: "e.g. CAC ~ $800, LTV ~ $18,000 on a 24-month retention; gross margin 42%.",
     type: "textarea",
   },
 
-  // ─── CASH & DEBT — DEEP DIVE ──────────────────────────────
+  // ─── CASH & DEBT ──────────────────────────────────────────
   {
     id: "qd_cash_position", qNumber: "Q_D",
     section: "Cash & Debt",
@@ -78,68 +81,70 @@ export const PAID_TIER_297_QUESTIONS: PaidTier297Question[] = [
     type: "textarea",
   },
 
-  // ─── OPERATIONS & WEAKNESSES — DEEP DIVE ──────────────────
+  // ─── OPERATIONS & CONSTRAINTS ─────────────────────────────
   {
     id: "qg_close_rate_by_stage", qNumber: "Q_G",
-    section: "Operations & Weaknesses",
-    title: "Sales Pipeline Conversion",
+    section: "Operations & Constraints",
+    title: "Close Rate by Sales Stage",
     // Reworded + optional. Many BGA buyers (e-commerce, trades,
     // referral-only shops) don't have a staged sales process. "Not
     // applicable" is explicitly allowed; the Worker rubric must NOT
     // treat it as a negative finding — see SALES-PIPELINE DISCIPLINE
     // in ASSESSMENT_RUBRIC.
-    text: "If you run a staged sales process, roughly what share of leads turn into qualified prospects, proposals, and closed clients — and where do you lose the most?",
-    placeholder: "e.g. 100 leads → 40 qualified (40%) → 15 proposals → 6 closes (6% overall). Biggest leak is at proposal-to-close.\n\nIf your business doesn't run through a staged sales process (e-commerce, trades on referral, etc.), answer: Not applicable.",
+    text: "If you use a defined sales process, what are your current close rates by stage — for example, lead → qualified → proposal → closed — and where does the process leak the most?",
+    helper: "If you do not track this or it does not apply to your business, enter \"Not applicable.\"",
+    placeholder: "e.g. 100 leads → 40 qualified (40%) → 15 proposals → 6 closes (6% overall). Biggest leak is at proposal-to-close.",
     required: false,
     type: "textarea",
   },
   {
     id: "qh_biggest_unfixed_problem", qNumber: "Q_H",
-    section: "Operations & Weaknesses",
+    section: "Operations & Constraints",
     title: "Biggest 'Should-Have-Fixed-Years-Ago' Problem",
     text: "What is the single biggest \"we should have fixed this years ago\" problem still on your list — and what has kept it there?",
     type: "textarea",
   },
   {
     id: "qi_cut_20_percent", qNumber: "Q_I",
-    section: "Operations & Weaknesses",
+    section: "Operations & Constraints",
     title: "If You Cut 20% Tomorrow",
     text: "If you had to cut 20% of your services, clients, or overhead tomorrow, what would go first — and why hasn't it gone already?",
     type: "textarea",
   },
 
-  // ─── GROWTH & THREATS — DEEP DIVE ─────────────────────────
+  // ─── GROWTH & RISK ────────────────────────────────────────
   {
     id: "qj_top_10_concentration", qNumber: "Q_J",
-    section: "Growth & Threats",
+    section: "Growth & Risk",
     title: "Customer Concentration",
     // Reworded + optional. Not every BGA buyer has client-level
     // revenue tracking (product businesses, subscription SaaS with
     // many small accounts). "Not applicable" is explicitly allowed;
     // the Worker rubric must NOT treat it as a negative finding —
     // see CUSTOMER-CONCENTRATION DISCIPLINE in ASSESSMENT_RUBRIC.
-    text: "If you track revenue by client, what share of total revenue comes from your top handful — and what would your business look like if the single largest left in the next 6 months?",
-    placeholder: "e.g. Top 3 clients = 48% of revenue. Losing #1 (28%) would force layoffs within 60 days.\n\nIf you don't have client-level revenue tracking (e-commerce, retail, high-volume subscription), answer: Not applicable.",
+    text: "If customer concentration is meaningful in your business, approximately what percentage of revenue comes from your largest client and from your top three clients combined?",
+    helper: "If you serve a broad consumer base and this does not apply, enter \"Not applicable.\"",
+    placeholder: "e.g. Largest client = 28% of revenue; top three combined = 48%.",
     required: false,
     type: "textarea",
   },
   {
     id: "qk_regulatory_changes", qNumber: "Q_K",
-    section: "Growth & Threats",
+    section: "Growth & Risk",
     title: "Regulatory / Tax / Compliance / Tech Changes",
     text: "What regulatory, tax, compliance, or technology changes on the horizon could materially impact how your business operates or gets paid?",
     type: "textarea",
   },
   {
     id: "ql_expansion_opportunities", qNumber: "Q_L",
-    section: "Growth & Threats",
+    section: "Growth & Risk",
     title: "Lowest-Barrier Expansion Opportunity",
     text: "What geographic or vertical expansion has the lowest barrier to entry based on what you already do today — and what would it take to move on it?",
     type: "textarea",
   },
   {
     id: "qn_top_competitors", qNumber: "Q_N",
-    section: "Growth & Threats",
+    section: "Growth & Risk",
     title: "Top 2–3 Competitors",
     text: "Who are your top 2–3 competitors right now, and what are they doing that you'd rather they weren't?",
     type: "textarea",
@@ -162,7 +167,8 @@ export const PAID_TIER_297_QUESTIONS: PaidTier297Question[] = [
     // skipped, which left Miguel reverse-engineering the call agenda
     // from the rest of the intake. The PaidTier297Survey component
     // blocks submission when this field is blank.
-    text: "What are the specific decisions you need to be able to make better after our BGA session? (Pricing, hiring, debt, growth bet, exit timing — anything you need the numbers to help you decide.)",
+    text: "What are the 2–3 financial or growth decisions you most want clarity on during your 50-minute Business Growth Analysis session?",
+    helper: "Be specific. These can include cash flow, debt, hiring, funding, margins, pricing, taxes, growth, or another decision you need to make.",
     required: true,
     type: "textarea",
   },

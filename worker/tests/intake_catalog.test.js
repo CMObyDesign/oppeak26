@@ -194,14 +194,14 @@ describe("$47 — Q19 and Q23 are replaced, legacy keys are gone from the produc
 
   it("q19_monthly_close_status is the new Q19", () => {
     assert.match(paid47Src, /id:\s*"q19_monthly_close_status"/);
-    assert.match(paid47Src, /Monthly Close Status/);
+    assert.match(paid47Src, /Monthly Close \/ Book Reconciliation Status/);
   });
   it("q19_audit_history is NOT in the active production survey (but kept conceptually elsewhere)", () => {
     assert.doesNotMatch(paid47Src, /id:\s*"q19_audit_history"/);
   });
   it("q23_operating_runway is the new Q23", () => {
     assert.match(paid47Src, /id:\s*"q23_operating_runway"/);
-    assert.match(paid47Src, /Operating Runway/);
+    assert.match(paid47Src, /Operating Cash Runway/);
   });
   it("q23_risk_management is NOT in the active production survey", () => {
     assert.doesNotMatch(paid47Src, /id:\s*"q23_risk_management"/);
@@ -233,7 +233,7 @@ describe("Rubric — new Q19/Q23 appear + legacy keys explicitly isolated", () =
     assert.match(indexSrc, /q23_risk_management/);
     assert.match(
       indexSrc,
-      /NEVER re-interpret these values as\s+operating runway/i,
+      /NEVER re-interpret these values as\s+operating\s+(cash\s+)?runway/i,
       "the rubric must warn Solomon not to confuse the two Q23s",
     );
   });
@@ -254,7 +254,7 @@ describe("BGA — Q_C 'Not tracked' and Q_G/Q_J 'Not applicable' discipline", ()
   });
   it("Q_J 'Not applicable' must NOT fire a concentration-risk finding", () => {
     assert.match(indexSrc, /qj_top_10_concentration/);
-    assert.match(indexSrc, /Do NOT fire a concentration-risk finding/);
+    assert.match(indexSrc, /Do NOT fire a\s+concentration-risk finding/);
     assert.match(indexSrc, /qj_top_10_concentration[\s\S]{0,2000}Not applicable/);
   });
 });
@@ -375,6 +375,6 @@ describe("Served console page actually loads", () => {
     assert.equal(res.status, 200);
     const body = await res.text();
     assert.match(body, /const INTAKE_CATALOG = \{/);
-    assert.match(body, /Which best describes your business's current debt/);
+    assert.match(body, /Which best describes your current situation with business debt, tax liens, or judgments/);
   });
 });

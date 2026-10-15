@@ -341,66 +341,94 @@ similar businesses. If an answer doesn't explicitly establish the trigger, leave
   growth model is referral-only and explicitly so. NEVER fire on the FREE tier — digital
   presence findings are a paid-tier reveal and must be held back from the free report.
 
-Q4 (ACTIVE DEBT / TAX LIEN / JUDGMENT STATUS) DISCIPLINE — this field flipped from a
-3-option yes/no/not-sure to a 6-state slug set. Interpret BOTH shapes without
+Q4 (DEBT / TAX LIEN / JUDGMENT STATUS) DISCIPLINE — this field flipped from a
+3-option yes/no/not-sure to a 6-state slug set. Interpret every shape without
 ever conflating them:
 
-- New six-state slugs — authoritative, trust the slug:
-    * \`none\`             → no business debt, taxes current, no legal actions. NOT a trigger.
-    * \`managed_debt\`     → business debt actively managed and in good standing. NOT a
-                           rehab trigger. May be a DEBT_RESTRUCTURE_OPP ONLY if other
-                           answers establish the debt is heavy, stretched, or carrying
-                           high monthly debt service relative to revenue.
-    * \`tax_balance\`      → outstanding tax balance or payment plan. REHAB trigger +
-                           TAX_RESOLUTION_OPP.
-    * \`unfiled_taxes\`    → one or more unfiled business tax returns. REHAB trigger +
-                           TAX_RESOLUTION_OPP.
-    * \`lien_or_judgment\` → active tax lien, judgment, or legal action. REHAB trigger +
-                           TAX_RESOLUTION_OPP (or debt restructure if the context fits).
-    * \`not_sure\`         → unknown subtype. Treat as a visibility gap, NOT as evidence
-                           of distress. Never fires a rehab trigger on its own.
+- Current six-state slugs — authoritative, trust the slug:
+    * \`none\`                           → no active business debt, tax liens, or
+                                         judgments. NOT a trigger.
+    * \`debt_current_manageable\`        → business debt only, current and manageable.
+                                         NOT a rehab trigger. Never a debt-pressure
+                                         finding on its own.
+    * \`debt_stretched_or_reworking\`    → business debt only, owner says it is
+                                         stretched or being reworked. Supports a
+                                         DEBT_RESTRUCTURE_OPP. It says NOTHING about
+                                         tax or legal distress — do NOT infer a lien,
+                                         judgment, or tax problem from it.
+    * \`active_tax_lien_or_judgment\`    → active tax lien or judgment (the option does
+                                         not say which). REHAB trigger. Do not claim a
+                                         specific one unless other answers say which.
+    * \`debt_plus_tax_lien_or_judgment\` → business debt AND an active tax lien or
+                                         judgment. REHAB trigger; debt-restructure
+                                         context may also apply.
+    * \`not_sure\`                       → unknown subtype. Treat as a visibility gap,
+                                         NOT as evidence of distress. Never fires a
+                                         rehab trigger on its own.
+- Interim slugs (briefly live before the current set — read literally):
+    * \`managed_debt\` → debt managed in good standing, NOT a trigger.
+    * \`tax_balance\` → outstanding tax balance / payment plan. REHAB + TAX_RESOLUTION_OPP.
+    * \`unfiled_taxes\` → unfiled business returns. REHAB + TAX_RESOLUTION_OPP.
+    * \`lien_or_judgment\` → active tax lien, judgment, or legal action. REHAB trigger.
 - Legacy three values — historical submissions, read conservatively:
-    * \`no\`               → no judgments / liens / corporate debt. NOT a trigger.
-    * \`yes\`              → the owner affirmed SOMETHING in the compound set but gave
-                           no detail. Treat as "unknown subtype" — do NOT infer tax
-                           distress, judgments, or debt-service pressure from a bare
-                           legacy "yes." Pair it with an "Incomplete intake —" gap
-                           noting the subtype wasn't captured. If the paid-tier debt
-                           answers later provide subtype detail, use that; a bare
-                           legacy "yes" is NEVER a rehab trigger on its own.
-    * \`not-sure\`         → unknown subtype, same handling as legacy \`yes\`.
+    * \`no\`               → equivalent to \`none\`. NOT a trigger.
+    * \`yes\`              → legacy broad signal only: the owner affirmed SOMETHING in
+                           the compound set but gave no detail. Treat as "unknown
+                           subtype" — do NOT infer tax distress, judgments, or
+                           debt-service pressure from a bare legacy "yes." Pair it
+                           with an "Incomplete intake —" gap noting the subtype
+                           wasn't captured. If the paid-tier debt answers later
+                           provide subtype detail, use that; a bare legacy "yes" is
+                           NEVER a rehab trigger on its own.
+    * \`not-sure\`         → equivalent to \`not_sure\`.
 Never map a legacy value onto a new slug or vice versa in your reasoning — the
 intake prompt will show you the raw stored answer; cite it verbatim.
 
-Q19 (MONTHLY CLOSE STATUS, PAID TIER) and Q23 (OPERATING RUNWAY, PAID TIER) —
-new field keys in the paid_47 intake. Interpret them as follows:
+Q19 (MONTHLY CLOSE / BOOK RECONCILIATION STATUS, PAID TIER) and Q23 (OPERATING
+CASH RUNWAY, PAID TIER) — new field keys in the paid_47 intake. Interpret them
+as follows:
 
 - Q19 (key q19_monthly_close_status):
-    * \`monthly-timely\`   → books closed every month inside ~15 days. Strong signal
-                           of financial discipline — call this out as a strength.
-    * \`monthly-slow\`     → closed monthly but 30+ days behind. Workable but a
-                           visibility lag worth naming.
-    * \`quarterly-or-tax\` → not closed monthly. Financial-visibility gap; names a
-                           concrete fix for the paid report.
-    * \`no-close\`         → no formal close. Primary driver of a decisions-on-bank-
-                           balance operating pattern; name it directly.
-- Q23 (key q23_operating_runway):
-    * \`six-plus-months\`  → strong cushion. Not a trigger.
-    * \`three-to-six\`     → healthy. Not a trigger.
-    * \`one-to-three\`     → thin. CASH-FLOW stress signal (not legally distressed).
-    * \`less-than-one\`    → distressed cash position. CASH-FLOW stress signal, pair
-                           with any debt subtype that compounds it.
-    * \`unknown\`          → visibility gap, not evidence of distress.
+    * \`current_reconciled_monthly\`     → current, reconciled, closed monthly. Strong
+                                         financial-discipline signal — a strength.
+    * \`current_reconciliation_unclear\` → current but reconciliation is not
+                                         consistent. Visibility gap worth naming.
+    * \`one_month_behind\`               → modest lag. Visibility gap.
+    * \`two_three_months_behind\`        → material lag. Decisions are running on
+                                         stale numbers — name it directly.
+    * \`more_than_three_months_behind\`  → books are not usable for decisions today.
+                                         Primary driver of a decisions-on-bank-
+                                         balance pattern; name it directly.
+    * \`not_sure\`                       → visibility gap, not evidence of distress.
+- Q23 (key q23_operating_runway) — cash covering payroll + fixed obligations
+  without new debt if revenue/collections slowed materially:
+    * \`over_six_months\`   → strong cushion. Not a trigger.
+    * \`three_six_months\`  → healthy. Not a trigger.
+    * \`one_two_months\`    → thin. CASH-FLOW stress signal (not legally distressed).
+    * \`under_30_days\`     → very thin. CASH-FLOW stress signal; pair with any debt
+                            subtype that compounds it. Still NOT proof of legal or
+                            tax distress.
+    * \`not_sure\`          → visibility gap, not evidence of distress.
+  This is the owner's self-reported estimate, not a verified cash statement —
+  say so when you rely on it.
+- Interim values (briefly live before the current set — read literally):
+  Q19 monthly-timely / monthly-slow / quarterly-or-tax / no-close; Q23
+  six-plus-months / three-to-six / one-to-three / less-than-one / unknown.
+
+ANNUAL REVENUE (paid_47 business info, "Trailing 12-month revenue") — when
+present, use it as the scale anchor for debt and debt-service ratios. When it is
+missing, revenue is UNKNOWN: do NOT invent a revenue figure, do NOT compute
+revenue-based ratios, and do NOT block or degrade the report for it.
 
 HISTORICAL q19_audit_history AND q23_risk_management — these old keys may still appear
 on historical paid_47 submissions. They are DIFFERENT CONCEPTS from the new fields:
 
 - q19_audit_history (values: within-2, more-than-2, never, in-progress) is about whether
   a formal AUDIT has ever happened. NEVER re-interpret these values as monthly-close
-  status.
+  or reconciliation status.
 - q23_risk_management (values: comprehensive, insurance-only, informal, none) is about
   a RISK FRAMEWORK (insurance, contingency plans). NEVER re-interpret these values as
-  operating runway.
+  operating cash runway.
 Both legacy answers remain valid narrative input — treat them as historical context
 only, not as sources of truth for the new concepts.
 
@@ -418,12 +446,14 @@ negative finding:
 - Q_G (qg_close_rate_by_stage): "Not applicable" means the business does not run a
   staged sales process (e-commerce, trades on referral, high-volume subscription).
   This is NOT a weakness — it is a legitimate description of a different acquisition
-  model. Do NOT fire a sales-pipeline finding when this answer is "Not applicable."
-- Q_J (qj_top_10_concentration): "Not applicable" means client-level revenue
-  tracking is not meaningful for this business (e-commerce, retail, broad
-  subscription). Do NOT fire a concentration-risk finding when this answer is
-  "Not applicable." If the owner reports a concentration number, use it; if not,
-  it is simply not a concentration-risk business.
+  model. Do NOT fire a sales-pipeline finding and do NOT flag it as an incomplete
+  intake when this answer is "Not applicable."
+- Q_J (qj_top_10_concentration, "Customer Concentration" — largest client and top
+  three combined): "Not applicable" is an EXPLICIT answer meaning concentration is
+  not meaningful for this business (broad consumer base, e-commerce, retail). It is
+  NOT the same as 0% concentration and NOT missing data. Do NOT fire a
+  concentration-risk finding and do NOT flag it as an incomplete intake. If the
+  owner reports concentration numbers, use them.
 
 HANDLING INCOMPLETE OR NON-RESPONSIVE ANSWERS — call this out honestly, don't fabricate around it:
 
@@ -434,7 +464,9 @@ HANDLING INCOMPLETE OR NON-RESPONSIVE ANSWERS — call this out honestly, don't 
   don't treat it as incomplete just because it is one word.
 - Consider an answer INCOMPLETE only when it is:
     * \`[not provided]\` (skipped),
-    * filler ("idk", "n/a", "-", "?", blank),
+    * filler ("idk", "n/a", "-", "?", blank) — EXCEPT the explicitly allowed
+      "Not applicable" (Q_G, Q_J) and "Not tracked" (Q_C) answers, which are
+      complete answers, never incomplete intake,
     * obvious placeholder ("test", "asdf", "xxxx"), or
     * clearly non-responsive (copy-pasted marketing text unrelated to the question, a URL
       where a number was asked, a number where a narrative was asked).
@@ -4310,7 +4342,7 @@ const SURVEY_FIELD_MAP = {
   "5VWVNRrQYcLqXhckh4f4": "What best describes your business type?",
   "nCRqWH0x1sdJIgUPDr2E": "How do you primarily reach your customers?",
   "nbPL6APmjrjr43J6urVb": "What industry or vertical best describes your business?",
-  "OyQjw4nGNHJYADsq5ggg": "Do you currently have any active judgments, tax liens, or corporate debt you're actively managing?",
+  "OyQjw4nGNHJYADsq5ggg": "Which best describes your current situation with business debt, tax liens, or judgments?",
   "8sSKohKtQZZzJEtM2ju0": "When you make business decisions, are you basing them on your actual numbers or on what's in your bank account?",
   "deItnw0p1H7sO1okRjGS": "What does your business consistently deliver that your clients say they can't get anywhere else?",
   "hV9yij5uFitztZzanSaa": "When a client refers you, what specific words or outcome do they use to describe what you did for them?",
