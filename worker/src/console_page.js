@@ -488,7 +488,21 @@ const SAVED_RUBRICS_KEY = "asksolomon_saved_rubrics";
 const BOOKMARKS_KEY = "asksolomon_bookmarks";
 const HISTORY_LIMIT = 20;
 const INPUT_DRAFT_KEY = "asksolomon_input_draft";
-const GUIDED_ANSWERS_KEY = "asksolomon_guided_answers"; // per-question values keyed by q.key, persist across tier switches
+// Versioned Guided-mode answer storage — Codex P1 on #128. The
+// shared catalog that landed with the Question Contract PR renumbered
+// the Guided-mode question keys (old Q1 was the debt question, new
+// Q1 is business type; old Q12 was overdue A/R, new Q12 is total
+// debt; etc.). Reusing the old storage key would silently restore an
+// answer against a completely different prompt and submit it. The
+// v2 key gives us a clean slate; the one-time migration below also
+// deletes the legacy key so stale drafts don't accumulate in the
+// browser.
+const GUIDED_ANSWERS_KEY = "asksolomon_guided_answers_v2";
+try {
+  if (typeof localStorage !== "undefined" && localStorage.getItem("asksolomon_guided_answers")) {
+    localStorage.removeItem("asksolomon_guided_answers");
+  }
+} catch { /* private mode / disabled storage — nothing to clean up */ }
 const LIBRARY_SELECTED_KEY = "asksolomon_library_selected"; // array of library item ids currently checked-in for the next run
 
 // Display labels for tiers — server + GHL tags still use the raw values
