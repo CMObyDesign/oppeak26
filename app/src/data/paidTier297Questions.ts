@@ -26,44 +26,53 @@ export const PAID_TIER_297_QUESTIONS: PaidTier297Question[] = [
   // ─── FINANCIAL PERFORMANCE — DEEP DIVE ────────────────────
   {
     id: "qa_top_engagements", qNumber: "Q_A",
-    section: "Financial Performance — Deep Dive",
+    section: "Financial Performance",
     title: "Top 3 Client Engagements (Last 12 Months)",
     text: "Walk through your top 3 client engagements or revenue wins in the last 12 months — what was the revenue, the margin, and what made each one work?",
     type: "textarea",
   },
   {
     id: "qb_margins_by_segment", qNumber: "Q_B",
-    section: "Financial Performance — Deep Dive",
+    section: "Financial Performance",
     title: "Margins by Product / Service Line / Segment",
     text: "What are your gross and net margins by product, service line, or client segment? Which is your most profitable, and which is costing you the most to deliver?",
     type: "textarea",
   },
   {
     id: "qc_unit_economics", qNumber: "Q_C",
-    section: "Financial Performance — Deep Dive",
-    title: "Unit Economics vs. Industry Benchmark",
-    text: "How do your unit economics compare to what you believe is the benchmark for your industry — CAC, LTV, payback period, gross margin?",
+    section: "Financial Performance",
+    title: "Unit Economics You Actually Track",
+    // Revised: previously asked how numbers compared to industry
+    // benchmarks, which encouraged customers to invent plausible-
+    // sounding figures. The new ask is strictly about what the
+    // business actually measures today — and "Not tracked" is an
+    // explicitly allowed answer. The Worker rubric treats "Not
+    // tracked" as a visibility gap worth addressing, NOT as proof of
+    // financial weakness. See the UNIT ECONOMICS DISCIPLINE rule in
+    // worker/src/index.js ASSESSMENT_RUBRIC.
+    text: "Which unit economics do you actually track for your business today — e.g. CAC, LTV, payback period, gross margin per client — and what are the numbers?",
+    placeholder: "e.g. CAC ~ $800, LTV ~ $18,000 on a 24-month retention; gross margin per client 42%.\n\nIf you don't measure these yet, answer: Not tracked.",
     type: "textarea",
   },
 
   // ─── CASH & DEBT — DEEP DIVE ──────────────────────────────
   {
     id: "qd_cash_position", qNumber: "Q_D",
-    section: "Cash & Debt — Deep Dive",
+    section: "Cash & Debt",
     title: "Cash Position & Runway",
     text: "What is your current cash position and runway — and how would three consecutive months of below-average revenue impact the business?",
     type: "textarea",
   },
   {
     id: "qe_debt_stack", qNumber: "Q_E",
-    section: "Cash & Debt — Deep Dive",
+    section: "Cash & Debt",
     title: "Current Debt Stack",
     text: "Walk us through your current debt stack: total corporate debt, monthly debt service, and how comfortable you are with that level of leverage right now.",
     type: "textarea",
   },
   {
     id: "qf_ar_aging_detail", qNumber: "Q_F",
-    section: "Cash & Debt — Deep Dive",
+    section: "Cash & Debt",
     title: "AR Aging in Detail",
     text: "What does your accounts receivable aging look like in detail — total AR, amount 30+ days overdue, and amount 60+ days overdue?",
     type: "textarea",
@@ -72,21 +81,28 @@ export const PAID_TIER_297_QUESTIONS: PaidTier297Question[] = [
   // ─── OPERATIONS & WEAKNESSES — DEEP DIVE ──────────────────
   {
     id: "qg_close_rate_by_stage", qNumber: "Q_G",
-    section: "Operations & Weaknesses — Deep Dive",
-    title: "Close Rate by Funnel Stage",
-    text: "What is your close rate at each stage of your sales process — lead to qualified, qualified to proposal, proposal to closed — and where does it leak the most?",
+    section: "Operations & Weaknesses",
+    title: "Sales Pipeline Conversion",
+    // Reworded + optional. Many BGA buyers (e-commerce, trades,
+    // referral-only shops) don't have a staged sales process. "Not
+    // applicable" is explicitly allowed; the Worker rubric must NOT
+    // treat it as a negative finding — see SALES-PIPELINE DISCIPLINE
+    // in ASSESSMENT_RUBRIC.
+    text: "If you run a staged sales process, roughly what share of leads turn into qualified prospects, proposals, and closed clients — and where do you lose the most?",
+    placeholder: "e.g. 100 leads → 40 qualified (40%) → 15 proposals → 6 closes (6% overall). Biggest leak is at proposal-to-close.\n\nIf your business doesn't run through a staged sales process (e-commerce, trades on referral, etc.), answer: Not applicable.",
+    required: false,
     type: "textarea",
   },
   {
     id: "qh_biggest_unfixed_problem", qNumber: "Q_H",
-    section: "Operations & Weaknesses — Deep Dive",
+    section: "Operations & Weaknesses",
     title: "Biggest 'Should-Have-Fixed-Years-Ago' Problem",
     text: "What is the single biggest \"we should have fixed this years ago\" problem still on your list — and what has kept it there?",
     type: "textarea",
   },
   {
     id: "qi_cut_20_percent", qNumber: "Q_I",
-    section: "Operations & Weaknesses — Deep Dive",
+    section: "Operations & Weaknesses",
     title: "If You Cut 20% Tomorrow",
     text: "If you had to cut 20% of your services, clients, or overhead tomorrow, what would go first — and why hasn't it gone already?",
     type: "textarea",
@@ -95,28 +111,35 @@ export const PAID_TIER_297_QUESTIONS: PaidTier297Question[] = [
   // ─── GROWTH & THREATS — DEEP DIVE ─────────────────────────
   {
     id: "qj_top_10_concentration", qNumber: "Q_J",
-    section: "Growth & Threats — Deep Dive",
-    title: "Top 10% Client Concentration",
-    text: "What percentage of your revenue comes from your top 10% of clients — and what is your realistic exposure if any of them left in the next 6 months?",
+    section: "Growth & Threats",
+    title: "Customer Concentration",
+    // Reworded + optional. Not every BGA buyer has client-level
+    // revenue tracking (product businesses, subscription SaaS with
+    // many small accounts). "Not applicable" is explicitly allowed;
+    // the Worker rubric must NOT treat it as a negative finding —
+    // see CUSTOMER-CONCENTRATION DISCIPLINE in ASSESSMENT_RUBRIC.
+    text: "If you track revenue by client, what share of total revenue comes from your top handful — and what would your business look like if the single largest left in the next 6 months?",
+    placeholder: "e.g. Top 3 clients = 48% of revenue. Losing #1 (28%) would force layoffs within 60 days.\n\nIf you don't have client-level revenue tracking (e-commerce, retail, high-volume subscription), answer: Not applicable.",
+    required: false,
     type: "textarea",
   },
   {
     id: "qk_regulatory_changes", qNumber: "Q_K",
-    section: "Growth & Threats — Deep Dive",
+    section: "Growth & Threats",
     title: "Regulatory / Tax / Compliance / Tech Changes",
     text: "What regulatory, tax, compliance, or technology changes on the horizon could materially impact how your business operates or gets paid?",
     type: "textarea",
   },
   {
     id: "ql_expansion_opportunities", qNumber: "Q_L",
-    section: "Growth & Threats — Deep Dive",
+    section: "Growth & Threats",
     title: "Lowest-Barrier Expansion Opportunity",
     text: "What geographic or vertical expansion has the lowest barrier to entry based on what you already do today — and what would it take to move on it?",
     type: "textarea",
   },
   {
     id: "qn_top_competitors", qNumber: "Q_N",
-    section: "Growth & Threats — Deep Dive",
+    section: "Growth & Threats",
     title: "Top 2–3 Competitors",
     text: "Who are your top 2–3 competitors right now, and what are they doing that you'd rather they weren't?",
     type: "textarea",
@@ -133,8 +156,14 @@ export const PAID_TIER_297_QUESTIONS: PaidTier297Question[] = [
   {
     id: "qo_focus_areas", qNumber: "Q_O",
     section: "The Bridge Question",
-    title: "Focus Areas for the Call",
-    text: "Anything you'd like to focus on on our call or our research?",
+    title: "Decisions to Work Through on Your BGA Call",
+    // Now REQUIRED — this is the strategist's single most important
+    // input for the 50-min call. Previously optional and routinely
+    // skipped, which left Miguel reverse-engineering the call agenda
+    // from the rest of the intake. The PaidTier297Survey component
+    // blocks submission when this field is blank.
+    text: "What are the specific decisions you need to be able to make better after our BGA session? (Pricing, hiring, debt, growth bet, exit timing — anything you need the numbers to help you decide.)",
+    required: true,
     type: "textarea",
   },
 

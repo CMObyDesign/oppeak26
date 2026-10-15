@@ -29,12 +29,19 @@ export interface PaidTier47Question {
 }
 
 export const PAID_TIER_47_BUSINESS_INFO: BusinessInfoField[] = [
-  { id: "organization", label: "Business Name",      placeholder: "Acme Marketing Inc.", required: true },
-  { id: "website",      label: "Website",            placeholder: "acmemarketing.com" },
-  { id: "industry",     label: "Industry / Vertical",placeholder: "Marketing Services" },
-  { id: "city",         label: "City",               placeholder: "Austin" },
-  { id: "state",        label: "State",              placeholder: "TX" },
-  { id: "country",      label: "Country",            placeholder: "US" },
+  { id: "organization",    label: "Business Name",                placeholder: "Acme Marketing Inc.", required: true },
+  { id: "website",         label: "Website",                      placeholder: "acmemarketing.com" },
+  { id: "industry",        label: "Industry / Vertical",          placeholder: "Marketing Services" },
+  { id: "city",            label: "City",                         placeholder: "Austin" },
+  { id: "state",           label: "State",                        placeholder: "TX" },
+  { id: "country",         label: "Country",                      placeholder: "US" },
+  // Reuses the existing BGA Annual Revenue HL custom field
+  // (contact.annual_revenue). The $47 diagnostic now anchors
+  // every ratio on this number instead of leaving Solomon to
+  // guess at scale from narrative. Backfilled on existing
+  // contacts by the BGA intake; new paid_47 buyers populate it
+  // here on first run.
+  { id: "annual_revenue",  label: "Trailing 12-Month Revenue",    placeholder: "$2,400,000 (or your best estimate)" },
 ];
 
 export const PAID_TIER_47_QUESTIONS: PaidTier47Question[] = [
@@ -134,17 +141,28 @@ export const PAID_TIER_47_QUESTIONS: PaidTier47Question[] = [
 
   // ─── REPORTING + AUDIT ──────────────────────────────────
   {
-    id: "q19_audit_history",
+    // Replaces q19_audit_history with a new concept: whether the owner
+    // actually closes the books every month. This is a far better
+    // discriminator of financial-visibility maturity than "have you
+    // ever had an audit" (which almost nobody at this stage has had).
+    //
+    // The legacy q19_audit_history key is NOT deleted — historical
+    // paid_47 submissions still carry that key and will continue to
+    // render through the fallback path in the Worker prompt. See the
+    // explicit guard in buildPrompt() around q19_* keys so an old
+    // "within-2" value is never silently reinterpreted as the new
+    // monthly-close vocabulary.
+    id: "q19_monthly_close_status",
     qNumber: "Q19",
     section: "Reporting & Audit",
-    title: "Financial Audit History",
-    text: "Have you ever had a formal financial audit, review, or deep dive conducted on your business?",
+    title: "Monthly Close Status",
+    text: "How consistently do you close your books every month — meaning your P&L, balance sheet, and cash figures are reconciled and finalized?",
     type: "select",
     options: [
-      { value: "within-2",         label: "Yes — within the last 2 years" },
-      { value: "more-than-2",      label: "Yes — but it's been more than 2 years" },
-      { value: "never",            label: "No — never formally done" },
-      { value: "in-progress",      label: "In progress / planning it" },
+      { value: "monthly-timely",    label: "Yes — closed every month, finalized within ~15 days of month-end" },
+      { value: "monthly-slow",      label: "Yes — closed monthly but typically 30+ days behind" },
+      { value: "quarterly-or-tax",  label: "No — books get closed quarterly, or only at tax time" },
+      { value: "no-close",          label: "No — there's no formal month-end close process" },
     ],
   },
   {
@@ -192,17 +210,30 @@ export const PAID_TIER_47_QUESTIONS: PaidTier47Question[] = [
     ],
   },
   {
-    id: "q23_risk_management",
+    // Replaces q23_risk_management with a new concept: how many months
+    // of operating expenses the business could cover from cash on
+    // hand. Operating runway is a direct, actionable number that
+    // drives the whole rehab/needs-attention/growth classification
+    // for a diagnostic buyer; "risk-management framework" was too
+    // abstract and rarely moved the diagnosis one way or the other.
+    //
+    // The legacy q23_risk_management key is NOT deleted — historical
+    // paid_47 submissions still carry it. The Worker prompt rubric
+    // explicitly guards against mapping any old "comprehensive" /
+    // "insurance-only" / "informal" / "none" value onto the new
+    // runway vocabulary. See buildPrompt() in worker/src/index.js.
+    id: "q23_operating_runway",
     qNumber: "Q23",
     section: "Growth & Risk",
-    title: "Risk Management Framework",
-    text: "What risk-management practices does your business currently have in place?",
+    title: "Operating Runway",
+    text: "If revenue stopped tomorrow, how many months of operating expenses could you cover from cash on hand (not including a line of credit)?",
     type: "select",
     options: [
-      { value: "comprehensive", label: "Comprehensive — insurance, contingency plans, financial reserves" },
-      { value: "insurance-only",label: "Insurance coverage in place, but no documented contingency plans" },
-      { value: "informal",      label: "Informal — risks are managed as they come up" },
-      { value: "none",          label: "No formal risk management" },
+      { value: "six-plus-months",   label: "6+ months of operating expenses covered" },
+      { value: "three-to-six",      label: "3–6 months" },
+      { value: "one-to-three",      label: "1–3 months" },
+      { value: "less-than-one",     label: "Less than one month" },
+      { value: "unknown",           label: "Not sure" },
     ],
   },
 

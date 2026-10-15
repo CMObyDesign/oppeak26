@@ -69,14 +69,27 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         id: 4,
         fieldKey: "OyQjw4nGNHJYADsq5ggg",
         type: "select",
-        title: "Active Debt Management",
-        text: "Do you currently have any active judgments, tax liens, or corporate debt you are actively managing?",
+        // Approved six-state option set — replaces the earlier
+        // yes / no / not-sure trio that could not distinguish
+        // "I'm managing a healthy SBA loan" from "I have an active
+        // IRS judgment," two situations with opposite rubric
+        // implications. The worker normalizer (normalize.js) still
+        // accepts the legacy three values for historical submissions
+        // and MUST never interpret a legacy bare "yes" as proof of
+        // tax distress or debt-service pressure — see the big
+        // DEBT SUBTYPE DISCIPLINE block in worker/src/index.js and
+        // normDebtSummary() in normalize.js.
+        title: "Debt / Tax Lien / Judgment Status",
+        text: "Which best describes your business's current debt, tax, and legal standing?",
         options: [
-          { value: "yes", label: "Yes" },
-          { value: "no", label: "No" },
-          { value: "not-sure", label: "Not sure" }
+          { value: "none",             label: "No business debt, taxes current, no legal actions against the business" },
+          { value: "managed_debt",     label: "Business loans or credit I'm actively managing in good standing (current, not stretched)" },
+          { value: "tax_balance",      label: "Outstanding tax balance or payment plan with the IRS or state" },
+          { value: "unfiled_taxes",    label: "One or more years of business tax returns unfiled" },
+          { value: "lien_or_judgment", label: "Active tax lien, judgment, or legal action against the business" },
+          { value: "not_sure",         label: "Not sure" },
         ],
-        required: true
+        required: true,
       },
       {
         id: 5,

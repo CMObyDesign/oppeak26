@@ -171,19 +171,80 @@ function normFinancialDecisionBasis(raw) {
 // phrase like "active debt" (that was the invented-tax-lien bug PR #52
 // closed). If the owner reports "no debt" / "no judgments or liens",
 // subtypes is [] and judgments_or_liens is false.
+// Approved six-state Q4 slug set (freeAssessmentQuestions.ts). Classified
+// authoritatively: when the raw stored value is any of these slugs we
+// trust the slug and skip the text-matching heuristics further down.
+// This also prevents a false "judgment" subtype from being added when
+// the user picks "No business debt, taxes current, no legal actions"
+// (which contains the substring "legal action" and would otherwise be
+// matched by the keyword rule for judgments).
+//
+// Historical three-value answers (yes / no / not-sure) remain supported
+// by the bareShortAnswer block below — a bare legacy "yes" MUST stay
+// as "unknown subtype" and never be interpreted as proof of tax
+// distress or debt-service pressure (ASSESSMENT_RUBRIC Q4 discipline).
+const Q4_SLUG_CLASSIFICATION = Object.freeze({
+  // New six-state slugs.
+  none:             { subtypes: [],                              judgments_or_liens: false     },
+  managed_debt:     { subtypes: ["managed_debt"],                judgments_or_liens: false     },
+  tax_balance:      { subtypes: ["tax_debt"],                    judgments_or_liens: false     },
+  unfiled_taxes:    { subtypes: ["tax_debt", "unfiled_taxes"],   judgments_or_liens: false     },
+  lien_or_judgment: { subtypes: ["tax_debt", "judgment"],        judgments_or_liens: true      },
+  not_sure:         { subtypes: [],                              judgments_or_liens: "unknown" },
+  // Legacy three-value slugs — bare values stored on historical
+  // submissions. Classified conservatively.
+  no:               { subtypes: [],                              judgments_or_liens: false     },
+  yes:              { subtypes: [],                              judgments_or_liens: "unknown" },
+  "not-sure":       { subtypes: [],                              judgments_or_liens: "unknown" },
+});
+
+// Full option-label text for the six-state Q4 set. HL's SINGLE_OPTIONS
+// field type stores the LABEL (not the slug) when a form writes the
+// chosen option back — so if the frontend ever posts labels to the
+// contact's custom field (not the slug), the normalizer must still
+// classify them authoritatively instead of hitting the keyword
+// matcher below (which would, for example, see "legal actions" in the
+// "none" label and wrongly add a "judgment" subtype).
+const Q4_LABEL_CLASSIFICATION = Object.freeze({
+  "no business debt, taxes current, no legal actions against the business":
+    Q4_SLUG_CLASSIFICATION.none,
+  "business loans or credit i'm actively managing in good standing (current, not stretched)":
+    Q4_SLUG_CLASSIFICATION.managed_debt,
+  "outstanding tax balance or payment plan with the irs or state":
+    Q4_SLUG_CLASSIFICATION.tax_balance,
+  "one or more years of business tax returns unfiled":
+    Q4_SLUG_CLASSIFICATION.unfiled_taxes,
+  "active tax lien, judgment, or legal action against the business":
+    Q4_SLUG_CLASSIFICATION.lien_or_judgment,
+  "not sure": Q4_SLUG_CLASSIFICATION.not_sure,
+});
+
 function normDebtSummary(raw) {
   if (raw === null || raw === undefined) return null;
   const s = String(raw).trim();
   if (!s) return null;
   const lower = s.toLowerCase();
 
-  // The free assessment ships this field as a 3-option select:
-  // "Yes" / "No" / "Not sure" (freeAssessmentQuestions.ts). A bare
-  // "yes" affirms SOMETHING in the compound set (judgments OR liens OR
-  // corporate debt) but gives no detail — collapsing it to "false"
-  // would turn an affirmative red-flag answer into a clean denial in
-  // the immutable snapshot. "Not sure" is ambiguous and must stay
-  // "unknown" too; only an explicit "No" sets judgments_or_liens: false.
+  // Slug-first classification — see Q4_SLUG_CLASSIFICATION above.
+  // Catches both the new 6-state values and the legacy 3-value set.
+  if (Object.prototype.hasOwnProperty.call(Q4_SLUG_CLASSIFICATION, lower)) {
+    const entry = Q4_SLUG_CLASSIFICATION[lower];
+    return { subtypes: [...entry.subtypes], judgments_or_liens: entry.judgments_or_liens };
+  }
+  // Known-option-label short-circuit (see Q4_LABEL_CLASSIFICATION above).
+  if (Object.prototype.hasOwnProperty.call(Q4_LABEL_CLASSIFICATION, lower)) {
+    const entry = Q4_LABEL_CLASSIFICATION[lower];
+    return { subtypes: [...entry.subtypes], judgments_or_liens: entry.judgments_or_liens };
+  }
+
+  // The free assessment ships this field as a select; a bare "yes"
+  // or label text may still arrive here from historical submissions.
+  // A bare "yes" affirms SOMETHING in the compound set (judgments OR
+  // liens OR corporate debt) but gives no detail — collapsing it to
+  // "false" would turn an affirmative red-flag answer into a clean
+  // denial in the immutable snapshot. "Not sure" is ambiguous and
+  // must stay "unknown" too; only an explicit "No" sets
+  // judgments_or_liens: false.
   const bareShortAnswer = s.length <= 20 &&
     !/\b(loan|credit|lien|judgment|debt|mca|vendor|tax|accountant|processing|balance)\b/.test(lower);
   if (bareShortAnswer) {
