@@ -196,6 +196,37 @@ export const CASE_VIEW_PAGE = `<!DOCTYPE html>
     gap: 12px; font-size: 12px; color: #6b7280;
   }
 
+  /* Rich HTML pane — Solomon's intake reports (business_playbook,
+     swot_full_report, strategist_brief) are stored as styled HTML in
+     GHL. Rendering them as raw text in the strategist console dumps
+     a wall of <div style="…"> that nobody can read. The rich pane
+     renders them in a sandboxed iframe (what the customer will see
+     in Email 04), with a one-click toggle to raw source for debug
+     and copy-paste. */
+  .rich-pane {
+    border: 1px solid #e5e7eb; border-radius: 6px; background: #ffffff;
+    overflow: hidden;
+  }
+  .rich-pane-toolbar {
+    display: flex; justify-content: flex-end; gap: 8px;
+    padding: 6px 10px; border-bottom: 1px solid #f3f4f6; background: #fafafa;
+  }
+  .rich-pane-toolbar .rich-toggle {
+    font-size: 11px; padding: 3px 10px;
+  }
+  .rich-pane-iframe {
+    width: 100%; border: 0; min-height: 360px;
+    background: #ffffff; display: block;
+  }
+  .rich-pane-source {
+    margin: 0; padding: 12px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 11px; line-height: 1.5; color: #374151;
+    white-space: pre-wrap; word-break: break-word;
+    max-height: 70vh; overflow: auto;
+  }
+  .rich-pane-iframe.hidden, .rich-pane-source.hidden { display: none !important; }
+
   /* Search landing — PR 125. Replaces the raw "paste a GHL Contact ID"
      loader with a case picker. Keeps the raw-ID loader behind an
      Advanced disclosure for support/debug. */
@@ -1186,15 +1217,103 @@ function renderCaseState(bundle) {
   pane.innerHTML = '<div class="case-state-row">' + parts.join("") + '</div>';
 }
 
+// renderContentPane — show one of Solomon's stored report fields.
+//
+// For HTML content (business_playbook, swot_full_report, and the HTML
+// variant of strategist_brief) the strategist needs to SEE the
+// rendered report, not read a wall of inline-styled divs. We render
+// it in a sandboxed iframe (sandbox="allow-same-origin" keeps scripts
+// blocked but lets the parent read scrollHeight to auto-grow), with
+// a one-click "View source" toggle for debug and copy-paste.
+//
+// The sniff: anything containing an HTML-ish tag. False negatives
+// (text that happens to look like <foo>) show as source, which is
+// strictly worse but not broken. False positives (plain text that
+// contains "<...>") render as HTML, which iframes handle fine.
+//
+// The content is Solomon-generated and stored in GHL, not posted by
+// a customer — so there's no XSS worry here. The sandbox is defence
+// in depth. The base-target meta forces links inside the report to
+// open in a new tab (otherwise they would navigate the iframe
+// itself, which from a sandboxed frame is blocked anyway).
 function renderContentPane(id, content) {
   const pane = document.getElementById(id);
+  if (!pane) return;
   if (!content || !String(content).trim()) {
     pane.className = "section-content empty";
     pane.textContent = "— not present —";
+    pane.removeAttribute("data-rich");
     return;
   }
-  pane.className = "section-content";
-  pane.textContent = content;
+  const text = String(content);
+  if (!looksLikeHTML(text)) {
+    pane.className = "section-content";
+    pane.textContent = text;
+    pane.removeAttribute("data-rich");
+    return;
+  }
+  pane.className = "rich-pane";
+  pane.setAttribute("data-rich", "1");
+  const CSS = 'body{margin:0;padding:16px;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif;color:#1a1a1a;background:#ffffff;font-size:14px;line-height:1.6}img{max-width:100%;height:auto}';
+  const srcdoc = '<!doctype html><html><head><meta charset="utf-8"><base target="_blank"><style>'
+    + CSS + '</style></head><body>' + text + '</body></html>';
+  pane.innerHTML = ''
+    + '<div class="rich-pane-toolbar">'
+      + '<button type="button" class="rich-toggle" data-mode="rendered">View source</button>'
+    + '</div>'
+    + '<iframe class="rich-pane-iframe" sandbox="allow-same-origin" srcdoc="' + esc(srcdoc) + '"></iframe>'
+    + '<pre class="rich-pane-source hidden"></pre>';
+  // Stash the raw source as a non-attribute property so the toggle
+  // can swap to it on demand without re-reading the (escaped) srcdoc.
+  pane._richSource = text;
+  wireRichPaneToggle(pane);
+  autoGrowRichPaneIframe(pane);
+}
+
+function looksLikeHTML(text) {
+  // A single HTML-ish tag anywhere is enough to flip to rich render.
+  // We don't try to be clever about markdown vs HTML — Solomon's
+  // report fields consistently open with <div ...> or <h1 ...>.
+  return /<[a-z][^<>]*>/i.test(text);
+}
+
+function wireRichPaneToggle(pane) {
+  const btn = pane.querySelector(".rich-toggle");
+  const iframe = pane.querySelector(".rich-pane-iframe");
+  const pre = pane.querySelector(".rich-pane-source");
+  if (!btn || !iframe || !pre) return;
+  btn.addEventListener("click", function () {
+    const mode = btn.getAttribute("data-mode");
+    if (mode === "rendered") {
+      // Populate the source pre lazily — the raw HTML can be large,
+      // and the strategist rarely needs to see it.
+      if (!pre.textContent) pre.textContent = pane._richSource || "";
+      iframe.classList.add("hidden");
+      pre.classList.remove("hidden");
+      btn.textContent = "View rendered";
+      btn.setAttribute("data-mode", "source");
+    } else {
+      iframe.classList.remove("hidden");
+      pre.classList.add("hidden");
+      btn.textContent = "View source";
+      btn.setAttribute("data-mode", "rendered");
+    }
+  });
+}
+
+function autoGrowRichPaneIframe(pane) {
+  const iframe = pane.querySelector(".rich-pane-iframe");
+  if (!iframe) return;
+  iframe.addEventListener("load", function () {
+    try {
+      const doc = iframe.contentDocument;
+      if (doc && doc.body) {
+        // +20px cushion for footer whitespace so the last line isn't
+        // flush against the iframe's bottom edge.
+        iframe.style.height = (doc.body.scrollHeight + 20) + "px";
+      }
+    } catch { /* cross-origin or sandbox-blocked — leave at CSS min-height */ }
+  });
 }
 
 function renderCase(bundle, auditData) {

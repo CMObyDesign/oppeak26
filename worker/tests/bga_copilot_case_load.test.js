@@ -662,6 +662,20 @@ describe("GET /asksolomon/case — route reachability (Codex P1 on #94)", () => 
     // And MUST NOT embed a JSON.stringify'd contactId inside an onclick.
     assert.doesNotMatch(body, /onclick="openCase\(/);
 
+    // Rich HTML rendering for Solomon-generated report fields — PR
+    // following the picker shipping. The three intake panes
+    // (business_playbook, swot_full_report, strategist_brief) are
+    // stored as HTML; the console used to dump them as raw-text
+    // walls of inline-styled divs. renderContentPane now sniffs
+    // for HTML tags and renders in a sandboxed iframe with a
+    // source-toggle button.
+    assert.match(body, /function looksLikeHTML\(/);
+    assert.match(body, /function wireRichPaneToggle\(/);
+    assert.match(body, /function autoGrowRichPaneIframe\(/);
+    assert.match(body, /class="rich-pane-iframe"/);
+    assert.match(body, /sandbox="allow-same-origin"/);
+    assert.match(body, /class="rich-toggle"/);
+
     // The script tag MUST actually parse as JavaScript. A long-
     // standing bug (PR #96 line, surfaced in prod only when BGA
     // Copilot became Miguel's primary embed) wrote regex escapes
