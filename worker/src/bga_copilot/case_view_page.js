@@ -1576,8 +1576,16 @@ function parseDraftOnClient(text) {
   for (let i = 0; i < matches.length; i++) {
     const cur = matches[i];
     const next = matches[i + 1];
+    // Double-backslash the regex escapes — this whole script is
+    // embedded inside the outer template literal of CASE_VIEW_PAGE.
+    // A bare \\t / \\n / \\s inside a template literal interpolates
+    // to a literal tab / newline / "s" character, which turns the
+    // regex into a syntax error at serve time (newline inside a
+    // regex literal) and brings the ENTIRE script tag down with
+    // it — gate, load panel, everything blank. Browsers must
+    // receive \\t, \\n, \\s as the TWO-character escape pairs.
     const body = text.slice(cur.headerEnd, next ? next.start : text.length)
-      .replace(/^[ \t]*\n/, "").replace(/\s+$/, "");
+      .replace(/^[ \\t]*\\n/, "").replace(/\\s+$/, "");
     sections.push({ n: cur.n, title: cur.title, body });
   }
   return { sections };
@@ -1726,7 +1734,7 @@ function renderPrepBriefContent(pane, content) {
   // read-only artifact; no per-section edit (regenerating is cheaper
   // than reconciling edits on a one-screen view).
   const body = String(content).startsWith(PREP_BRIEF_BANNER)
-    ? String(content).slice(PREP_BRIEF_BANNER.length).replace(/^\s*/, "")
+    ? String(content).slice(PREP_BRIEF_BANNER.length).replace(/^\\s*/, "")
     : String(content);
   chunks.push('<div class="section-content">' + esc(body) + '</div>');
   chunks.push('<div class="generate-row" style="margin-top:12px;">');
@@ -1883,7 +1891,13 @@ function renderRedTeamReport() {
         if (isAcked) {
           parts.push('<span style="color:#065f46;">(acknowledged)</span>');
         } else {
-          parts.push('<button onclick="acknowledgeWarning(\'' + escapeHtml(w.id) + '\')">Acknowledge</button>');
+          // Double-backslash the quote escapes — see sectionBodies regex
+          // comment above. Two-backslash + single-quote in this outer
+          // template literal interpolates to one-backslash + quote in
+          // the served script (an escaped single-quote inside a
+          // single-quoted string); a bare backslash + quote would
+          // interpolate to a raw quote and break the inner string.
+          parts.push('<button onclick="acknowledgeWarning(\\'' + escapeHtml(w.id) + '\\')">Acknowledge</button>');
         }
         parts.push('</li>');
       }
