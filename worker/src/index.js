@@ -341,6 +341,90 @@ similar businesses. If an answer doesn't explicitly establish the trigger, leave
   growth model is referral-only and explicitly so. NEVER fire on the FREE tier — digital
   presence findings are a paid-tier reveal and must be held back from the free report.
 
+Q4 (ACTIVE DEBT / TAX LIEN / JUDGMENT STATUS) DISCIPLINE — this field flipped from a
+3-option yes/no/not-sure to a 6-state slug set. Interpret BOTH shapes without
+ever conflating them:
+
+- New six-state slugs — authoritative, trust the slug:
+    * \`none\`             → no business debt, taxes current, no legal actions. NOT a trigger.
+    * \`managed_debt\`     → business debt actively managed and in good standing. NOT a
+                           rehab trigger. May be a DEBT_RESTRUCTURE_OPP ONLY if other
+                           answers establish the debt is heavy, stretched, or carrying
+                           high monthly debt service relative to revenue.
+    * \`tax_balance\`      → outstanding tax balance or payment plan. REHAB trigger +
+                           TAX_RESOLUTION_OPP.
+    * \`unfiled_taxes\`    → one or more unfiled business tax returns. REHAB trigger +
+                           TAX_RESOLUTION_OPP.
+    * \`lien_or_judgment\` → active tax lien, judgment, or legal action. REHAB trigger +
+                           TAX_RESOLUTION_OPP (or debt restructure if the context fits).
+    * \`not_sure\`         → unknown subtype. Treat as a visibility gap, NOT as evidence
+                           of distress. Never fires a rehab trigger on its own.
+- Legacy three values — historical submissions, read conservatively:
+    * \`no\`               → no judgments / liens / corporate debt. NOT a trigger.
+    * \`yes\`              → the owner affirmed SOMETHING in the compound set but gave
+                           no detail. Treat as "unknown subtype" — do NOT infer tax
+                           distress, judgments, or debt-service pressure from a bare
+                           legacy "yes." Pair it with an "Incomplete intake —" gap
+                           noting the subtype wasn't captured. If the paid-tier debt
+                           answers later provide subtype detail, use that; a bare
+                           legacy "yes" is NEVER a rehab trigger on its own.
+    * \`not-sure\`         → unknown subtype, same handling as legacy \`yes\`.
+Never map a legacy value onto a new slug or vice versa in your reasoning — the
+intake prompt will show you the raw stored answer; cite it verbatim.
+
+Q19 (MONTHLY CLOSE STATUS, PAID TIER) and Q23 (OPERATING RUNWAY, PAID TIER) —
+new field keys in the paid_47 intake. Interpret them as follows:
+
+- Q19 (key q19_monthly_close_status):
+    * \`monthly-timely\`   → books closed every month inside ~15 days. Strong signal
+                           of financial discipline — call this out as a strength.
+    * \`monthly-slow\`     → closed monthly but 30+ days behind. Workable but a
+                           visibility lag worth naming.
+    * \`quarterly-or-tax\` → not closed monthly. Financial-visibility gap; names a
+                           concrete fix for the paid report.
+    * \`no-close\`         → no formal close. Primary driver of a decisions-on-bank-
+                           balance operating pattern; name it directly.
+- Q23 (key q23_operating_runway):
+    * \`six-plus-months\`  → strong cushion. Not a trigger.
+    * \`three-to-six\`     → healthy. Not a trigger.
+    * \`one-to-three\`     → thin. CASH-FLOW stress signal (not legally distressed).
+    * \`less-than-one\`    → distressed cash position. CASH-FLOW stress signal, pair
+                           with any debt subtype that compounds it.
+    * \`unknown\`          → visibility gap, not evidence of distress.
+
+HISTORICAL q19_audit_history AND q23_risk_management — these old keys may still appear
+on historical paid_47 submissions. They are DIFFERENT CONCEPTS from the new fields:
+
+- q19_audit_history (values: within-2, more-than-2, never, in-progress) is about whether
+  a formal AUDIT has ever happened. NEVER re-interpret these values as monthly-close
+  status.
+- q23_risk_management (values: comprehensive, insurance-only, informal, none) is about
+  a RISK FRAMEWORK (insurance, contingency plans). NEVER re-interpret these values as
+  operating runway.
+Both legacy answers remain valid narrative input — treat them as historical context
+only, not as sources of truth for the new concepts.
+
+BGA (PAID_297) Q_C / Q_G / Q_J "VISIBILITY-GAP" DISCIPLINE — the deep-dive intake
+explicitly allows these answers; treat them as described, never as evidence of a
+negative finding:
+
+- Q_C (qc_unit_economics): "Not tracked" means the business does not currently
+  measure CAC / LTV / payback / per-client gross margin. This is a VISIBILITY GAP
+  worth addressing in the growth plan ("here is the measurement to install so your
+  pricing and acquisition decisions have a real base"), NOT an invented financial
+  weakness. Do NOT claim margins are poor, do NOT invent benchmark comparisons, do
+  NOT infer the business is losing money per customer. State plainly that the data
+  isn't tracked yet and name the smallest measurement that would change that.
+- Q_G (qg_close_rate_by_stage): "Not applicable" means the business does not run a
+  staged sales process (e-commerce, trades on referral, high-volume subscription).
+  This is NOT a weakness — it is a legitimate description of a different acquisition
+  model. Do NOT fire a sales-pipeline finding when this answer is "Not applicable."
+- Q_J (qj_top_10_concentration): "Not applicable" means client-level revenue
+  tracking is not meaningful for this business (e-commerce, retail, broad
+  subscription). Do NOT fire a concentration-risk finding when this answer is
+  "Not applicable." If the owner reports a concentration number, use it; if not,
+  it is simply not a concentration-risk business.
+
 HANDLING INCOMPLETE OR NON-RESPONSIVE ANSWERS — call this out honestly, don't fabricate around it:
 
 - The intake block lists EVERY question that was posed. Skipped answers appear as

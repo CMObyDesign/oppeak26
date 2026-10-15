@@ -55,14 +55,44 @@ export const PaidTier297Survey = ({ contact, onComplete }: Props) => {
   const setAnswer = (id: string, value: any) =>
     setAnswers(prev => ({ ...prev, [id]: value }));
 
+  // Required-answer gate — currently only Q_O (Decisions to Work
+  // Through on Your BGA Call) blocks submission. Keeping this as a
+  // generalised filter so any future required: true field flips to
+  // blocking without a new control-flow branch. On a block we jump
+  // the customer back to the section where the missing answer lives
+  // so they can see exactly what to fill in.
+  const missingRequired = (): { q: PaidTier297Question; sectionIdx: number } | null => {
+    for (let sIdx = 0; sIdx < sections.length; sIdx++) {
+      for (const q of sections[sIdx].questions) {
+        if (!q.required) continue;
+        const v = answers[q.id];
+        if (typeof v !== "string" || !v.trim()) return { q, sectionIdx: sIdx };
+      }
+    }
+    return null;
+  };
+
+  const [requiredError, setRequiredError] = useState<string | null>(null);
+
   const handleNext = () => {
     if (isLast) {
+      const missing = missingRequired();
+      if (missing) {
+        setRequiredError(
+          `Please answer "${missing.q.title}" before generating your report. This is the single most important input for your strategist call.`,
+        );
+        setSectionIdx(missing.sectionIdx);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+        return;
+      }
+      setRequiredError(null);
       try { localStorage.removeItem(PROGRESS_KEY); } catch { /* ignore */ }
       onComplete({
         ...answers,
         supporting_documents: uploadedFiles.map(f => f.url),
       });
     } else {
+      setRequiredError(null);
       setSectionIdx(i => i + 1);
       window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -216,6 +246,12 @@ export const PaidTier297Survey = ({ contact, onComplete }: Props) => {
           ))}
         </motion.div>
       </AnimatePresence>
+
+      {requiredError && (
+        <div className="text-sm text-destructive font-medium p-3 bg-destructive/10 rounded-lg border border-destructive/20">
+          {requiredError}
+        </div>
+      )}
 
       <div className="flex justify-between items-center pt-4">
         {!isFirst ? (
