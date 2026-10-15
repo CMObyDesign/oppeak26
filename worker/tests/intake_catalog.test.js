@@ -365,6 +365,43 @@ describe("annual_revenue is actually forwarded to the worker (Codex P2 on #128)"
   });
 });
 
+describe("$47 → $297 handoff actually prefills annual_revenue (Codex P2 on #129)", () => {
+  it("PaidTier297.tsx businessProfile type allows annualRevenue", () => {
+    const src = readApp("pages/PaidTier297.tsx");
+    assert.match(src, /annualRevenue\?:\s*string/);
+  });
+  it("PaidTier297.tsx hydrates annualRevenue from the stash on verifyPayment", () => {
+    const src = readApp("pages/PaidTier297.tsx");
+    // params.get("annualRevenue") || stored.annualRevenue || ""
+    assert.match(
+      src,
+      /annualRevenue:\s*params\.get\("annualRevenue"\)[\s\S]{0,80}stored\.annualRevenue/,
+      "verifyPayment path must read annualRevenue from URL param + localStorage stash",
+    );
+  });
+  it("PaidTier297.tsx hands initialAnswers.annual_revenue to the Survey component", () => {
+    const src = readApp("pages/PaidTier297.tsx");
+    assert.match(src, /initialAnswers=/);
+    assert.match(src, /annual_revenue:\s*businessProfile\.annualRevenue/);
+  });
+  it("PaidTier297Survey.tsx accepts initialAnswers prop and seeds its state from it", () => {
+    const src = readApp("components/PaidTier297Survey.tsx");
+    assert.match(src, /initialAnswers\?:\s*Record<string,\s*any>/);
+    // Must destructure the prop and use it to seed the useState initializer.
+    assert.match(src, /PaidTier297Survey\s*=\s*\(\{[\s\S]{0,200}initialAnswers\s*\}:/);
+    assert.match(src, /useState<Record<string,\s*any>>\(\(\)\s*=>\s*\(\{\s*\.\.\.\(initialAnswers\s*\|\|\s*\{\}\)/);
+  });
+  it("PaidTier297Survey resume merge treats seed values as a floor, not an override — mid-survey draft wins", () => {
+    const src = readApp("components/PaidTier297Survey.tsx");
+    // The resume effect must NOT blindly setAnswers(s.answers) because
+    // that would drop the initialAnswers seed. It must merge and only
+    // let non-empty stored values overwrite the seed.
+    assert.doesNotMatch(src, /setAnswers\(s\.answers\)/,
+      "a bare setAnswers(s.answers) would wipe the initialAnswers seed — merge instead");
+    assert.match(src, /if \(v !== undefined && v !== null && v !== ""\) merged\[k\] = v/);
+  });
+});
+
 describe("Served console page actually loads", () => {
   it("GET /asksolomon returns 200 HTML containing the catalog", async () => {
     const res = await worker.fetch(

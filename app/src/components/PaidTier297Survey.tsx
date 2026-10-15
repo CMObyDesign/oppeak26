@@ -14,19 +14,36 @@ import { SaveForLater } from "@/components/SaveForLater";
 interface Props {
   contact: { name: string; email: string; contactId?: string };
   onComplete: (answers: Record<string, any>) => void;
+  // Prefill map, keyed by question id (same keys the survey uses in its
+  // internal `answers` state). Today the only user is PaidTier297.tsx
+  // seeding `annual_revenue` from the paid_47 → paid_297 handoff so
+  // the buyer isn't asked for the same number twice (Codex P2 on #129).
+  // Each key is applied ONCE on mount; the per-browser PROGRESS_KEY
+  // resume (below) still wins if the buyer has a mid-survey draft
+  // stored, so a re-mount with a different seed can never overwrite
+  // their in-flight work.
+  initialAnswers?: Record<string, any>;
 }
 
 interface UploadedFile { url: string; fileName: string; }
 
-export const PaidTier297Survey = ({ contact, onComplete }: Props) => {
+export const PaidTier297Survey = ({ contact, onComplete, initialAnswers }: Props) => {
   const [sectionIdx, setSectionIdx] = useState(0);
-  const [answers, setAnswers] = useState<Record<string, any>>({});
+  // Seed from initialAnswers on construction so the first paint reflects
+  // the prefill. The PROGRESS_KEY resume below runs in an effect right
+  // after mount and merges on top — if the buyer has a mid-survey draft,
+  // its values win over the seed.
+  const [answers, setAnswers] = useState<Record<string, any>>(() => ({ ...(initialAnswers || {}) }));
   const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Per-browser resume: a paid customer who drops mid-survey picks back up
-  // (answers + uploaded-file references + where they were).
+  // (answers + uploaded-file references + where they were). The resume
+  // merges ON TOP of initialAnswers so a stored mid-survey draft always
+  // wins over a prefill; empty values in the stored draft do NOT override
+  // the prefill (so a buyer who got the annual-revenue prefill but then
+  // skipped past that section still has the prefilled value).
   const PROGRESS_KEY = `swot_paid297_progress_${contact.contactId || "anon"}`;
   useEffect(() => {
     try {
@@ -34,7 +51,15 @@ export const PaidTier297Survey = ({ contact, onComplete }: Props) => {
       if (!raw) return;
       const s = JSON.parse(raw);
       if (s && typeof s === "object") {
-        if (s.answers && typeof s.answers === "object") setAnswers(s.answers);
+        if (s.answers && typeof s.answers === "object") {
+          setAnswers((prev) => {
+            const merged: Record<string, any> = { ...prev };
+            for (const [k, v] of Object.entries(s.answers)) {
+              if (v !== undefined && v !== null && v !== "") merged[k] = v;
+            }
+            return merged;
+          });
+        }
         if (typeof s.sectionIdx === "number") setSectionIdx(s.sectionIdx);
         if (Array.isArray(s.uploadedFiles)) setUploadedFiles(s.uploadedFiles);
       }
