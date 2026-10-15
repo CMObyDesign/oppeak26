@@ -24,6 +24,22 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
   .brand span { color: #92400e; }
   .subbrand { font-size: 11px; color: #6b7280; letter-spacing: 1.5px; text-transform: uppercase; margin-left: 12px; }
   .topbar-right { display: flex; gap: 12px; align-items: center; }
+  /* Shared app navigation — must stay in sync with the identical block in
+     worker/src/bga_copilot/case_view_page.js so the two pages feel like a
+     single embedded Ask Solomon app with two modes. The .active tab marks
+     the current page and is non-clickable; the inactive tab links to the
+     other route. CONSOLE_EMBED_TOKEN in sessionStorage carries across
+     same-origin navigation (both routes read asksolomon_password). */
+  .app-nav { display: flex; gap: 4px; margin-left: 24px; margin-right: auto; }
+  .app-nav a {
+    padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 500;
+    color: #6b7280; text-decoration: none; border: 1px solid transparent;
+  }
+  .app-nav a:hover { background: #f3f4f6; color: #1a1a1a; }
+  .app-nav a.active {
+    background: #fef3c7; color: #92400e; border-color: #fde68a;
+    cursor: default; pointer-events: none;
+  }
   button, .btn {
     padding: 8px 14px; border-radius: 6px; border: 1px solid #d1d5db;
     background: #ffffff; color: #1a1a1a; font-size: 13px; font-weight: 500;
@@ -263,8 +279,11 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
 <div class="topbar">
   <div>
     <span class="brand">Ask <span>Solomon</span></span>
-    <span class="subbrand">Internal Training & Testing</span>
   </div>
+  <nav class="app-nav">
+    <a href="/asksolomon/case">BGA Copilot</a>
+    <a href="/asksolomon" class="active" aria-current="page">Solomon Lab</a>
+  </nav>
   <div class="topbar-right">
     <span id="connection-status" class="run-status"></span>
     <button onclick="exportLearnings()" title="Download your saved rubrics and bookmarks as JSON">📤 Export Learnings</button>
