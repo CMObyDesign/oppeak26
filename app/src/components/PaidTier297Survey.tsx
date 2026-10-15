@@ -40,10 +40,12 @@ export const PaidTier297Survey = ({ contact, onComplete, initialAnswers }: Props
 
   // Per-browser resume: a paid customer who drops mid-survey picks back up
   // (answers + uploaded-file references + where they were). The resume
-  // merges ON TOP of initialAnswers so a stored mid-survey draft always
-  // wins over a prefill; empty values in the stored draft do NOT override
-  // the prefill (so a buyer who got the annual-revenue prefill but then
-  // skipped past that section still has the prefilled value).
+  // merges ON TOP of initialAnswers: any KEY present in the stored draft
+  // overwrites the seed (including a present-but-empty value — Codex P2
+  // on #130: that is an explicit clear by the buyer and must survive the
+  // reload). A KEY that was never typed into isn't in s.answers at all,
+  // so the seed is preserved for it by the merge's inherent "missing key
+  // means no overwrite" behavior.
   const PROGRESS_KEY = `swot_paid297_progress_${contact.contactId || "anon"}`;
   useEffect(() => {
     try {
@@ -52,13 +54,7 @@ export const PaidTier297Survey = ({ contact, onComplete, initialAnswers }: Props
       const s = JSON.parse(raw);
       if (s && typeof s === "object") {
         if (s.answers && typeof s.answers === "object") {
-          setAnswers((prev) => {
-            const merged: Record<string, any> = { ...prev };
-            for (const [k, v] of Object.entries(s.answers)) {
-              if (v !== undefined && v !== null && v !== "") merged[k] = v;
-            }
-            return merged;
-          });
+          setAnswers((prev) => ({ ...prev, ...s.answers }));
         }
         if (typeof s.sectionIdx === "number") setSectionIdx(s.sectionIdx);
         if (Array.isArray(s.uploadedFiles)) setUploadedFiles(s.uploadedFiles);

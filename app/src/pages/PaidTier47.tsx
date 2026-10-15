@@ -81,24 +81,35 @@ const PaidTier47 = () => {
     }
   }, [screen, timerDone, report, reportError]);
   // When results land, stash business info so /paid-297 can pick it up.
+  //
+  // Scope the stash to the verified contact — Codex P2 on #130.
+  // Previously the object was a single global, so if browser session A
+  // (contact A) stashed a $2.4M revenue and session B (contact B) later
+  // opened the paid_297 flow in the same browser, A's revenue was
+  // prefilled into B's required answer and could ship to B's report.
+  // The owner fields let the paid_297 side gate the prefill on an
+  // exact contactId or email match before trusting any stashed value.
   useEffect(() => {
     if (screen === "results" && report) {
       const businessInfo = {
-        businessName:   answers["organization"]     || "",
-        website:        answers["website"]          || "",
-        industry:       answers["industry"]         || "",
-        city:           answers["city"]             || "",
-        state:          answers["state"]            || "",
-        country:        answers["country"]          || "",
-        // annualRevenue added so /paid-297 can prefill it instead of
-        // asking the buyer the same number twice — Codex P2 on #128.
-        annualRevenue:  answers["annual_revenue"]   || "",
+        // Owner identifiers (both when available; email is useful for
+        // the email-resume path on paid_297 where contactId is derived
+        // from the email lookup).
+        ownerContactId:  contact.contactId || "",
+        ownerEmail:      (contact.email || "").toLowerCase(),
+        businessName:    answers["organization"]     || "",
+        website:         answers["website"]          || "",
+        industry:        answers["industry"]         || "",
+        city:            answers["city"]             || "",
+        state:           answers["state"]            || "",
+        country:         answers["country"]          || "",
+        annualRevenue:   answers["annual_revenue"]   || "",
       };
       try {
         localStorage.setItem("swot_business_info", JSON.stringify(businessInfo));
       } catch { /* localStorage disabled — fall back to URL params */ }
     }
-  }, [screen, report, answers]);
+  }, [screen, report, answers, contact]);
 
   const handleSurveyComplete = async (finalAnswers: Record<string, any>) => {
     setAnswers(finalAnswers);
