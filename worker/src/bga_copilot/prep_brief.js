@@ -183,8 +183,8 @@ export function buildPrepBriefUserPrompt(bundle, { draft, matches, catalogVersio
 }
 
 // Q_O ("Decisions to Work Through on Your BGA Call"). The HL field's
-// fieldKey predates the rename, so match the stable id-derived key, the
-// semantic key, and either label.
+// fieldKey predates the rename, so match the stable fieldKey, the
+// semantic key, the survey title, or the HL field name (old or new).
 const Q_O_FIELD_KEYS = new Set([
   "qo_focus_areas",
   "anything_youd_like_to_focus_on_on_our_call_or_our_research",
@@ -196,6 +196,7 @@ export function findCallAgendaAnswer(answers) {
     if (Q_O_FIELD_KEYS.has(a.fieldKey)) return true;
     const label = String(a.label || "").toLowerCase();
     return label.startsWith("decisions to work through") ||
+      label.startsWith("what are the 2–3 financial or growth decisions") ||
       label.startsWith("anything you'd like to focus on");
   }) || null;
 }

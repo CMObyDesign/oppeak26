@@ -190,6 +190,7 @@ describe("Prep Me For The Call — Q_O agenda surfaced first", () => {
   });
   it("matches by renamed label too, and says so when absent", () => {
     assert.ok(findCallAgendaAnswer([{ fieldKey: "x", label: "Decisions to Work Through on Your BGA Call", value: "a" }]));
+    assert.ok(findCallAgendaAnswer([{ fieldKey: "x", label: "What are the 2–3 financial or growth decisions you most want clarity on during your 50-minute Business Growth Analysis session?", value: "a" }]));
     const u = buildPrepBriefUserPrompt({ contactId: "c", intake: { paid_297_answers: [] } }, { draft });
     assert.match(u, /no call agenda provided/);
   });
