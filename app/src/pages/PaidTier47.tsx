@@ -84,12 +84,15 @@ const PaidTier47 = () => {
   useEffect(() => {
     if (screen === "results" && report) {
       const businessInfo = {
-        businessName: answers["organization"] || "",
-        website:      answers["website"]      || "",
-        industry:     answers["industry"]     || "",
-        city:         answers["city"]         || "",
-        state:        answers["state"]        || "",
-        country:      answers["country"]      || "",
+        businessName:   answers["organization"]     || "",
+        website:        answers["website"]          || "",
+        industry:       answers["industry"]         || "",
+        city:           answers["city"]             || "",
+        state:          answers["state"]            || "",
+        country:        answers["country"]          || "",
+        // annualRevenue added so /paid-297 can prefill it instead of
+        // asking the buyer the same number twice — Codex P2 on #128.
+        annualRevenue:  answers["annual_revenue"]   || "",
       };
       try {
         localStorage.setItem("swot_business_info", JSON.stringify(businessInfo));
@@ -107,13 +110,21 @@ const PaidTier47 = () => {
     try {
       // Split business-info fields out of `answers` and into `businessProfile`.
       const businessInfoIds = new Set(PAID_TIER_47_BUSINESS_INFO.map(b => b.id));
+      // annualRevenue is included — Codex P2 on #128. Previously
+      // businessInfoIds removed it from diagnosticAnswers but no
+      // businessProfile field forwarded it, so the number collected
+      // from the buyer never reached the Worker and could not anchor
+      // any ratio or report reasoning. Now it flows via
+      // businessProfile.annualRevenue → BUSINESS PROFILE block in
+      // buildPrompt().
       const businessProfile = {
-        businessName: finalAnswers["organization"] || "",
-        website:      finalAnswers["website"]      || "",
-        industry:     finalAnswers["industry"]     || "",
-        city:         finalAnswers["city"]         || "",
-        state:        finalAnswers["state"]        || "",
-        country:      finalAnswers["country"]      || "",
+        businessName:   finalAnswers["organization"]     || "",
+        website:        finalAnswers["website"]          || "",
+        industry:       finalAnswers["industry"]         || "",
+        city:           finalAnswers["city"]             || "",
+        state:          finalAnswers["state"]            || "",
+        country:        finalAnswers["country"]          || "",
+        annualRevenue:  finalAnswers["annual_revenue"]   || "",
       };
 
       // Everything that isn't business info is a question answer.

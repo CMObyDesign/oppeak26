@@ -183,13 +183,27 @@ function normFinancialDecisionBasis(raw) {
 // by the bareShortAnswer block below — a bare legacy "yes" MUST stay
 // as "unknown subtype" and never be interpreted as proof of tax
 // distress or debt-service pressure (ASSESSMENT_RUBRIC Q4 discipline).
+// Each entry's subtypes list carries ONLY facts the option name itself
+// guarantees — Codex P1 on #128. Previously `unfiled_taxes` added a
+// `tax_debt` subtype (the owner may have filed and owed nothing when
+// they catch up) and `lien_or_judgment` added both `tax_debt` and
+// `judgment` (the slug encompasses tax liens AND civil judgments AND
+// other legal action, so neither specific subtype is guaranteed).
+// Over-attributing subtypes turns into report claims the customer
+// never made, so we now keep the slug-level signal (via
+// judgments_or_liens where it is unambiguous) and let the paid-tier
+// debt detail disambiguate the specific category.
 const Q4_SLUG_CLASSIFICATION = Object.freeze({
   // New six-state slugs.
   none:             { subtypes: [],                              judgments_or_liens: false     },
   managed_debt:     { subtypes: ["managed_debt"],                judgments_or_liens: false     },
   tax_balance:      { subtypes: ["tax_debt"],                    judgments_or_liens: false     },
-  unfiled_taxes:    { subtypes: ["tax_debt", "unfiled_taxes"],   judgments_or_liens: false     },
-  lien_or_judgment: { subtypes: ["tax_debt", "judgment"],        judgments_or_liens: true      },
+  unfiled_taxes:    { subtypes: ["unfiled_taxes"],               judgments_or_liens: false     },
+  // The slug encompasses tax lien / civil judgment / other legal
+  // action — commit only to the compound judgments_or_liens signal,
+  // leave the specific subtype empty so Solomon doesn't invent a tax
+  // balance or court judgment the customer never stated.
+  lien_or_judgment: { subtypes: [],                              judgments_or_liens: true      },
   not_sure:         { subtypes: [],                              judgments_or_liens: "unknown" },
   // Legacy three-value slugs — bare values stored on historical
   // submissions. Classified conservatively.

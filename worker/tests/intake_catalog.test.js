@@ -84,16 +84,29 @@ describe("Q4 — new six-state slug set normalizes authoritatively", () => {
     assert.ok(n.subtypes.includes("tax_debt"));
     assert.equal(n.judgments_or_liens, false);
   });
-  it("unfiled_taxes → tax_debt + unfiled_taxes subtypes", () => {
+  // Codex P1 on #128: previous mapping overclaimed. unfiled_taxes
+  // adding a tax_debt subtype can turn into a "tax balance" claim
+  // the customer never made (they may file and owe nothing when they
+  // catch up). Pin that we keep ONLY unfiled_taxes.
+  it("unfiled_taxes → unfiled_taxes subtype only (no inferred tax_debt)", () => {
     const n = normQ4("unfiled_taxes");
-    assert.ok(n.subtypes.includes("tax_debt"));
-    assert.ok(n.subtypes.includes("unfiled_taxes"));
+    assert.deepEqual(n.subtypes, ["unfiled_taxes"]);
+    assert.ok(!n.subtypes.includes("tax_debt"),
+      "unfiled_taxes must NOT be classified as tax_debt — see Codex P1 on #128");
     assert.equal(n.judgments_or_liens, false);
   });
-  it("lien_or_judgment → judgments_or_liens: true + judgment subtype", () => {
+  // Same discipline for lien_or_judgment: the slug encompasses tax
+  // lien / civil judgment / other legal action. We keep only the
+  // compound judgments_or_liens signal; the specific subtype is for
+  // the paid-tier debt detail to disambiguate.
+  it("lien_or_judgment → compound signal only, no specific subtype claimed", () => {
     const n = normQ4("lien_or_judgment");
-    assert.ok(n.subtypes.includes("judgment"));
+    assert.deepEqual(n.subtypes, []);
     assert.equal(n.judgments_or_liens, true);
+    assert.ok(!n.subtypes.includes("tax_debt"),
+      "lien_or_judgment must NOT be classified as tax_debt — the slug covers civil judgments too");
+    assert.ok(!n.subtypes.includes("judgment"),
+      "lien_or_judgment must NOT be classified as a court judgment — the slug covers tax liens too");
   });
   it("not_sure → unknown subtype (never a positive rehab trigger)", () => {
     assert.deepEqual(normQ4("not_sure"), { subtypes: [], judgments_or_liens: "unknown" });
@@ -314,6 +327,41 @@ describe("Lab Guided catalog mirrors the production TypeScript definitions", () 
       questionsForTier("paid_297").length,
       INTAKE_CATALOG.free.length + INTAKE_CATALOG.paid_47.length + INTAKE_CATALOG.paid_297.length,
     );
+  });
+});
+
+describe("Guided-mode answer storage is versioned (Codex P1 on #128)", () => {
+  it("uses the v2 storage key, not the legacy one", () => {
+    assert.match(CONSOLE_PAGE, /asksolomon_guided_answers_v2/);
+  });
+  it("removes the legacy asksolomon_guided_answers key on load", () => {
+    // The one-time migration deletes the pre-rename localStorage key
+    // so stale drafts (keyed to old meanings like old Q1 = debt
+    // question) don't get restored and silently submitted against the
+    // new catalog where Q1 is business type.
+    assert.match(
+      CONSOLE_PAGE,
+      /localStorage\.removeItem\("asksolomon_guided_answers"\)/,
+    );
+  });
+});
+
+describe("annual_revenue is actually forwarded to the worker (Codex P2 on #128)", () => {
+  it("the paid_47 handler puts annual_revenue into businessProfile.annualRevenue", () => {
+    const paid47Src = readApp("pages/PaidTier47.tsx");
+    assert.match(paid47Src, /annualRevenue:\s*finalAnswers\["annual_revenue"\]/);
+  });
+  it("the assessment.ts businessProfile type allows annualRevenue", () => {
+    const libSrc = readApp("lib/assessment.ts");
+    assert.match(libSrc, /annualRevenue\?:\s*string/);
+  });
+  it("the worker's BUSINESS PROFILE block emits annualRevenue when present", () => {
+    const workerIndex = readFileSync(resolve(HERE, "..", "src", "index.js"), "utf8");
+    assert.match(workerIndex, /businessProfile\.annualRevenue\s*&&\s*`Trailing 12-month revenue/);
+  });
+  it("the paid_47 → paid_297 localStorage stash includes annualRevenue so it isn't collected twice", () => {
+    const paid47Src = readApp("pages/PaidTier47.tsx");
+    assert.match(paid47Src, /annualRevenue:\s*answers\["annual_revenue"\]/);
   });
 });
 

@@ -755,11 +755,17 @@ function buildPrompt(tier, answers, contact, businessProfile = {}, factsBundle =
   // Optional business profile (sent at $47 + $297 tiers from the GHL survey
   // business-info section). Only emit lines that have real values.
   const profileLines = [
-    businessProfile.businessName && `Business: ${businessProfile.businessName}`,
-    businessProfile.industry     && `Industry: ${businessProfile.industry}`,
-    businessProfile.website      && `Website: ${businessProfile.website}`,
+    businessProfile.businessName  && `Business: ${businessProfile.businessName}`,
+    businessProfile.industry      && `Industry: ${businessProfile.industry}`,
+    businessProfile.website       && `Website: ${businessProfile.website}`,
     [businessProfile.city, businessProfile.state, businessProfile.country]
       .filter(Boolean).join(", "),
+    // Trailing 12-month revenue — collected in the paid_47 Business
+    // Info section (PR #128) and now forwarded here (Codex P2 fix).
+    // Emitted as a concrete number Solomon can anchor every ratio
+    // and report claim on; empty when the buyer skipped the field,
+    // and the line is suppressed in that case by the filter below.
+    businessProfile.annualRevenue && `Trailing 12-month revenue: ${businessProfile.annualRevenue}`,
   ].filter(Boolean);
   const profileBlock = profileLines.length
     ? `\nBUSINESS PROFILE:\n${profileLines.join("\n")}\n`

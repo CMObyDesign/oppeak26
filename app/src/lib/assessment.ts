@@ -108,6 +108,11 @@ export async function runAssessment(params: {
     city?: string;
     state?: string;
     country?: string;
+    // Collected in the paid_47 Business Info section as of PR #128,
+    // forwarded here as of the follow-up Codex P2 fix. Worker emits
+    // it in the BUSINESS PROFILE block of buildPrompt so Solomon can
+    // anchor every ratio and report claim on a real number.
+    annualRevenue?: string;
   };
 }): Promise<AgentReport> {
   const controller = new AbortController();
