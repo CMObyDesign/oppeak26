@@ -27,6 +27,7 @@ import {
   handleVerifiedFinancialsPanel,
 } from "./bga_copilot/case_handlers.js";
 import { handleCaseLoad } from "./bga_copilot/case_load.js";
+import { handleCaseSearch } from "./bga_copilot/case_search.js";
 import { CASE_VIEW_PAGE } from "./bga_copilot/case_view_page.js";
 import {
   handleGenerateRoadmapDraft,
@@ -5657,6 +5658,15 @@ export default {
     // per Codex P1 on #94: the POST-only guard would otherwise make it unreachable.)
     if (path === "/asksolomon/case/load") {
       return handleCaseLoad(request, env, { checkPassword: checkConsolePassword });
+    }
+
+    // PR 125 — docs/BGA_COPILOT_SPEC.md §2.1 picker ("find a client").
+    // Read-only lookup over swot_paid_297 contacts. Returns display
+    // cards with workflow-state badges. Feeds the strategist a
+    // searchable list so the "paste a GHL Contact ID" step is only
+    // a support/debug fallback (behind an Advanced disclosure).
+    if (path === "/asksolomon/case/search") {
+      return handleCaseSearch(request, env, { checkPassword: checkConsolePassword });
     }
 
     // PR 5b — docs/BGA_COPILOT_SPEC.md §4.3 + §4.3.1.

@@ -278,9 +278,23 @@ export function assembleCaseBundle(contact, idMap, { contactId, catalog } = { co
   const dayStamp = readCustomField(contact, "swot_paid_297_applied_at", idMap) || null;
   const daysSincePaid297 = daysSince(dayStamp);
 
+  // Human-friendly identifiers for the clean client header the case
+  // view renders in place of the raw contactId. The search landing
+  // (/asksolomon/case/search) already surfaces these on each card;
+  // echoing them in the bundle means the opened case page doesn't
+  // have to carry the search-result row around or re-fetch for the
+  // header. See handleCaseSearch for the search-side counterpart.
+  const firstName = contact.firstName || "";
+  const lastName = contact.lastName || "";
+  const contactName = (contact.contactName
+    || [firstName, lastName].filter(Boolean).join(" ").trim()
+    || "");
+
   return {
     contactId,
     business_name: businessName(contact),
+    contact_name: contactName,
+    contact_email: contact.email || "",
     status: {
       day_since_paid_297: daysSincePaid297,
       target_days_for_first_draft: 5,

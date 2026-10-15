@@ -630,9 +630,22 @@ describe("GET /asksolomon/case — route reachability (Codex P1 on #94)", () => 
     // "Ask Solomon" app. The nav must declare BGA Copilot as the active
     // tab (aria-current="page") and expose a Solomon Lab link that points
     // back at /asksolomon so the token-in-sessionStorage carries across.
+    //
+    // The active-tab marker is a <span>, not an <a> — Codex P2 on #124:
+    // an <a href> with pointer-events:none is still keyboard-focusable
+    // and Enter follows the href, reloading the current route and
+    // discarding the loaded case. A <span> has no href to activate.
     assert.match(body, /Ask Solomon · BGA Copilot/);
-    assert.match(body, /class="active" aria-current="page">BGA Copilot</);
+    assert.match(body, /<span class="active" aria-current="page">BGA Copilot<\/span>/);
     assert.match(body, /href="\/asksolomon">Solomon Lab</);
-    assert.match(body, /Load a case/);
+    // Search landing — PR 125. Replaces the paste-a-contactId loader
+    // with a case picker; the raw-ID loader is preserved behind an
+    // Advanced disclosure for support and debug.
+    assert.match(body, /Find a client/);
+    assert.match(body, /id="case-search"/);
+    assert.match(body, /Recently opened/);
+    assert.match(body, /Active BGA cases/);
+    assert.match(body, /Advanced — load by contact ID/);
+    assert.match(body, /id="contact-id"/);
   });
 });

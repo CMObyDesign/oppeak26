@@ -31,14 +31,15 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
      other route. CONSOLE_EMBED_TOKEN in sessionStorage carries across
      same-origin navigation (both routes read asksolomon_password). */
   .app-nav { display: flex; gap: 4px; margin-left: 24px; margin-right: auto; }
-  .app-nav a {
+  .app-nav a, .app-nav span.active {
+    display: inline-block;
     padding: 6px 14px; border-radius: 6px; font-size: 13px; font-weight: 500;
     color: #6b7280; text-decoration: none; border: 1px solid transparent;
   }
   .app-nav a:hover { background: #f3f4f6; color: #1a1a1a; }
-  .app-nav a.active {
+  .app-nav span.active {
     background: #fef3c7; color: #92400e; border-color: #fde68a;
-    cursor: default; pointer-events: none;
+    cursor: default;
   }
   button, .btn {
     padding: 8px 14px; border-radius: 6px; border: 1px solid #d1d5db;
@@ -282,7 +283,11 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
   </div>
   <nav class="app-nav">
     <a href="/asksolomon/case">BGA Copilot</a>
-    <a href="/asksolomon" class="active" aria-current="page">Solomon Lab</a>
+    <!-- Active tab is a <span>, not an <a> — Codex P2 on #124: an <a href>
+         with pointer-events:none is still keyboard-focusable and Enter
+         follows the href, which reloads the current route and loses the
+         loaded case state. A <span> has no href to activate. -->
+    <span class="active" aria-current="page">Solomon Lab</span>
   </nav>
   <div class="topbar-right">
     <span id="connection-status" class="run-status"></span>
@@ -679,7 +684,20 @@ function logout() {
 function getPassword() { return sessionStorage.getItem(PASSWORD_KEY) || ""; }
 // True when the console was loaded via ?token=... (embedded iframe mode).
 // In embed mode, we NEVER auto-reload on 401 — that would infinite-loop the iframe.
-function isEmbedMode() { return new URLSearchParams(window.location.search).has("token"); }
+//
+// Sticky: once this session has ever been embedded (?token on first load),
+// the flag persists in sessionStorage so same-origin navigation to the
+// BGA Copilot tab and back — which drops the query string — doesn't
+// toggle embed-mode off and cause handleAuthFailure() to wipe the
+// password and reload to the gate.
+//   - Codex P2 on #124: without this, Lab → Case → Lab lost embed-mode
+//     and a subsequent 401 broke the embedded iframe.
+var EMBED_FLAG_KEY = "asksolomon_embed_mode";
+function isEmbedMode() {
+  if (new URLSearchParams(window.location.search).has("token")) return true;
+  try { return sessionStorage.getItem(EMBED_FLAG_KEY) === "1"; }
+  catch { return false; }
+}
 // Guarded 401 handler: reloads in normal mode, toasts (once) in embed mode.
 var __authErrorShown = false;
 function handleAuthFailure() {
@@ -703,7 +721,15 @@ window.addEventListener("DOMContentLoaded", () => {
   var embedToken = urlParams.get("token");
   if (embedToken) {
     sessionStorage.setItem(PASSWORD_KEY, embedToken);
-    // Optional: hide the topbar controls (logout / export / import) in embed mode
+    // Mark this session as embedded so same-origin navigation to the
+    // BGA Copilot tab and back preserves embed-mode even without the
+    // query string — see isEmbedMode() for the Codex-P2-on-#124 note.
+    try { sessionStorage.setItem(EMBED_FLAG_KEY, "1"); } catch {}
+  }
+  // Hide topbar controls (logout / export / import) in embed mode.
+  // This runs on every load so a Lab→Case→Lab navigation (which drops
+  // ?token) still hides them when the sticky flag is set.
+  if (isEmbedMode()) {
     var topbarRight = document.querySelector(".topbar-right");
     if (topbarRight) topbarRight.style.display = "none";
   }
