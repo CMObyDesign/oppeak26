@@ -626,7 +626,13 @@ describe("GET /asksolomon/case — route reachability (Codex P1 on #94)", () => 
     const ct = res.headers.get("Content-Type") || "";
     assert.ok(ct.includes("text/html"), `Content-Type: ${ct}`);
     const body = await res.text();
-    assert.match(body, /BGA Case View/);
+    // The BGA Copilot page is the /asksolomon/case half of the two-tab
+    // "Ask Solomon" app. The nav must declare BGA Copilot as the active
+    // tab (aria-current="page") and expose a Solomon Lab link that points
+    // back at /asksolomon so the token-in-sessionStorage carries across.
+    assert.match(body, /Ask Solomon · BGA Copilot/);
+    assert.match(body, /class="active" aria-current="page">BGA Copilot</);
+    assert.match(body, /href="\/asksolomon">Solomon Lab</);
     assert.match(body, /Load a case/);
   });
 });
