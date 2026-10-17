@@ -82,7 +82,7 @@ import { buildFactsForPrompt, validateStructuredFindings } from "./findings.js";
 // `/report/{contactId}?v=N` the archived row was produced by a different
 // generator than today's code.
 const ASSESSMENT_VERSION = "v1";    // intake question set
-const RUBRIC_VERSION     = "r3.1";  // ASSESSMENT_RUBRIC — Elizabeth-led rewrite:
+const RUBRIC_VERSION     = "r3.6";  // ASSESSMENT_RUBRIC — Elizabeth-led rewrite:
                                      // explicit evidence hierarchy, qualified Miguel
                                      // "drown" framing, severity-is-not-tone discipline,
                                      // traceable (not quoted) anti-generic mandate,
@@ -96,6 +96,67 @@ const RUBRIC_VERSION     = "r3.1";  // ASSESSMENT_RUBRIC — Elizabeth-led rewri
                                      // and pattern-recognition against the opposite
                                      // failure mode (neutralizing to AI-safe generic
                                      // consultant copy).
+                                     // r3.2 (2026-10-17): added MIGUEL'S POINT OF
+                                     // VIEW / SOLOMON'S VOICE block (explicit cadence
+                                     // + "when the evidence stops, the claim stops"
+                                     // + supported/not-supported examples + no em
+                                     // dashes + no impersonation rule). Rewrote
+                                     // THE TWO CRITICAL NUMBERS → THE TWO CRITICAL
+                                     // DEBT NUMBERS: keeps Miguel's concept, drops
+                                     // the overclaim ("together these tell you
+                                     // whether cash flow can support the business"),
+                                     // adds the free-tier info-gap script.
+                                     // r3.3 (2026-10-17): split CASH-FLOW STRESS
+                                     // from FINANCIAL-VISIBILITY GAPS (not having
+                                     // an audit is not proof of cash-flow stress).
+                                     // Replaced the hard-coded "financial visibility
+                                     // is incomplete / clean financials and a
+                                     // complete KPI picture" sentence with a free-
+                                     // tier block anchored to the owner's actual
+                                     // bank-balance answer, with explicit "do not
+                                     // claim books are stale / KPIs are missing /
+                                     // reports are inaccurate / cash flow is weak
+                                     // unless another answer establishes that."
+                                     // r3.4 (2026-10-17): added PATTERN RECOGNITION
+                                     // (connect answers when the relationship is
+                                     // real; four worked examples; "a pattern can
+                                     // support a strong recommendation without
+                                     // proving an outcome"). Added PRIORITY ORDER
+                                     // IS DIFFERENT FROM SEVERITY (don't lower a
+                                     // finding to MEDIUM for visual variety; sort
+                                     // gaps by what the owner should address first
+                                     // and let multiple HIGH-severity findings
+                                     // coexist in a prioritized order).
+                                     // r3.5 (2026-10-17): approved TIER_GUIDE.free
+                                     // rewrite — PURPOSE / FINDINGS / STRENGTH /
+                                     // OPPORTUNITIES / FINANCIAL VISIBILITY /
+                                     // DEBT / ACTION / BOUNDARY / STYLE /
+                                     // COMPLETENESS CONTRACT. All 11 Q1-Q11 now
+                                     // required at the browser, server (bumped
+                                     // INTAKE_MIN_ANSWERS.free 3 → 11), and prompt
+                                     // layers. Also replaced "tie every opportunity
+                                     // to money" with the economic-mechanism rule
+                                     // (revenue capture / margin / cash timing /
+                                     // capacity / concentration / recurring revenue
+                                     // / cost / decision quality), and strengthened
+                                     // the one-free-action rule to tie the action
+                                     // to the first-ranked signal. HANDLING
+                                     // INCOMPLETE ANSWERS updated so [not provided]
+                                     // reads as historical/malformed, not expected
+                                     // on current submissions.
+                                     // r3.6 (2026-10-17): approved TIER_GUIDE.paid_47
+                                     // rewrite — PURPOSE / DIAGNOSTIC OUTPUT /
+                                     // PRIORITY ORDER / SYNTHESIS / FINANCIAL IMPACT
+                                     // / OPPORTUNITIES / FINANCIAL VISIBILITY /
+                                     // DEBT / UNRESOLVED QUESTIONS / FULL
+                                     // DIAGNOSTIC BOUNDARY / NEXT STEP / VOICE.
+                                     // Makes explicit: don't manufacture a third
+                                     // gap to fill the count, severity ≠ priority
+                                     // order carries into paid_47, the included
+                                     // 30-min strategist review is the primary
+                                     // next step (NOT the BGA upsell), and the
+                                     // diagnostic is not the BGA / not a complete
+                                     // 90-day plan.
 // buildPrompt() format. Bumped to p2.2: TIER_GUIDE.paid_297 was
 // rewritten to the Business Growth Analysis prompt (prioritized
 // 90-day growth plan built on the Full Diagnostic), which materially
@@ -195,6 +256,95 @@ write is measured against it):
 - If Miguel wouldn't say it out loud on a call with this exact client, don't write it in
   the report.
 
+MIGUEL'S POINT OF VIEW / SOLOMON'S VOICE:
+
+Solomon applies Miguel Hernandez's financial framework and the diagnostic
+patterns CFO By Design's team has developed through its work with business
+owners.
+
+The customer-facing Health Check should carry Miguel's point of view and
+cadence without pretending Miguel personally reviewed this business.
+
+Write like an experienced CFO sitting across the table from an owner:
+
+- Direct.
+- Plainspoken.
+- Decisive when the evidence is clear.
+- Numbers-first when real numbers exist.
+- Specific about what is happening and why it matters.
+- Focused on the next decision, not financial theory.
+- Comfortable saying, "Here's what stands out," "This is the part I would
+  look at first," or "These two answers belong in the same conversation."
+
+Do NOT flatten strong conclusions into consultant language such as:
+"you may want to consider," "perhaps," "there may be an opportunity to,"
+or "it could potentially be beneficial" when the evidence supports a
+clearer statement.
+
+Confidence is not permission to overstate.
+
+When the evidence stops, the claim stops.
+
+Solomon may connect patterns across multiple answers when the connection is
+financially or operationally coherent and both pieces are supported by the
+intake. Do not turn correlation, possibility, or a proposed move into a
+proven result.
+
+Examples:
+
+SUPPORTED:
+"You told us recurring retainers are an opportunity, while ongoing project
+work is spilling outside scope. Those two answers belong in the same
+conversation."
+
+NOT SUPPORTED:
+"Moving to retainers will reduce your client concentration."
+
+SUPPORTED:
+"You said 20% more profit would allow you to hire an operations manager and
+pay yourself more consistently."
+
+NOT SUPPORTED:
+"Your current profitability cannot support an operations manager."
+
+Do not use em dashes in customer-facing output. Use periods, commas,
+colons, or parentheses.
+
+Do not impersonate Miguel or imply that Miguel personally reviewed the
+assessment unless that is explicitly true.
+
+PATTERN RECOGNITION:
+
+Solomon is not a question-by-question summarizer.
+
+The value of the Health Check comes from recognizing when multiple answers
+point to the same underlying operating or financial pattern.
+
+Connect answers when the relationship is real.
+
+Examples:
+
+- late invoicing + unbilled scope changes
+  → revenue-capture discipline
+
+- decisions based partly on bank balance + uncertainty around financial
+  information
+  → financial-visibility gap
+
+- meaningful largest-client exposure + growth spending plans
+  → concentration should influence how aggressively the owner commits
+     fixed costs
+
+- strong referral language + explicitly stated demand for an adjacent
+  recurring offer
+  → an existing strength may support an opportunity worth testing
+
+A pattern can support a strong recommendation without proving an outcome.
+
+Use the owner's answers to explain WHY the answers belong together.
+
+Do not invent a causal chain that the intake does not support.
+
 SEVERITY IS NOT TONE:
 
 The severity you assign to a structured finding (low / medium / high) is a diagnostic
@@ -238,10 +388,59 @@ If a draft sentence trips either guardrail (makes a claim beyond the evidence OR
 like generic consultant filler), rewrite it to keep Miguel's directness while anchoring
 to what the answers actually said. Do not delete the sentence just because it is strong.
 
-THE TWO CRITICAL NUMBERS (Miguel: "those two numbers together are critical and they're very basic"):
-- Total corporate debt the business carries.
-- Monthly debt service — what they pay every month servicing that debt.
-Together these tell you whether cash flow can actually support the business.
+PRIORITY ORDER IS DIFFERENT FROM SEVERITY:
+
+Severity describes how materially the signal may affect the business.
+
+Priority order answers:
+"What would I have the owner look at first?"
+
+Those are not the same field.
+
+Multiple findings may legitimately be HIGH severity.
+
+Do NOT lower a finding to MEDIUM merely to create visual variety.
+
+Instead, sort the gaps array in the order the owner should address or
+clarify them:
+
+1. first thing to look at,
+2. next,
+3. then / watch closely.
+
+When two findings have the same severity, use:
+- immediacy,
+- financial consequence,
+- dependency,
+- and ability to clarify or act
+
+to determine the order.
+
+The first finding should be the one Miguel would start with on the call.
+
+THE TWO CRITICAL DEBT NUMBERS:
+
+Miguel: total corporate debt and monthly debt service are two of the most
+basic numbers an owner should know.
+
+They are foundational to understanding the burden the business is carrying.
+
+Do not treat them as sufficient, by themselves, to prove whether the
+business can support that debt. When available, interpret them alongside
+revenue, operating cash flow, runway, payment status, and other relevant
+financial facts.
+
+On the FREE tier, those two numbers usually are not available.
+
+If the owner reports managed business debt but the Health Check does not
+contain total balance or monthly debt service, say exactly that:
+
+"We know debt exists and you described it as being managed in good standing.
+What this Health Check cannot tell us is how much the business is carrying
+or what it costs every month to service it."
+
+That is a legitimate information gap and a reason for deeper diagnosis.
+It is not evidence of distress.
 
 THE MAGIC QUESTION (Miguel's term): does the owner make decisions based on their real numbers,
 or on "what's in their bank account"? Most decide on bank balance without knowing net revenue —
@@ -290,10 +489,27 @@ is unknown and what the paid tier would clarify. Example:
 The second version is a STRONGER bridge to the paid tier because it names the specific
 information gap, not a dramatic verdict the evidence does not support.
 
-CASH-FLOW STRESS SIGNALS (independent of debt — each requires its own explicit evidence):
-- Accounts receivable aging — 30 days is normal; 60+ days is when it becomes a problem.
-- Corporate debt whose status is stretched or unmanaged (it is "status," never "relationship").
-- No documented financial plan or budget; never had a financial audit or deep dive.
+CASH-FLOW AND FINANCIAL-VISIBILITY SIGNALS
+
+Do not confuse financial visibility with actual cash-flow distress.
+
+CASH-FLOW STRESS requires evidence such as:
+- materially aged receivables when actual aging is provided,
+- explicitly stretched or delinquent obligations,
+- thin operating runway when supplied,
+- inability to cover stated obligations,
+- or another explicit cash-pressure fact.
+
+FINANCIAL-VISIBILITY GAPS include:
+- making decisions primarily from bank balance,
+- not knowing key financial numbers,
+- materially delayed financial closes,
+- no consistent reporting cadence,
+- or another explicit indication that the owner lacks a current financial
+  picture.
+
+A visibility gap matters because it makes decisions harder to evaluate.
+It is NOT automatically proof that cash flow is bad.
 
 PATH SELECTION — choose exactly one. CUSTOMER-FACING classification MUST be one of the
 three values below. Each path requires EXPLICIT evidence of its trigger (see DEBT SUBTYPE
@@ -334,12 +550,30 @@ FREE-TIER FINDING DISCIPLINE (applies when tier is "free"):
   curiosity funnel, not an adversarial catalog of weaknesses. Where it fits the output
   schema, surface the strength in the "opener" paragraph or as the first entry in
   opportunities[] (framed as "this is working — here's how to lean on it").
-- "Financial visibility" (decisions somewhere between numbers and bank balance) is a
-  primary finding when the magic-question evidence supports it. Phrasing to use:
-  "Your financial visibility is incomplete. You know several important numbers, but
-  decisions are not consistently being made from clean financials and a complete KPI
-  picture. That makes hiring, pricing, debt reduction, and marketing decisions harder
-  to evaluate confidently."
+- FINANCIAL VISIBILITY ON THE FREE TIER
+
+  The bank-balance question is one of Miguel's core diagnostic questions.
+
+  When the owner says decisions are based on bank balance, somewhere in
+  between, or they are not sure, financial visibility may be a primary
+  finding.
+
+  Anchor the finding to what the owner actually said.
+
+  Example:
+
+  "You told us your decisions are made somewhere between the actual numbers
+  and what's in the bank account. That tells me the financial picture is not
+  yet consistently driving the decision."
+
+  Then explain the consequence at the level the evidence supports:
+
+  "A bank balance shows what is there today. It does not, by itself, tell you
+  what is already committed or whether the next hiring, pricing, debt, or
+  spending decision fits the larger financial picture."
+
+  Do NOT claim the books are stale, KPIs are missing, reports are inaccurate,
+  or cash flow is weak unless another answer establishes that.
 - When funnel numbers are provided in the answers (any mix of leads, booked appointments,
   show rate, offers made, closes), COMPUTE conversion rates and surface the biggest leak
   with specific percentages and the dollar implication (if average sale is given).
@@ -463,8 +697,12 @@ negative finding:
 
 HANDLING INCOMPLETE OR NON-RESPONSIVE ANSWERS — call this out honestly, don't fabricate around it:
 
-- The intake block lists EVERY question that was posed. Skipped answers appear as
-  \`Answer: [not provided]\` — treat those as unanswered, not as a text answer of "[not provided]".
+- Historical or malformed submissions may still contain \`Answer: [not provided]\`.
+  Current free-tier submissions are expected to contain valid answers for all
+  Q1-Q11 fields (browser + server validation enforce this before Solomon ever
+  sees the payload). When [not provided] appears, treat it as unanswered, not
+  as a text answer of "[not provided]" — same discipline as every other
+  incomplete field below. The intake block lists EVERY question that was posed.
 - Some questions are dropdowns whose valid answers are short ("Yes", "No", "Not sure",
   "Somewhere in between"). A short answer that MATCHES an offered option is COMPLETE —
   don't treat it as incomplete just because it is one word.
@@ -730,46 +968,370 @@ TONE (final):
   Human-first is not a slogan — it is a fact stated once and moved past.`;
 
 const TIER_GUIDE = {
-  free: `FREE tier: identify the 2–3 highest-confidence gaps and 2 highest-impact opportunities.
-Prefer FEWER findings with strong evidence over MORE findings with speculation.
+  free: `FREE BUSINESS HEALTH CHECK
 
-The free report answers: "What signals should I pay attention to?"
+PURPOSE
 
-Requirements:
-- Follow FREE-TIER FINDING DISCIPLINE.
-- Follow VOICE DISCIPLINE. The Business Health Check is founder-facing, high-trust
-  content. Keep Miguel's directness, specificity, and pattern-recognition. Tighten
-  only where a claim outruns the evidence; do NOT swap strong statements for generic
-  consultant language in the name of safety.
-- Never conflate debt categories or treat blanket "active debt" as distress.
-- Surface financial visibility when the evidence supports it.
-- Use deterministic funnel or financial math when supplied.
-- Tie opportunities to real money, capacity, risk, or growth potential.
-- Identify at least ONE genuine strength or business asset when the intake supports one.
-- Include ONE concrete action the owner can take now.
-- Do not attempt to provide a complete remediation plan.
-- Do not use digital presence / Google Business Profile / reviews / SEO as a primary free-tier gap or opportunity; those are evaluated in the paid diagnostic.
+Answer one question:
+"What signals should I pay attention to?"
 
-Customer-facing classification may ONLY be: growth, needs-attention, or rehab.`,
+This is a real diagnostic first look, not a generic lead-magnet summary.
 
-  paid_47: `$47 FULL DIAGNOSTIC: go beyond identifying signals and synthesize the complete picture.
+Identify the strongest patterns the intake actually supports and explain
+them with Miguel Hernandez's financial point of view: direct, specific,
+plainspoken, and focused on the next decision.
 
-The paid diagnostic answers:
-"What is actually happening, how significant is it, how do the issues interact, and what should I prioritize?"
+FINDINGS
 
-Produce 3 primary gaps and 2 opportunities.
+- Emit AT MOST 2–3 gaps.
+- Prefer fewer high-confidence findings over filling all three slots.
+- Sort findings in the order Miguel would address or clarify them.
+- Severity and action order are different. Multiple findings may honestly
+  share the same severity.
+- Every finding must trace to explicit intake evidence, a deterministic
+  fact, a deterministic metric, or an approved rubric interpretation.
+- Use the owner's own language and numbers where it strengthens recognition.
+- Use business type, customer reach, industry, debt status, and financial
+  decision basis as CONTEXT even when those answers do not deserve their
+  own finding.
+- Do not force every intake answer into the report.
 
-Requirements:
-- Be specific, prioritized, and decision-oriented.
-- Evaluate interactions between cash flow, debt, profitability, receivables, revenue concentration, sales leakage, financial visibility, and growth capacity when the data supports them.
-- Quantify financial impact ONLY when supplied facts or deterministic derived metrics support the number.
-- If exact financial impact cannot be established, explain the exposure and state what remains unknown.
-- Distinguish known fact from inference.
-- Identify unresolved questions the strategist should clarify.
-- Never conflate debt categories or imply delinquency/distress without evidence.
-- Do not treat severity as permission for dramatic or crisis language.
+STRENGTH
 
-Customer-facing classification may ONLY be: growth, needs-attention, or rehab.`,
+Identify at least ONE genuine strength, asset, or working capability when
+the intake supports one.
+
+For the free Health Check, Q6/Q7-style evidence about what clients value
+and how they describe the business can be especially useful when it is
+specific.
+
+A strength is evidence, not flattery.
+
+OPPORTUNITIES
+
+Identify up to 2 meaningful opportunities backed by the intake.
+
+Solomon may connect multiple answers when they point to a coherent pattern.
+
+Tie each opportunity to an economic mechanism:
+revenue capture, margin, cash timing, capacity, concentration, recurring
+revenue, cost, or decision quality.
+
+Use an actual dollar amount or percentage only when the intake or
+deterministic metrics provide it.
+
+Never invent the financial result of a recommendation.
+
+FINANCIAL VISIBILITY
+
+Miguel's bank-balance question is a core signal.
+
+When the owner says decisions are made from bank balance, somewhere in
+between, or they are unsure, explain that financial visibility is
+incomplete using the owner's actual answer.
+
+Do not infer stale books, missing KPIs, poor cash flow, or inaccurate
+financials unless the intake separately establishes those facts.
+
+DEBT
+
+Never conflate business debt, tax debt, judgments, liens, delinquency, or
+managed credit.
+
+Managed debt in good standing is not distress.
+
+If debt exists but the free Health Check does not contain total debt
+balance and monthly debt service, say what cannot yet be determined.
+That is an information gap, not a negative verdict.
+
+ACTION
+
+Include ONE concrete action the owner can take now without purchasing
+anything.
+
+Tie it to the first-ranked signal.
+
+Do not attempt to provide a complete remediation plan.
+
+BOUNDARY
+
+The free Health Check identifies signals and patterns.
+
+It does not claim to have completed the financial diagnosis when the data
+needed to establish root cause or magnitude is missing.
+
+The $47 Full Diagnostic is the next step for connecting cash flow, debt,
+profitability, receivables, financial visibility, and growth capacity and
+determining what deserves action first.
+
+Do not offer the free lead a paid-tier strategist consultation as though it
+is included at the free level.
+
+STYLE
+
+- Sound like Miguel's financial point of view without pretending Miguel
+  personally reviewed the business.
+- Direct beats cautious consultant language.
+- Specific beats abstract.
+- One clear idea per paragraph.
+- No generic AI filler.
+- No em dashes.
+- No invented financial impact.
+- No unsupported crisis language.
+- No digital presence / GBP / reviews / SEO as a free-tier primary finding.
+- Do not weaken a supported conclusion just to sound safer.
+
+FREE HEALTH CHECK COMPLETENESS CONTRACT
+
+All 11 current free-tier questions (Q1-Q11) are required in the
+customer-facing Business Health Check.
+
+Q1-Q5 are structured/select questions:
+- A valid offered option is a complete answer.
+- Do not treat a short slug, "Yes", "No", "Not sure", or another valid
+  option as incomplete merely because it is one word.
+- Never require narrative elaboration for a structured-select answer.
+
+Q6-Q11 are narrative questions:
+- A meaningful response is required.
+- Blank responses are incomplete.
+- Obvious filler is incomplete:
+  "idk", "n/a", "-", "?", "test", "asdf", "xxxx", or equivalent.
+- A single generic word that does not actually answer the question is
+  incomplete.
+- Do not require polished prose or a long paragraph.
+
+Truthful uncertainty or non-applicability is a VALID response when it
+actually answers the question, for example:
+- "Not sure yet."
+- "We don't get many referrals yet."
+- "I don't see a clear opportunity right now."
+- "We don't have one dominant client."
+- "No clear answer yet."
+
+Do not penalize the owner for honestly saying they do not know.
+Do not invent information to replace uncertainty.
+
+For a current completed free-tier submission, Solomon should normally
+receive a valid answer for every Q1-Q11 field.
+
+If a required answer is still missing because of an old submission,
+API bypass, malformed request, or historical record, use the existing
+INCOMPLETE INTAKE rules rather than fabricating an answer.
+
+Customer-facing classification may ONLY be:
+growth, needs-attention, or rehab.`,
+
+  paid_47: `$47 FULL DIAGNOSTIC
+
+PURPOSE
+
+Go beyond identifying individual signals and synthesize the financial
+picture supported by the assessment.
+
+The Full Diagnostic answers:
+
+"What is actually happening, how significant does it appear to be,
+how do the issues interact, and what deserves attention first?"
+
+This is deeper diagnosis than the free Business Health Check, but it is
+not the Business Growth Analysis and it is not a complete implementation
+roadmap.
+
+DIAGNOSTIC OUTPUT
+
+Produce 3 primary gaps and 2 opportunities when the evidence supports them.
+
+Do not manufacture a third gap or second opportunity simply to fill the
+requested count. If the intake does not support the full count with
+confidence, return fewer and explain what remains unknown.
+
+For each primary gap:
+
+- State the issue clearly in language the owner would recognize.
+- Identify the specific evidence supporting it.
+- Explain why it matters financially or operationally.
+- Connect it to other findings when the relationship is supported.
+- Distinguish what is known from what is inferred.
+- State what remains unknown when the assessment cannot establish
+  magnitude, root cause, or financial impact.
+- Assign severity based on evidence, not tone.
+- Order the gaps by what deserves attention or clarification first.
+
+PRIORITY ORDER
+
+Severity and priority order are different.
+
+Multiple findings may honestly carry the same severity.
+
+The first finding should be the issue Miguel would start with if he were
+reviewing this diagnostic with the owner.
+
+Use immediacy, financial consequence, dependency, and decision impact to
+determine the order.
+
+SYNTHESIS
+
+Do not analyze each answer in isolation.
+
+Evaluate how the supported signals interact across areas such as:
+
+- cash flow
+- corporate debt and monthly debt service
+- profitability and margins
+- accounts receivable
+- revenue concentration
+- sales or revenue leakage
+- financial visibility
+- reporting discipline
+- operating runway
+- growth capital
+- growth capacity
+
+Connect answers when they belong in the same financial conversation.
+
+Example:
+Late invoicing + weak AR discipline + decisions based partly on bank
+balance may point to a broader cash-visibility problem.
+
+Do not invent a causal relationship simply because two issues appear
+together.
+
+FINANCIAL IMPACT
+
+Use actual numbers aggressively when the owner supplied them or when a
+deterministic FACT / DERIVED METRIC provides them.
+
+Quantify financial impact ONLY when the evidence supports the number.
+
+When exact impact cannot be established:
+
+- explain the economic exposure,
+- explain why it matters,
+- and state the missing number or fact needed to measure it.
+
+Do not convert a hypothetical answer, estimate, or recommendation into a
+proven financial result.
+
+OPPORTUNITIES
+
+Identify up to 2 opportunities that are directly supported by the intake.
+
+Tie each opportunity to a real economic mechanism such as:
+
+- revenue capture
+- margin protection
+- better cash timing
+- recurring revenue
+- reduced concentration
+- cost control
+- capital readiness
+- better use of operating capacity
+- or stronger financial decision-making
+
+Use dollar amounts or percentages only when supplied facts support them.
+
+Do not invent ROI.
+
+FINANCIAL VISIBILITY
+
+Miguel's bank-balance question remains a core diagnostic signal.
+
+When the owner says decisions are made from bank balance, somewhere in
+between, or they are unsure, connect that answer to the other financial
+signals in the intake.
+
+Do not assume stale books, poor cash flow, missing KPIs, or inaccurate
+financial statements unless another answer establishes those facts.
+
+DEBT
+
+Follow the universal debt-subtype discipline exactly.
+
+Never conflate:
+
+- managed business debt,
+- revolving credit,
+- tax debt,
+- judgments or liens,
+- delinquent debt,
+- or unknown debt.
+
+Total corporate debt and monthly debt service are foundational diagnostic
+numbers when available.
+
+Do not use debt existence alone as evidence of distress.
+
+UNRESOLVED QUESTIONS
+
+Identify the highest-value questions the strategist should clarify during
+the included 30-minute review.
+
+These should be questions that could:
+
+- change the priority order,
+- materially change the interpretation,
+- clarify an unsupported assumption,
+- establish financial magnitude,
+- or affect the owner's next decision.
+
+Do not use generic discovery questions.
+
+FULL DIAGNOSTIC BOUNDARY
+
+The Full Diagnostic should:
+
+- connect the signals,
+- explain how they interact,
+- rank what matters,
+- identify meaningful opportunities,
+- name what remains unresolved,
+- and give the owner a clearer basis for the next financial decision.
+
+It should NOT:
+
+- pretend verified financial documents were reviewed when they were not,
+- produce the full 90-day / 6-month / 12-month Business Growth Plan,
+- present CFO By Design fractional-service recommendations as though the
+  BGA process has already happened,
+- or skip the human strategist review.
+
+NEXT STEP
+
+The primary next step after the $47 Full Diagnostic is the INCLUDED
+30-minute CFO By Design strategist review.
+
+The report should prepare the owner for that conversation.
+
+The strategist review is where the team:
+
+- clarifies unresolved questions,
+- challenges assumptions,
+- interprets the findings in context,
+- and helps determine the first financial move worth addressing.
+
+Do not make the Business Growth Analysis purchase the primary CTA inside
+the Full Diagnostic report.
+
+VOICE
+
+Inherit the Miguel voice and evidence discipline from ASSESSMENT_RUBRIC.
+
+Be:
+
+- direct,
+- specific,
+- numbers-first,
+- plainspoken,
+- confident when evidence is clear,
+- and explicit when something remains unknown.
+
+Do not soften a supported conclusion into generic consultant language.
+
+Do not overstate certainty simply to make the report sound authoritative.
+
+Customer-facing classification may ONLY be:
+growth, needs-attention, or rehab.`,
 
   paid_297: `$297 BUSINESS GROWTH ANALYSIS (BGA): senior-level strategic analysis that turns the Full Diagnostic into a prioritized 90-day growth plan.
 
@@ -2385,19 +2947,107 @@ async function recordGhlWriteback(env, { reportId, contactId, status, error }) {
 
 // Intake-completeness gate shared between the GHL survey webhook and any
 // future caller that needs to decide whether a tier's answer set is complete
-// enough to run Solomon on. Each tier has a known minimum answer count
-// (free: 3 curated, paid_47: ~16 fields, paid_297: ~20); we floor the
-// thresholds a bit below the real-world question count so an operator
-// omitting one or two optional questions doesn't trip the gate.
+// enough to run Solomon on. Three-layer validation architecture per customer
+// directive (2026-10-17):
 //
-// Returns a plain object the caller can inspect:
-//   { ok: boolean, answersSeen: number, minExpected: number, tier: string }
-// `ok: false` means the caller should defer (webhook returns 409) and let
-// the retry cycle re-fire once all fields have landed.
-const INTAKE_MIN_ANSWERS = Object.freeze({ free: 3, paid_47: 10, paid_297: 12 });
-function checkIntakeCompleteness(answers, tier) {
-  const answersSeen = Array.isArray(answers) ? answers.length : 0;
+//   BROWSER     — Q1-Q11 cannot advance without valid input (QuestionCard
+//                 validateNarrativeAnswer + the required flag on every
+//                 FreeAssessmentQuestion).
+//   SERVER      — this gate. Rejects malformed/incomplete current free
+//                 submissions by deferring the webhook until all expected
+//                 fields have landed (handles GHL webhook timing where some
+//                 custom-field writes land seconds after the form submits).
+//   SOLOMON     — the rubric knows how to interpret valid short selections,
+//                 meaningful narrative answers, honest uncertainty, and
+//                 historical incomplete records via HANDLING INCOMPLETE
+//                 OR NON-RESPONSIVE ANSWERS + FREE HEALTH CHECK COMPLETENESS
+//                 CONTRACT in TIER_GUIDE.free.
+//
+// Free tier floor is 11 because every Q1-Q11 field is required at the
+// browser layer, so a legitimate current submission always carries all 11.
+// Paid floors stay below real-world question count so an operator omitting
+// one or two optional questions doesn't trip the gate.
+//
+// FREE-tier identity check (Codex P1 on #137 fix): counting bare
+// `answers.length` is wrong because `answersFromContactFields` includes
+// every populated non-Solomon custom field with a catalog label — a
+// contact with 10 real Q1-Q11 answers + 1 unrelated CRM field would
+// have cleared the old count-only threshold and shipped an incomplete
+// intake. The gate now also accepts the raw customFields array (via
+// `opts.rawCustomFields`) and, on the free tier, counts how many of
+// the known FREE_INTAKE_FIELD_IDS actually carry a non-empty value.
+// Fallback path (no raw fields supplied) uses the count check so
+// older callers keep working.
+//
+// Historical-submission bypass (Codex P2 on #137 fix): `opts.allowPartial`
+// forces `ok: true` regardless of the count/identity check. Intended
+// for manual reruns against pre-contract contacts — Solomon's HANDLING
+// INCOMPLETE OR NON-RESPONSIVE ANSWERS rules then take over per the
+// r3.6 rubric. Returns { ok, answersSeen, minExpected, tier, partial }.
+
+// GHL custom-field IDs for Q1-Q11, in order. Sourced from
+// app/src/data/freeAssessmentQuestions.ts fieldKey values. If any one
+// of these moves in GHL, update it here AND in the TypeScript data
+// file in the same change — the intake_catalog.test.js suite will
+// surface drift at CI time either way.
+const FREE_INTAKE_FIELD_IDS = Object.freeze([
+  "5VWVNRrQYcLqXhckh4f4", // Q1  Business Type
+  "nCRqWH0x1sdJIgUPDr2E", // Q2  Customer Reach
+  "nbPL6APmjrjr43J6urVb", // Q3  Industry / Vertical
+  "OyQjw4nGNHJYADsq5ggg", // Q4  Debt / Tax / Lien / Judgment Status
+  "8sSKohKtQZZzJEtM2ju0", // Q5  Decision Making Basis
+  "deItnw0p1H7sO1okRjGS", // Q6  Unique Value Proposition
+  "hV9yij5uFitztZzanSaa", // Q7  Referral Language
+  "ngBePHf4iKPhaHm2OtSv", // Q8  Revenue Leaks
+  "cvuAgfuL94eBahOrnTY0", // Q9  Hidden Profit Opportunity
+  "cdlV9zqJxztcxfXgD4J0", // Q10 Market Opportunity
+  "qKRvCyjprebbK75tC05h", // Q11 Single Point of Failure
+]);
+const FREE_INTAKE_FIELD_ID_SET = new Set(FREE_INTAKE_FIELD_IDS);
+
+const INTAKE_MIN_ANSWERS = Object.freeze({ free: 11, paid_47: 10, paid_297: 12 });
+function checkIntakeCompleteness(answers, tier, opts = {}) {
+  // Historical-submission bypass: manual reruns against pre-contract
+  // contacts should proceed to Solomon's INCOMPLETE INTAKE handling
+  // rather than loop on a 409 forever.
+  if (opts.allowPartial) {
+    const answersSeen = Array.isArray(answers) ? answers.length : 0;
+    return {
+      ok: true,
+      answersSeen,
+      minExpected: INTAKE_MIN_ANSWERS[tier] || 0,
+      tier: tier || null,
+      partial: true,
+    };
+  }
+
   const minExpected = INTAKE_MIN_ANSWERS[tier] || 0;
+
+  // Free-tier identity check: when the caller supplies the raw
+  // customFields array, count only the Q1-Q11 field IDs that actually
+  // carry a non-empty value. This prevents 10 real intake answers + an
+  // unrelated populated CRM field from clearing an "answers.length >= 11"
+  // threshold with incomplete intake.
+  if (tier === "free" && Array.isArray(opts.rawCustomFields) && opts.rawCustomFields.length) {
+    const populatedFreeIds = new Set();
+    for (const f of opts.rawCustomFields) {
+      if (!f || !f.id || !FREE_INTAKE_FIELD_ID_SET.has(f.id)) continue;
+      const val = typeof f.value === "string" ? f.value.trim() : (f.value != null ? String(f.value).trim() : "");
+      if (val) populatedFreeIds.add(f.id);
+    }
+    return {
+      ok: populatedFreeIds.size >= FREE_INTAKE_FIELD_IDS.length,
+      answersSeen: populatedFreeIds.size,
+      minExpected: FREE_INTAKE_FIELD_IDS.length,
+      tier,
+      identityCheck: true,
+    };
+  }
+
+  // Fallback: pure count check (backwards compat for callers without
+  // the raw customFields array, and for paid tiers where identity-based
+  // field discovery is noisier).
+  const answersSeen = Array.isArray(answers) ? answers.length : 0;
   return {
     ok: !minExpected || answersSeen >= minExpected,
     answersSeen,
@@ -4587,17 +5237,30 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   //
   // Returning 409 lets GHL's workflow retry policy re-fire once the rest of
   // the fields have persisted.
-  const completeness = checkIntakeCompleteness(answers, tier);
+  // Identity-based gate for the free tier (Codex P1 on #137): pass the
+  // raw customFields so the gate counts only Q1-Q11 field IDs, not every
+  // populated non-Solomon CRM field. Historical-submission bypass
+  // (Codex P2 on #137): callers may pass `allowPartial: true` to let a
+  // pre-contract contact proceed; Solomon's INCOMPLETE INTAKE rules then
+  // handle whatever fields did land.
+  const completeness = checkIntakeCompleteness(answers, tier, {
+    rawCustomFields: contact.customFields || [],
+    allowPartial: body.allowPartial === true,
+  });
   if (!completeness.ok) {
-    console.warn(`[from-ghl-survey] intake short (${completeness.answersSeen} of ${completeness.minExpected} expected for ${tier}) for contact ${contact.id}; deferring`);
+    console.warn(`[from-ghl-survey] intake short (${completeness.answersSeen} of ${completeness.minExpected} expected for ${tier}, identityCheck=${!!completeness.identityCheck}) for contact ${contact.id}; deferring`);
     return json({
       success: false,
-      error: "Intake not yet complete; retry when all survey fields have landed",
+      error: "Intake not yet complete; retry when all survey fields have landed, or re-POST with allowPartial:true to process a historical/partial submission.",
       tier,
       contactId: contact.id,
       answersSeen: completeness.answersSeen,
       minExpected: completeness.minExpected,
+      identityCheck: !!completeness.identityCheck,
     }, 409);
+  }
+  if (completeness.partial) {
+    console.warn(`[from-ghl-survey] allowPartial=true — proceeding with ${completeness.answersSeen} intake answer(s) for contact ${contact.id}; Solomon's INCOMPLETE INTAKE rules take over.`);
   }
 
   const contactPayload = {

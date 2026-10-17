@@ -4,6 +4,14 @@ export interface FreeAssessmentQuestion {
   type: 'select' | 'text' | 'textarea';
   title: string;
   text: string;
+  // Optional guide/hint shown inside the input (textarea placeholder or
+  // text input placeholder). Used to give owners who are stuck a nudge
+  // toward a specific example or a legitimate "I don't know yet" answer.
+  // Only set on textarea questions where the question is open-ended
+  // enough that an owner might otherwise freeze. Must be a legitimate
+  // allowed answer, not a leading one — see UNCERTAINTY IS VALID in the
+  // worker rubric.
+  placeholder?: string;
   options?: { value: string; label: string }[];
   required: boolean;
 }
@@ -116,7 +124,7 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         type: "textarea",
         title: "Unique Value Proposition",
         text: "What does your business consistently deliver that your clients say they cannot get anywhere else?",
-        required: false
+        required: true
       },
       {
         id: 7,
@@ -124,7 +132,7 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         type: "textarea",
         title: "Referral Language",
         text: "When a client refers you, what specific words or outcome do they use to describe what you did for them?",
-        required: false
+        required: true
       }
     ]
   },
@@ -137,7 +145,8 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         type: "textarea",
         title: "Revenue Leaks",
         text: "Where does revenue most often leak in your business?",
-        required: false
+        placeholder: "Give us one specific example. If you're not sure, tell us where you suspect it happens.",
+        required: true
       }
     ]
   },
@@ -150,7 +159,7 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         type: "textarea",
         title: "Hidden Profit Opportunity",
         text: "What would change in your business if you had 20% more profit on the same revenue?",
-        required: false
+        required: true
       },
       {
         id: 10,
@@ -158,7 +167,8 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         type: "textarea",
         title: "Market Opportunity",
         text: "Where do you see demand in your market that you are not yet positioned to capture?",
-        required: false
+        placeholder: "Be specific. If you don't see a clear opportunity right now, say that.",
+        required: true
       },
       {
         id: 11,
@@ -166,7 +176,8 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         type: "textarea",
         title: "Single Point of Failure",
         text: "What would happen to your business if your single largest client, revenue source, or referral channel disappeared in the next 90 days?",
-        required: false
+        placeholder: "If you don't depend heavily on any one source, tell us that.",
+        required: true
       }
     ]
   }

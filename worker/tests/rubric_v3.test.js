@@ -27,12 +27,13 @@ import {
   PROMPT_VERSION,
   ASSESSMENT_RUBRIC,
   TIER_GUIDE,
+  INTAKE_MIN_ANSWERS,
   buildPrompt,
 } from "../src/index.js";
 
 describe("Rubric v3 — version bumps", () => {
-  it("RUBRIC_VERSION is r3.1 (bumped from r3.0 when VOICE DISCIPLINE was added)", () => {
-    assert.equal(RUBRIC_VERSION, "r3.1");
+  it("RUBRIC_VERSION is r3.6 (bumped from r3.5 when the approved TIER_GUIDE.paid_47 rewrite landed)", () => {
+    assert.equal(RUBRIC_VERSION, "r3.6");
   });
 
   it("PROMPT_VERSION is p2.2 (bumped from p2.1 when TIER_GUIDE.paid_297 was rewritten for BGA)", () => {
@@ -66,6 +67,95 @@ describe("Rubric v3 — ASSESSMENT_RUBRIC content", () => {
     assert.match(ASSESSMENT_RUBRIC, /guardrails control truthfulness, not personality/i);
     assert.match(ASSESSMENT_RUBRIC, /Miguel's voice \+ Solomon's evidence discipline/);
     assert.match(ASSESSMENT_RUBRIC, /NOT: AI-safe generic financial copy/);
+  });
+
+  it("carries MIGUEL'S POINT OF VIEW / SOLOMON'S VOICE block (2026-10-17 round-2 directive)", () => {
+    // Explicit Miguel voice description — cadence, write-like-a-CFO stance,
+    // supported/not-supported examples, no em dashes, no impersonation.
+    // Locked here so this block can't be stripped or softened.
+    assert.match(ASSESSMENT_RUBRIC, /MIGUEL'S POINT OF VIEW \/ SOLOMON'S VOICE/);
+    assert.match(ASSESSMENT_RUBRIC, /Write like an experienced CFO sitting across the table from an owner/);
+    assert.match(ASSESSMENT_RUBRIC, /Confidence is not permission to overstate/);
+    assert.match(ASSESSMENT_RUBRIC, /When the evidence stops, the claim stops/);
+    assert.match(ASSESSMENT_RUBRIC, /Do not use em dashes in customer-facing output/);
+    assert.match(ASSESSMENT_RUBRIC, /Do not impersonate Miguel/);
+    // Both halves of the supported/not-supported example pair must be present.
+    assert.match(ASSESSMENT_RUBRIC, /Those two answers belong in the same[\s\S]+?conversation/);
+    assert.match(ASSESSMENT_RUBRIC, /Moving to retainers will reduce your client concentration/);
+  });
+
+  it("separates CASH-FLOW STRESS from FINANCIAL-VISIBILITY GAPS (2026-10-17 round-3 directive)", () => {
+    // Not having an audit is not proof of cash-flow stress. These are
+    // two different signal buckets and the rubric must say so, with
+    // explicit evidence lists for each.
+    assert.match(ASSESSMENT_RUBRIC, /CASH-FLOW AND FINANCIAL-VISIBILITY SIGNALS/);
+    assert.match(ASSESSMENT_RUBRIC, /Do not confuse financial visibility with actual cash-flow distress/);
+    assert.match(ASSESSMENT_RUBRIC, /CASH-FLOW STRESS requires evidence such as/);
+    assert.match(ASSESSMENT_RUBRIC, /materially aged receivables/);
+    assert.match(ASSESSMENT_RUBRIC, /FINANCIAL-VISIBILITY GAPS include/);
+    assert.match(ASSESSMENT_RUBRIC, /making decisions primarily from bank balance/);
+    assert.match(ASSESSMENT_RUBRIC, /A visibility gap matters because it makes decisions harder to evaluate/);
+    assert.match(ASSESSMENT_RUBRIC, /It is NOT automatically proof that cash flow is bad/);
+    // Hard regression bar: the discarded "no documented financial plan /
+    // never had a financial audit" bullet must stay out of the cash-flow
+    // stress list — that was the overclaim being corrected.
+    assert.doesNotMatch(ASSESSMENT_RUBRIC, /No documented financial plan or budget; never had a financial audit or deep dive\./);
+  });
+
+  it("carries the PATTERN RECOGNITION rules (2026-10-17 round-4 directive)", () => {
+    // Explicit "connect answers when the relationship is real" rule.
+    // Locked here so a future rubric edit can't silently flatten
+    // Solomon back into a per-question summarizer.
+    assert.match(ASSESSMENT_RUBRIC, /PATTERN RECOGNITION/);
+    assert.match(ASSESSMENT_RUBRIC, /Solomon is not a question-by-question summarizer/);
+    assert.match(ASSESSMENT_RUBRIC, /Connect answers when the relationship is real/);
+    assert.match(ASSESSMENT_RUBRIC, /A pattern can support a strong recommendation without proving an outcome/);
+    assert.match(ASSESSMENT_RUBRIC, /Do not invent a causal chain that the intake does not support/);
+    // At least one of the worked example pairs stays verbatim so the
+    // pattern-connection shape doesn't drift into generic consultant speak.
+    assert.match(ASSESSMENT_RUBRIC, /late invoicing \+ unbilled scope changes/);
+    assert.match(ASSESSMENT_RUBRIC, /revenue-capture discipline/);
+  });
+
+  it("carries PRIORITY ORDER IS DIFFERENT FROM SEVERITY (2026-10-17 round-4 directive)", () => {
+    // Severity ≠ priority order. Multiple HIGH-severity findings may
+    // coexist and should be ordered by what the owner should look at
+    // first — NOT re-leveled down to MEDIUM for visual variety.
+    assert.match(ASSESSMENT_RUBRIC, /PRIORITY ORDER IS DIFFERENT FROM SEVERITY/);
+    assert.match(ASSESSMENT_RUBRIC, /Severity describes how materially the signal may affect the business/);
+    assert.match(ASSESSMENT_RUBRIC, /What would I have the owner look at first/);
+    assert.match(ASSESSMENT_RUBRIC, /Multiple findings may legitimately be HIGH severity/);
+    assert.match(ASSESSMENT_RUBRIC, /Do NOT lower a finding to MEDIUM merely to create visual variety/);
+    assert.match(ASSESSMENT_RUBRIC, /sort the gaps array in the order the owner should address or\s+clarify them/);
+    assert.match(ASSESSMENT_RUBRIC, /The first finding should be the one Miguel would start with on the call/);
+  });
+
+  it("anchors FREE-TIER FINANCIAL VISIBILITY to the owner's actual answer (2026-10-17 round-3 directive)", () => {
+    // The replacement block uses the bank-balance answer as the anchor
+    // and explicitly bans four over-claims the previous hard-coded line
+    // was quietly licensing.
+    assert.match(ASSESSMENT_RUBRIC, /FINANCIAL VISIBILITY ON THE FREE TIER/);
+    assert.match(ASSESSMENT_RUBRIC, /The bank-balance question is one of Miguel's core diagnostic questions/);
+    assert.match(ASSESSMENT_RUBRIC, /Anchor the finding to what the owner actually said/);
+    assert.match(ASSESSMENT_RUBRIC, /somewhere between the actual numbers\s+and what's in the bank account/);
+    assert.match(ASSESSMENT_RUBRIC, /A bank balance shows what is there today/);
+    assert.match(ASSESSMENT_RUBRIC, /Do NOT claim the books are stale, KPIs are missing, reports are inaccurate,\s+or cash flow is weak unless another answer establishes that/);
+    // Hard regression bar: the discarded hard-coded sentence must stay out.
+    assert.doesNotMatch(ASSESSMENT_RUBRIC, /You know several important numbers, but\s+decisions are not consistently being made from clean financials and a complete KPI\s+picture/);
+  });
+
+  it("carries THE TWO CRITICAL DEBT NUMBERS (rewrite that drops the cash-flow overclaim)", () => {
+    // Keeps Miguel's concept; drops the previous "together these tell you
+    // whether cash flow can actually support the business" overclaim.
+    // The free-tier info-gap script must stay verbatim so a healthy Q4
+    // "managed debt" answer never gets flipped into evidence of distress.
+    assert.match(ASSESSMENT_RUBRIC, /THE TWO CRITICAL DEBT NUMBERS/);
+    assert.match(ASSESSMENT_RUBRIC, /are two of the most\s+basic numbers an owner should know/);
+    assert.match(ASSESSMENT_RUBRIC, /Do not treat them as sufficient, by themselves/);
+    assert.match(ASSESSMENT_RUBRIC, /What this Health Check cannot tell us is how much the business is carrying/);
+    assert.match(ASSESSMENT_RUBRIC, /legitimate information gap and a reason for deeper diagnosis/);
+    // Hard regression bar: the discarded overclaim must stay out.
+    assert.doesNotMatch(ASSESSMENT_RUBRIC, /these tell you whether cash flow can actually support the business/);
   });
 
   it("qualifies Miguel's 'drown' phrase as internal philosophy only", () => {
@@ -105,17 +195,89 @@ describe("Rubric v3 — ASSESSMENT_RUBRIC content", () => {
 });
 
 describe("Rubric v3 — TIER_GUIDE content", () => {
-  it("free tier requires strength recognition and allowed classification", () => {
-    assert.match(TIER_GUIDE.free, /genuine strength or business asset/);
+  it("free tier carries the approved customer-directive block (2026-10-17 round-5 directive)", () => {
+    // Section headers from the approved rewrite — PURPOSE / FINDINGS /
+    // STRENGTH / OPPORTUNITIES / FINANCIAL VISIBILITY / DEBT / ACTION /
+    // BOUNDARY / STYLE / FREE HEALTH CHECK COMPLETENESS CONTRACT.
+    assert.match(TIER_GUIDE.free, /FREE BUSINESS HEALTH CHECK/);
+    assert.match(TIER_GUIDE.free, /^PURPOSE$/m);
+    assert.match(TIER_GUIDE.free, /^FINDINGS$/m);
+    assert.match(TIER_GUIDE.free, /^STRENGTH$/m);
+    assert.match(TIER_GUIDE.free, /^OPPORTUNITIES$/m);
+    assert.match(TIER_GUIDE.free, /^FINANCIAL VISIBILITY$/m);
+    assert.match(TIER_GUIDE.free, /^DEBT$/m);
+    assert.match(TIER_GUIDE.free, /^ACTION$/m);
+    assert.match(TIER_GUIDE.free, /^BOUNDARY$/m);
+    assert.match(TIER_GUIDE.free, /^STYLE$/m);
+    assert.match(TIER_GUIDE.free, /FREE HEALTH CHECK COMPLETENESS CONTRACT/);
+
+    // Core promises the block replaces older, overbroad language with:
+    // economic-mechanism rule, honest uncertainty allowance, severity vs
+    // action order split, no em dashes, allowed classification.
+    assert.match(TIER_GUIDE.free, /Tie each opportunity to an economic mechanism/);
+    assert.match(TIER_GUIDE.free, /revenue capture, margin, cash timing, capacity, concentration, recurring\s+revenue, cost, or decision quality/);
+    assert.match(TIER_GUIDE.free, /Severity and action order are different/);
+    assert.match(TIER_GUIDE.free, /A strength is evidence, not flattery/);
+    assert.match(TIER_GUIDE.free, /Managed debt in good standing is not distress/);
+    assert.match(TIER_GUIDE.free, /No em dashes/);
+    assert.match(TIER_GUIDE.free, /No digital presence \/ GBP \/ reviews \/ SEO/);
+    assert.match(TIER_GUIDE.free, /Truthful uncertainty or non-applicability is a VALID response/);
+    assert.match(TIER_GUIDE.free, /Do not penalize the owner for honestly saying they do not know/);
     assert.match(TIER_GUIDE.free, /growth, needs-attention, or rehab/);
+
+    // Hard regression bar: the overbroad "tie opportunities to real money"
+    // line from the previous block must stay out — replaced by the
+    // economic-mechanism rule above.
+    assert.doesNotMatch(TIER_GUIDE.free, /Tie opportunities to real money, capacity, risk, or growth potential/);
   });
 
-  it("paid_47 emphasizes synthesis, not enumeration", () => {
-    assert.match(TIER_GUIDE.paid_47, /synthesize the complete picture/);
-    assert.match(TIER_GUIDE.paid_47, /interactions between/);
-    // No crisis-permission language.
-    assert.match(TIER_GUIDE.paid_47, /Do not treat severity as permission/);
+  it("server-side intake-completeness gate requires all 11 Q1-Q11 on the free tier", () => {
+    // The browser enforces Q1-Q11 at the input layer; the server gate
+    // backs that up. Any legitimate current free submission has 11
+    // answers, so the floor matches that count. If this ever reads back
+    // as 3 again, the browser contract has quietly broken.
+    assert.equal(INTAKE_MIN_ANSWERS.free, 11);
+  });
+
+  it("paid_47 carries the approved customer-directive block (2026-10-17 round-6 directive)", () => {
+    // Section headers from the approved rewrite — PURPOSE / DIAGNOSTIC
+    // OUTPUT / PRIORITY ORDER / SYNTHESIS / FINANCIAL IMPACT /
+    // OPPORTUNITIES / FINANCIAL VISIBILITY / DEBT / UNRESOLVED QUESTIONS
+    // / FULL DIAGNOSTIC BOUNDARY / NEXT STEP / VOICE.
+    assert.match(TIER_GUIDE.paid_47, /\$47 FULL DIAGNOSTIC/);
+    assert.match(TIER_GUIDE.paid_47, /^PURPOSE$/m);
+    assert.match(TIER_GUIDE.paid_47, /^DIAGNOSTIC OUTPUT$/m);
+    assert.match(TIER_GUIDE.paid_47, /^PRIORITY ORDER$/m);
+    assert.match(TIER_GUIDE.paid_47, /^SYNTHESIS$/m);
+    assert.match(TIER_GUIDE.paid_47, /^FINANCIAL IMPACT$/m);
+    assert.match(TIER_GUIDE.paid_47, /^OPPORTUNITIES$/m);
+    assert.match(TIER_GUIDE.paid_47, /^FINANCIAL VISIBILITY$/m);
+    assert.match(TIER_GUIDE.paid_47, /^DEBT$/m);
+    assert.match(TIER_GUIDE.paid_47, /^UNRESOLVED QUESTIONS$/m);
+    assert.match(TIER_GUIDE.paid_47, /^FULL DIAGNOSTIC BOUNDARY$/m);
+    assert.match(TIER_GUIDE.paid_47, /^NEXT STEP$/m);
+    assert.match(TIER_GUIDE.paid_47, /^VOICE$/m);
+
+    // Core promises the block locks in:
+    assert.match(TIER_GUIDE.paid_47, /Do not manufacture a third gap or second opportunity simply to fill the\s+requested count/);
+    assert.match(TIER_GUIDE.paid_47, /Severity and priority order are different/);
+    assert.match(TIER_GUIDE.paid_47, /Do not analyze each answer in isolation/);
+    assert.match(TIER_GUIDE.paid_47, /Do not invent ROI/);
+    assert.match(TIER_GUIDE.paid_47, /Do not use debt existence alone as evidence of distress/);
+    // The included 30-min strategist review is the primary next step —
+    // NOT the BGA purchase CTA.
+    assert.match(TIER_GUIDE.paid_47, /INCLUDED\s+30-minute CFO By Design strategist review/);
+    assert.match(TIER_GUIDE.paid_47, /Do not make the Business Growth Analysis purchase the primary CTA inside\s+the Full Diagnostic report/);
+    // Full Diagnostic boundary — not the BGA, not a 90-day plan, not
+    // CFO fractional-service recommendations.
+    assert.match(TIER_GUIDE.paid_47, /not the Business Growth Analysis/);
+    assert.match(TIER_GUIDE.paid_47, /not a complete implementation\s+roadmap/);
+    assert.match(TIER_GUIDE.paid_47, /pretend verified financial documents were reviewed when they were not/);
     assert.match(TIER_GUIDE.paid_47, /growth, needs-attention, or rehab/);
+
+    // Hard regression bar: the discarded "synthesize the complete
+    // picture" one-liner must stay out.
+    assert.doesNotMatch(TIER_GUIDE.paid_47, /go beyond identifying signals and synthesize the complete picture/);
   });
 
   it("paid_297 is named Business Growth Analysis (BGA), not Deep Dive, and emphasizes 90-day growth planning", () => {

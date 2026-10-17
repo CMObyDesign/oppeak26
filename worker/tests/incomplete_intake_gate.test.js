@@ -40,10 +40,87 @@ describe("intake completeness gate", () => {
     assert.equal(result.answersSeen, 19);
   });
 
-  it("free tier at 3 answers is ok (free intake is intentionally small)", () => {
-    const answers = Array.from({ length: 3 }, (_, i) => ({ question: `Q${i}`, answer: `A${i}` }));
+  it("free tier at 11 answers is ok (all Q1-Q11 required per customer directive 2026-10-17)", () => {
+    const answers = Array.from({ length: 11 }, (_, i) => ({ question: `Q${i + 1}`, answer: `A${i + 1}` }));
     const result = checkIntakeCompleteness(answers, "free");
     assert.equal(result.ok, true);
+    assert.equal(result.answersSeen, 11);
+  });
+
+  it("free tier at 10 answers is NOT ok (floor bumped from 3 → 11 when the browser contract made every Q required)", () => {
+    const answers = Array.from({ length: 10 }, (_, i) => ({ question: `Q${i + 1}`, answer: `A${i + 1}` }));
+    const result = checkIntakeCompleteness(answers, "free");
+    assert.equal(result.ok, false);
+  });
+
+  it("free tier identity check — 10 real Q1-Q11 + 1 unrelated CRM field is NOT ok (Codex P1 on #137)", () => {
+    // Codex finding: counting pure answers.length is wrong because
+    // answersFromContactFields includes every non-Solomon populated
+    // custom field with a catalog label. A buyer with 10 real intake
+    // answers plus one unrelated CRM field would have cleared the old
+    // count-only >= 11 threshold and shipped incomplete intake.
+    const freeFieldIds = [
+      "5VWVNRrQYcLqXhckh4f4", "nCRqWH0x1sdJIgUPDr2E", "nbPL6APmjrjr43J6urVb",
+      "OyQjw4nGNHJYADsq5ggg", "8sSKohKtQZZzJEtM2ju0", "deItnw0p1H7sO1okRjGS",
+      "hV9yij5uFitztZzanSaa", "ngBePHf4iKPhaHm2OtSv", "cvuAgfuL94eBahOrnTY0",
+      "cdlV9zqJxztcxfXgD4J0", /* Q11 intentionally missing */
+    ];
+    const rawCustomFields = [
+      ...freeFieldIds.map(id => ({ id, value: "answer" })),
+      { id: "zzzUnrelatedCrmField", value: "lead source: Facebook" },
+    ];
+    // answersFromContactFields would return 11 entries here (10 Q1-Q10 + 1 unrelated)
+    const fakeAnswers = Array.from({ length: 11 }, (_, i) => ({ question: `Q${i}`, answer: `A${i}` }));
+    const result = checkIntakeCompleteness(fakeAnswers, "free", { rawCustomFields });
+    assert.equal(result.ok, false);
+    assert.equal(result.identityCheck, true);
+    assert.equal(result.answersSeen, 10, "only 10 of the 11 Q1-Q11 IDs are populated");
+  });
+
+  it("free tier identity check — all 11 Q1-Q11 populated (plus noise) is ok", () => {
+    const freeFieldIds = [
+      "5VWVNRrQYcLqXhckh4f4", "nCRqWH0x1sdJIgUPDr2E", "nbPL6APmjrjr43J6urVb",
+      "OyQjw4nGNHJYADsq5ggg", "8sSKohKtQZZzJEtM2ju0", "deItnw0p1H7sO1okRjGS",
+      "hV9yij5uFitztZzanSaa", "ngBePHf4iKPhaHm2OtSv", "cvuAgfuL94eBahOrnTY0",
+      "cdlV9zqJxztcxfXgD4J0", "qKRvCyjprebbK75tC05h",
+    ];
+    const rawCustomFields = [
+      ...freeFieldIds.map(id => ({ id, value: "answer" })),
+      { id: "zzzUnrelatedCrmField", value: "lead source: Facebook" },
+    ];
+    const fakeAnswers = Array.from({ length: 12 }, (_, i) => ({ question: `Q${i}`, answer: `A${i}` }));
+    const result = checkIntakeCompleteness(fakeAnswers, "free", { rawCustomFields });
+    assert.equal(result.ok, true);
+    assert.equal(result.identityCheck, true);
+    assert.equal(result.answersSeen, 11);
+  });
+
+  it("free tier identity check — a Q1-Q11 field present with empty string value is NOT populated", () => {
+    const freeFieldIds = [
+      "5VWVNRrQYcLqXhckh4f4", "nCRqWH0x1sdJIgUPDr2E", "nbPL6APmjrjr43J6urVb",
+      "OyQjw4nGNHJYADsq5ggg", "8sSKohKtQZZzJEtM2ju0", "deItnw0p1H7sO1okRjGS",
+      "hV9yij5uFitztZzanSaa", "ngBePHf4iKPhaHm2OtSv", "cvuAgfuL94eBahOrnTY0",
+      "cdlV9zqJxztcxfXgD4J0",
+    ];
+    const rawCustomFields = [
+      ...freeFieldIds.map(id => ({ id, value: "answer" })),
+      { id: "qKRvCyjprebbK75tC05h", value: "   " }, // whitespace-only is NOT populated
+    ];
+    const result = checkIntakeCompleteness([], "free", { rawCustomFields });
+    assert.equal(result.ok, false);
+    assert.equal(result.answersSeen, 10);
+  });
+
+  it("allowPartial bypass lets a historical/partial submission through (Codex P2 on #137)", () => {
+    // The old count-only gate blocked manual reruns on pre-contract
+    // contacts forever. The new allowPartial flag lets a caller decide
+    // to let Solomon's INCOMPLETE INTAKE handling take over per the
+    // r3.6 TIER_GUIDE.free rubric.
+    const answers = Array.from({ length: 3 }, (_, i) => ({ question: `Q${i + 1}`, answer: `A${i + 1}` }));
+    const result = checkIntakeCompleteness(answers, "free", { allowPartial: true });
+    assert.equal(result.ok, true);
+    assert.equal(result.partial, true);
+    assert.equal(result.answersSeen, 3);
   });
 
   it("free tier at 1 answer is NOT ok", () => {

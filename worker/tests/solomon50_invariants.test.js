@@ -92,17 +92,25 @@ describe("SOLOMON50 beta invariants", () => {
 
   it("8. Beta and paid routes share the same paid_47 synthesis directive — not more findings, synthesis", () => {
     // paid_47 is characterized by synthesis-over-enumeration. Beta users
-    // get the same discipline because they hit the same tier.
-    assert.match(TIER_GUIDE.paid_47, /synthesize the complete picture/);
-    assert.match(TIER_GUIDE.paid_47, /interactions between/);
+    // get the same discipline because they hit the same tier. The r3.6
+    // rewrite moved these ideas into dedicated SYNTHESIS + DIAGNOSTIC
+    // OUTPUT blocks; the invariant we're protecting is "connect signals
+    // across answers; don't manufacture a third gap to fill the count."
+    assert.match(TIER_GUIDE.paid_47, /synthesize the financial\s+picture supported by the assessment/);
+    assert.match(TIER_GUIDE.paid_47, /Do not analyze each answer in isolation/);
+    assert.match(TIER_GUIDE.paid_47, /how the supported signals interact/);
+    assert.match(TIER_GUIDE.paid_47, /Do not manufacture a third gap or second opportunity simply to fill the\s+requested count/);
   });
 
   it("9. There is no beta-specific severity or tone escape hatch", () => {
     assert.doesNotMatch(TIER_GUIDE.paid_47, /beta/i);
     assert.doesNotMatch(TIER_GUIDE.paid_47, /SOLOMON50/i);
     // Severity-is-not-tone discipline applies to all paid_47 output
-    // regardless of how the entitlement was granted.
-    assert.match(TIER_GUIDE.paid_47, /Do not treat severity as permission/);
+    // regardless of how the entitlement was granted. The r3.6 rewrite
+    // phrases this as "assign severity based on evidence, not tone"
+    // and separates severity from priority order explicitly.
+    assert.match(TIER_GUIDE.paid_47, /Assign severity based on evidence, not tone/);
+    assert.match(TIER_GUIDE.paid_47, /Severity and priority order are different/);
   });
 
   it("10. Removing the beta campaign does not require touching the diagnostic — the tier is paid_47, not solomon50", () => {
