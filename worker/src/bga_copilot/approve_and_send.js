@@ -36,7 +36,7 @@ import {
 } from "../ghl_catalog.js";
 import { parseDraftSections, DRAFT_BANNER } from "./roadmap.js";
 import { parseVerifiedFinancials } from "./metrics.js";
-import { getServicesCatalogVersion } from "./services_catalog.js";
+import { getServicesCatalogVersion, primeServicesCatalog } from "./services_catalog.js";
 import { assembleCaseBundle } from "./case_load.js";
 import {
   HISTORY_FIELD_KEY,
@@ -311,6 +311,11 @@ export async function handleApproveAndSend(request, env, { checkPassword }) {
   if (!checkPassword(request, env)) {
     return json({ success: false, error: "Unauthorized" }, 401);
   }
+  // Codex P1 on #138: prime the D1 catalog so the SHA recorded on
+  // the approve-and-send audit entry matches whatever is active at
+  // approval time — pre-send QA and approval both reading the active
+  // D1 version is the point of the catalog_ref invariant.
+  await primeServicesCatalog(env);
   let body;
   try { body = await request.json(); }
   catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
@@ -383,7 +388,7 @@ export async function handleApproveAndSend(request, env, { checkPassword }) {
 
   const bundle = assembleCaseBundle(contact, idMap, { contactId, catalog });
   const intakeAnswers = bundle?.intake?.paid_297_answers || [];
-  const catalogRef = await getServicesCatalogVersion();
+  const catalogRef = await getServicesCatalogVersion(env);
   const currentHashes = await computeInputHashes({
     draft,
     decisions: decisionsRaw,

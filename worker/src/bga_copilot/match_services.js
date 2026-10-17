@@ -251,7 +251,7 @@ export async function handleMatchServices(request, env, { checkPassword }) {
   const matches = matchServices({
     activeSignals: signals, activeDisqualifiers: disqualifiers,
   });
-  const catalogVersion = await getServicesCatalogVersion();
+  const catalogVersion = await getServicesCatalogVersion(env);
 
   if (mode === "readonly") {
     return json({

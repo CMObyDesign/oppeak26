@@ -2768,17 +2768,38 @@ function parseAgentJson(text) {
 // Repair pass: escape stray unescaped `"` characters that appear INSIDE
 // JSON string literals. Walks the text as a state machine (outside /
 // inside string). When inside a string, if we see a `"` that is NOT
-// followed by a JSON structural character (`,`, `:`, `}`, `]`, whitespace
-// before one of those, or end-of-input), it's an unescaped inner quote —
-// escape it.
+// followed by a JSON structural continuation, it's an unescaped inner
+// quote — escape it.
 //
-// This is deliberately conservative: it only fires on characters that
-// cannot be the real end of a string value in the shapes we emit (object
-// members, array elements, top-level return). It does NOT try to fix
-// stray newlines, trailing commas, or other classes of malformed JSON —
-// those are rare in production and the model's output is otherwise
-// disciplined.
+// Terminator decision uses TWO look-aheads (Codex P1 on #138):
+//   - `:` or EOF after the quote → always a terminator (end-of-key /
+//     end-of-document).
+//   - `}` or `]` after the quote → terminator ONLY when what follows
+//     the close is itself a JSON continuation (`,` `}` `]` `:` or EOF).
+//     Reject `}` followed by `great` or by prose.
+//   - `,` after the quote → terminator ONLY when the next non-whitespace
+//     char AFTER the comma is itself a JSON value start (`"`, `{`, `[`,
+//     `}`, `]`, `-`, a digit, `t`/`f`/`n` for true/false/null) or EOF.
+//     Reject `,` followed by " which earned referrals." — that's prose,
+//     the comma is inside the string.
+//
+// Deliberately conservative: it only fires on characters that cannot be
+// the real end of a string value in the shapes we emit. Does NOT try to
+// fix stray newlines, trailing commas, or other classes of malformed
+// JSON — those are rare in production and the model is otherwise
+// disciplined. See parse_agent_json_repair.test.js for cases.
 function repairAgentJson(src) {
+  const isWs = (c) => c === " " || c === "\t" || c === "\n" || c === "\r";
+  const isDigitStart = (c) => c === "-" || (c >= "0" && c <= "9");
+  // Characters that legitimately start a JSON value (after a `,`).
+  const isValueStart = (c) =>
+    c === '"' || c === "{" || c === "[" || c === "}" || c === "]" ||
+    c === "t" || c === "f" || c === "n" || isDigitStart(c) || c === "";
+  // Characters that legitimately follow a `}` or `]` (continuation of
+  // the enclosing JSON structure).
+  const isAfterCloseOk = (c) =>
+    c === "," || c === "}" || c === "]" || c === ":" || c === "";
+
   const out = [];
   let inStr = false;
   let escaped = false;
@@ -2803,12 +2824,31 @@ function repairAgentJson(src) {
     if (ch === '"') {
       // Look ahead past whitespace for the next non-space character.
       let j = i + 1;
-      while (j < src.length && (src[j] === " " || src[j] === "\t" || src[j] === "\n" || src[j] === "\r")) j++;
+      while (j < src.length && isWs(src[j])) j++;
       const next = j < src.length ? src[j] : "";
-      // Characters that legitimately follow the end of a JSON string:
-      // `,` `:` `}` `]` or end-of-input. Anything else means this quote
-      // is actually inside the string value and must be escaped.
-      if (next === "," || next === ":" || next === "}" || next === "]" || next === "") {
+      let isTerminator = false;
+      if (next === "" || next === ":") {
+        // End-of-key or end-of-document — always a terminator.
+        isTerminator = true;
+      } else if (next === "}" || next === "]") {
+        // Terminator ONLY if the close is itself followed by valid
+        // continuation. `"foo"}` inside prose where the `}` is actually
+        // literal text would fall out here (next-after-close would be
+        // a word character and fail isAfterCloseOk).
+        let k = j + 1;
+        while (k < src.length && isWs(src[k])) k++;
+        const afterClose = src[k] || "";
+        isTerminator = isAfterCloseOk(afterClose);
+      } else if (next === ",") {
+        // Terminator ONLY if the comma is followed by a JSON value
+        // start (next key, next array element, close, or EOF). Rejects
+        // `", which earned referrals."` — a comma followed by prose.
+        let k = j + 1;
+        while (k < src.length && isWs(src[k])) k++;
+        const afterComma = src[k] || "";
+        isTerminator = isValueStart(afterComma);
+      }
+      if (isTerminator) {
         out.push(ch);
         inStr = false;
       } else {

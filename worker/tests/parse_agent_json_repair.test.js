@@ -53,6 +53,28 @@ describe("parseAgentJson — repair fallback", () => {
     assert.equal(out.gaps[0].impact, "ok");
   });
 
+  it("repairs quoted prose where the inner close-quote is followed by a comma (Codex P1 on #138)", () => {
+    // The naive heuristic would treat the `"` after "great job" as a
+    // real string terminator because it's followed by `,`. The
+    // tightened heuristic checks what the comma leads INTO — here it
+    // leads into prose ` which earned referrals.`, which is NOT a
+    // JSON value start, so the quote is correctly recognized as
+    // inside-string and escaped. The whole opener survives intact.
+    const src = '{"opener":"They said "great job", which earned referrals."}';
+    const out = parseAgentJson(src);
+    assert.equal(out.opener, 'They said "great job", which earned referrals.');
+  });
+
+  it("repairs quoted prose where the inner close-quote is followed by `}` + prose (defensive)", () => {
+    // Here the `}` after the second inner quote is still followed by
+    // more prose. The afterClose check rejects it as a real close.
+    // Not a realistic shape but verifies the braces/brackets look-ahead
+    // mirrors the comma look-ahead.
+    const src = '{"opener":"a "b"} and more"}';
+    const out = parseAgentJson(src);
+    assert.equal(out.opener, 'a "b"} and more');
+  });
+
   it("repairs the Q7-referral-language production failure shape", () => {
     // Mirrors the actual field layout Solomon emitted when Q7 was the
     // customer-testimonial paste. The strategistBrief contains an

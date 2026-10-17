@@ -27,17 +27,42 @@ import {
 // Minimal fake D1. Supports prepare/bind/first/all/run with the exact
 // query shapes the loader uses; everything else throws so a drift in
 // the loader's queries fails loudly instead of silently matching.
-function makeFakeDb({ activeVersionId = null, services = [], throwOn = null } = {}) {
+//
+// Options:
+//   activeVersionId      — initial active version pointer (null for cold start)
+//   services             — initial row set (array of pre-hydrated rows)
+//   versions             — initial version rows (adds published_at / services_sha)
+//   throwOn              — if a prepare()'d SQL includes this substring, every
+//                          method on the statement throws (simulates D1 outage)
+//   failInsertNth        — Codex P2 atomicity test: fail the Nth bga_services
+//                          INSERT run() to simulate a partial seed. Zero-indexed.
+function makeFakeDb({
+  activeVersionId = null,
+  services = [],
+  versions = null,
+  throwOn = null,
+  failInsertNth = null,
+} = {}) {
   const state = {
     activeVersionId,
     services: [...services],
-    versions: [],
+    versions: Array.isArray(versions) ? [...versions] : [],
     nextVersionId: 100,
     reads: 0,
     writes: 0,
+    insertAttempts: 0,
   };
-  if (activeVersionId) {
-    state.versions.push({ id: activeVersionId, published_at: "2026-01-01T00:00:00Z", published_by: "test" });
+  if (activeVersionId && !state.versions.find(v => v.id === activeVersionId)) {
+    // Default: version row carries a stored services_sha so the loader
+    // can read it. Tests that need a specific SHA pass `versions`
+    // explicitly.
+    state.versions.push({
+      id: activeVersionId,
+      published_at: "2026-01-01T00:00:00Z",
+      published_by: "test",
+      services_sha: "deadbeefcafe",
+      bundles_sha: "0000beefcafe",
+    });
   }
   function prepare(sql) {
     if (throwOn && sql.includes(throwOn)) {
@@ -45,6 +70,19 @@ function makeFakeDb({ activeVersionId = null, services = [], throwOn = null } = 
     }
     if (/FROM bga_catalog_active/i.test(sql)) {
       return { first: async () => { state.reads++; return { active_version_id: state.activeVersionId }; } };
+    }
+    // SELECT services_sha FROM bga_catalog_versions WHERE id = ? — the
+    // post-#138 canonical-SHA lookup used in place of hashing rows.
+    if (/FROM bga_catalog_versions[\s\S]+WHERE id = \?/i.test(sql)) {
+      return {
+        bind: (vid) => ({
+          first: async () => {
+            state.reads++;
+            const v = state.versions.find(r => r.id === vid);
+            return v ? { services_sha: v.services_sha } : null;
+          },
+        }),
+      };
     }
     if (/FROM bga_services[\s\S]+WHERE version_id = \?/i.test(sql)) {
       return {
@@ -76,6 +114,10 @@ function makeFakeDb({ activeVersionId = null, services = [], throwOn = null } = 
                pricing_json, bundle_eligibility_json, dependencies_json,
                talking_points_json, customer_value_points_json) => ({
           run: async () => {
+            const attempt = state.insertAttempts++;
+            if (failInsertNth !== null && attempt === failInsertNth) {
+              throw new Error(`fake D1: forced insert failure at attempt ${attempt}`);
+            }
             state.writes++;
             state.services.push({
               version_id, service_id, name, problem_solved,
@@ -102,6 +144,11 @@ function makeFakeDb({ activeVersionId = null, services = [], throwOn = null } = 
     }
     throw new Error(`fake D1: unexpected SQL: ${sql.slice(0, 80)}…`);
   }
+  // Intentionally NOT providing a `batch` method on the fake D1 — the
+  // loader's seed path then takes its sequential-with-abort fallback,
+  // which is the shape these unit tests exercise. The real D1 batch is
+  // used in production; its all-or-nothing contract is what the
+  // fallback emulates here.
   return { prepare, _state: state };
 }
 
@@ -172,7 +219,38 @@ describe("services_catalog D1 loader (slice A)", () => {
     assert.equal(sync[0].service_id, "svc_override");
   });
 
-  it("7. hard_block_rules / caution_rules / defer_rules hydrate on the service shape", async () => {
+  it("7. Codex P2 on #138: a failed seed insert aborts activation (no partial catalog)", async () => {
+    // Fail the FIRST services INSERT. Expectation: no version is
+    // promoted to active (pointer stays null), so the next request
+    // retries the seed instead of being stuck on a half-populated
+    // catalog forever.
+    const db = makeFakeDb({ activeVersionId: null, services: [], failInsertNth: 0 });
+    const list = await getServicesCatalog({ SOLOMON_DB: db });
+    // The loader returned SOMETHING (bundled fallback) for this
+    // request, but the active pointer must NOT be set.
+    assert.ok(Array.isArray(list));
+    assert.equal(db._state.activeVersionId, null, "active pointer must remain null after a partial seed");
+  });
+
+  it("8. Codex P2 on #138: the stored services_sha from the version row is preserved (not recomputed from hydrated rows)", async () => {
+    // The hydrator re-shapes rows (adds hard_block_rules /
+    // caution_rules / defer_rules / customer_value_points, sorts by
+    // service_id), so hashing hydrated rows gives a different SHA
+    // than the publisher stored on the version row. The loader must
+    // return the stored SHA so case-level
+    // `swot_bga_services_catalog_ref` values remain comparable across
+    // the slice-A schema change.
+    const STORED_SHA = "feedfacefeed";
+    const db = makeFakeDb({
+      activeVersionId: 55,
+      versions: [{ id: 55, published_at: "2026-01-01T00:00:00Z", published_by: "test", services_sha: STORED_SHA, bundles_sha: "0" }],
+      services: [makeRow(55, "svc_x", "X")],
+    });
+    const ver = await getServicesCatalogVersion({ SOLOMON_DB: db });
+    assert.equal(ver, STORED_SHA, "the version row's services_sha must be returned verbatim");
+  });
+
+  it("9. hard_block_rules / caution_rules / defer_rules hydrate on the service shape", async () => {
     const db = makeFakeDb({
       activeVersionId: 10,
       services: [{

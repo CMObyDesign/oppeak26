@@ -165,7 +165,21 @@ async function _loadActiveVersion(env) {
       .all();
 
     const services = (rows && rows.results ? rows.results : []).map(_hydrateServiceRow);
-    const versionSha = await _computeShortSha(services);
+
+    // Codex P2 on #138: don't recompute SHA from hydrated rows — the
+    // hydrator shape differs from the stored on-disk JSON (adds the
+    // three new rule arrays + customer_value_points, sorts by
+    // service_id), so a hashed-after-hydrate SHA diverges from the
+    // `services_sha` the publisher stored on the version row and from
+    // the pre-migration JSON hash. Read the canonical SHA from the
+    // version row and return THAT, so case-level
+    // `swot_bga_services_catalog_ref` values stay comparable across
+    // the schema change.
+    const versionRow = await db
+      .prepare("SELECT services_sha FROM bga_catalog_versions WHERE id = ? LIMIT 1")
+      .bind(versionId)
+      .first();
+    const versionSha = (versionRow && versionRow.services_sha) || (await _computeShortSha(services));
 
     _cache = { versionId, services, versionSha, loadedAt: now };
     return _cache;
@@ -201,14 +215,27 @@ async function _seedFromBundledJson(db) {
       return null;
     }
 
-    // Each service in a separate INSERT. D1's prepared statement
-    // batching could tighten this later; for seed we prize clarity +
-    // partial-success recovery (if any one row fails, the rest still
-    // land and the version is still usable).
+    // Codex P2 on #138: all-or-nothing seed. If ANY service insert
+    // fails, do NOT activate the partial version — leave
+    // `bga_catalog_active.active_version_id` NULL so the next request
+    // re-attempts the seed. Without this, one transient failure (or a
+    // row-specific D1 error) permanently activates an incomplete
+    // catalog, and the loader never retries because
+    // `active_version_id` is no longer null.
+    //
+    // D1 doesn't support cross-statement transactions on the Workers
+    // binding, but we DO have `batch([...])` which runs an array of
+    // prepared statements as a single D1 operation. On binding error
+    // (e.g. D1 outage mid-seed), the whole batch rejects and the
+    // activation UPDATE in the same batch is NOT applied — the
+    // version row remains orphaned (harmless; just an abandoned
+    // catalog_versions id) and the pointer stays NULL for next-request
+    // retry.
+    const inserts = [];
     for (const svc of BUNDLED_JSON_CATALOG) {
       if (!svc || !svc.service_id || !svc.name) continue;
-      try {
-        await db
+      inserts.push(
+        db
           .prepare(
             `INSERT INTO bga_services (
                version_id, service_id, name, problem_solved,
@@ -237,20 +264,47 @@ async function _seedFromBundledJson(db) {
             JSON.stringify(svc.talking_points || []),
             "[]", // customer_value_points — empty on seed, admins add later in slice B
           )
-          .run();
-      } catch (err) {
-        console.warn(`[services_catalog] seed: failed to insert service ${svc.service_id}: ${err && err.message}`);
-      }
+      );
     }
 
-    await db
+    // Append the activation UPDATE as the final statement in the same
+    // batch. D1's batch is all-or-nothing at the API level — any
+    // statement failing rejects the whole call, so the activation only
+    // sticks if every insert also stuck.
+    const activate = db
       .prepare(
         `UPDATE bga_catalog_active
          SET active_version_id = ?, activated_at = ?, activated_by = 'seed'
          WHERE singleton = 1`
       )
-      .bind(versionId, nowIso)
-      .run();
+      .bind(versionId, nowIso);
+
+    if (typeof db.batch === "function") {
+      try {
+        await db.batch([...inserts, activate]);
+      } catch (err) {
+        console.warn(`[services_catalog] seed batch failed; NOT activating partial version ${versionId}: ${err && err.message}`);
+        return null;
+      }
+    } else {
+      // Test harnesses (fake D1) may not implement batch. Fall back
+      // to sequential execution with explicit abort-on-first-failure
+      // so the activation UPDATE never runs after an insert failure.
+      for (const stmt of inserts) {
+        try {
+          await stmt.run();
+        } catch (err) {
+          console.warn(`[services_catalog] seed insert failed; NOT activating partial version ${versionId}: ${err && err.message}`);
+          return null;
+        }
+      }
+      try {
+        await activate.run();
+      } catch (err) {
+        console.warn(`[services_catalog] seed activation failed for version ${versionId}: ${err && err.message}`);
+        return null;
+      }
+    }
 
     console.log(`[services_catalog] seeded D1 from bundled JSON as version ${versionId} (${BUNDLED_JSON_CATALOG.length} services)`);
     return versionId;
