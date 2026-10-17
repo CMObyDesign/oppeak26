@@ -4,6 +4,14 @@ export interface FreeAssessmentQuestion {
   type: 'select' | 'text' | 'textarea';
   title: string;
   text: string;
+  // Optional guide/hint shown inside the input (textarea placeholder or
+  // text input placeholder). Used to give owners who are stuck a nudge
+  // toward a specific example or a legitimate "I don't know yet" answer.
+  // Only set on textarea questions where the question is open-ended
+  // enough that an owner might otherwise freeze. Must be a legitimate
+  // allowed answer, not a leading one — see UNCERTAINTY IS VALID in the
+  // worker rubric.
+  placeholder?: string;
   options?: { value: string; label: string }[];
   required: boolean;
 }
@@ -137,6 +145,7 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         type: "textarea",
         title: "Revenue Leaks",
         text: "Where does revenue most often leak in your business?",
+        placeholder: "Give us one specific example. If you're not sure, tell us where you suspect it happens.",
         required: false
       }
     ]
@@ -158,6 +167,7 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         type: "textarea",
         title: "Market Opportunity",
         text: "Where do you see demand in your market that you are not yet positioned to capture?",
+        placeholder: "Be specific. If you don't see a clear opportunity right now, say that.",
         required: false
       },
       {
@@ -166,6 +176,7 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         type: "textarea",
         title: "Single Point of Failure",
         text: "What would happen to your business if your single largest client, revenue source, or referral channel disappeared in the next 90 days?",
+        placeholder: "If you don't depend heavily on any one source, tell us that.",
         required: false
       }
     ]

@@ -40,12 +40,12 @@ export const QuestionCard = ({ question, selectedOption, onSelect }: QuestionCar
         {question.type === "textarea" && (
           <div className="space-y-6">
             <Textarea
-              placeholder="Type your response here..."
+              placeholder={question.placeholder || "Type your response here..."}
               className="min-h-[160px] bg-secondary/40 border-border focus:border-primary focus:ring-primary/20 text-foreground resize-none rounded-xl p-6 text-lg"
               value={openText}
               onChange={(e) => setOpenText(e.target.value)}
             />
-            <Button 
+            <Button
               onClick={handleTextSubmit}
               className="w-full h-16 bg-primary text-primary-foreground font-bold text-lg rounded-xl shadow-glow-gold hover:scale-[1.01] transition-transform"
             >
@@ -57,12 +57,12 @@ export const QuestionCard = ({ question, selectedOption, onSelect }: QuestionCar
         {question.type === "text" && (
           <div className="space-y-6">
             <Input
-              placeholder="Type your response here..."
+              placeholder={question.placeholder || "Type your response here..."}
               className="h-14 bg-secondary/40 border-border focus:border-primary focus:ring-primary/20 text-foreground rounded-xl px-6 text-lg"
               value={openText}
               onChange={(e) => setOpenText(e.target.value)}
             />
-            <Button 
+            <Button
               onClick={handleTextSubmit}
               className="w-full h-16 bg-primary text-primary-foreground font-bold text-lg rounded-xl shadow-glow-gold hover:scale-[1.01] transition-transform"
             >
