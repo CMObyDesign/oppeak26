@@ -2963,19 +2963,91 @@ async function recordGhlWriteback(env, { reportId, contactId, status, error }) {
 //                 OR NON-RESPONSIVE ANSWERS + FREE HEALTH CHECK COMPLETENESS
 //                 CONTRACT in TIER_GUIDE.free.
 //
-// Free tier floor is now 11 because every Q1-Q11 field is required at the
+// Free tier floor is 11 because every Q1-Q11 field is required at the
 // browser layer, so a legitimate current submission always carries all 11.
 // Paid floors stay below real-world question count so an operator omitting
 // one or two optional questions doesn't trip the gate.
 //
-// Returns a plain object the caller can inspect:
-//   { ok: boolean, answersSeen: number, minExpected: number, tier: string }
-// `ok: false` means the caller should defer (webhook returns 409) and let
-// the retry cycle re-fire once all fields have landed.
+// FREE-tier identity check (Codex P1 on #137 fix): counting bare
+// `answers.length` is wrong because `answersFromContactFields` includes
+// every populated non-Solomon custom field with a catalog label — a
+// contact with 10 real Q1-Q11 answers + 1 unrelated CRM field would
+// have cleared the old count-only threshold and shipped an incomplete
+// intake. The gate now also accepts the raw customFields array (via
+// `opts.rawCustomFields`) and, on the free tier, counts how many of
+// the known FREE_INTAKE_FIELD_IDS actually carry a non-empty value.
+// Fallback path (no raw fields supplied) uses the count check so
+// older callers keep working.
+//
+// Historical-submission bypass (Codex P2 on #137 fix): `opts.allowPartial`
+// forces `ok: true` regardless of the count/identity check. Intended
+// for manual reruns against pre-contract contacts — Solomon's HANDLING
+// INCOMPLETE OR NON-RESPONSIVE ANSWERS rules then take over per the
+// r3.6 rubric. Returns { ok, answersSeen, minExpected, tier, partial }.
+
+// GHL custom-field IDs for Q1-Q11, in order. Sourced from
+// app/src/data/freeAssessmentQuestions.ts fieldKey values. If any one
+// of these moves in GHL, update it here AND in the TypeScript data
+// file in the same change — the intake_catalog.test.js suite will
+// surface drift at CI time either way.
+const FREE_INTAKE_FIELD_IDS = Object.freeze([
+  "5VWVNRrQYcLqXhckh4f4", // Q1  Business Type
+  "nCRqWH0x1sdJIgUPDr2E", // Q2  Customer Reach
+  "nbPL6APmjrjr43J6urVb", // Q3  Industry / Vertical
+  "OyQjw4nGNHJYADsq5ggg", // Q4  Debt / Tax / Lien / Judgment Status
+  "8sSKohKtQZZzJEtM2ju0", // Q5  Decision Making Basis
+  "deItnw0p1H7sO1okRjGS", // Q6  Unique Value Proposition
+  "hV9yij5uFitztZzanSaa", // Q7  Referral Language
+  "ngBePHf4iKPhaHm2OtSv", // Q8  Revenue Leaks
+  "cvuAgfuL94eBahOrnTY0", // Q9  Hidden Profit Opportunity
+  "cdlV9zqJxztcxfXgD4J0", // Q10 Market Opportunity
+  "qKRvCyjprebbK75tC05h", // Q11 Single Point of Failure
+]);
+const FREE_INTAKE_FIELD_ID_SET = new Set(FREE_INTAKE_FIELD_IDS);
+
 const INTAKE_MIN_ANSWERS = Object.freeze({ free: 11, paid_47: 10, paid_297: 12 });
-function checkIntakeCompleteness(answers, tier) {
-  const answersSeen = Array.isArray(answers) ? answers.length : 0;
+function checkIntakeCompleteness(answers, tier, opts = {}) {
+  // Historical-submission bypass: manual reruns against pre-contract
+  // contacts should proceed to Solomon's INCOMPLETE INTAKE handling
+  // rather than loop on a 409 forever.
+  if (opts.allowPartial) {
+    const answersSeen = Array.isArray(answers) ? answers.length : 0;
+    return {
+      ok: true,
+      answersSeen,
+      minExpected: INTAKE_MIN_ANSWERS[tier] || 0,
+      tier: tier || null,
+      partial: true,
+    };
+  }
+
   const minExpected = INTAKE_MIN_ANSWERS[tier] || 0;
+
+  // Free-tier identity check: when the caller supplies the raw
+  // customFields array, count only the Q1-Q11 field IDs that actually
+  // carry a non-empty value. This prevents 10 real intake answers + an
+  // unrelated populated CRM field from clearing an "answers.length >= 11"
+  // threshold with incomplete intake.
+  if (tier === "free" && Array.isArray(opts.rawCustomFields) && opts.rawCustomFields.length) {
+    const populatedFreeIds = new Set();
+    for (const f of opts.rawCustomFields) {
+      if (!f || !f.id || !FREE_INTAKE_FIELD_ID_SET.has(f.id)) continue;
+      const val = typeof f.value === "string" ? f.value.trim() : (f.value != null ? String(f.value).trim() : "");
+      if (val) populatedFreeIds.add(f.id);
+    }
+    return {
+      ok: populatedFreeIds.size >= FREE_INTAKE_FIELD_IDS.length,
+      answersSeen: populatedFreeIds.size,
+      minExpected: FREE_INTAKE_FIELD_IDS.length,
+      tier,
+      identityCheck: true,
+    };
+  }
+
+  // Fallback: pure count check (backwards compat for callers without
+  // the raw customFields array, and for paid tiers where identity-based
+  // field discovery is noisier).
+  const answersSeen = Array.isArray(answers) ? answers.length : 0;
   return {
     ok: !minExpected || answersSeen >= minExpected,
     answersSeen,
@@ -5165,17 +5237,30 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   //
   // Returning 409 lets GHL's workflow retry policy re-fire once the rest of
   // the fields have persisted.
-  const completeness = checkIntakeCompleteness(answers, tier);
+  // Identity-based gate for the free tier (Codex P1 on #137): pass the
+  // raw customFields so the gate counts only Q1-Q11 field IDs, not every
+  // populated non-Solomon CRM field. Historical-submission bypass
+  // (Codex P2 on #137): callers may pass `allowPartial: true` to let a
+  // pre-contract contact proceed; Solomon's INCOMPLETE INTAKE rules then
+  // handle whatever fields did land.
+  const completeness = checkIntakeCompleteness(answers, tier, {
+    rawCustomFields: contact.customFields || [],
+    allowPartial: body.allowPartial === true,
+  });
   if (!completeness.ok) {
-    console.warn(`[from-ghl-survey] intake short (${completeness.answersSeen} of ${completeness.minExpected} expected for ${tier}) for contact ${contact.id}; deferring`);
+    console.warn(`[from-ghl-survey] intake short (${completeness.answersSeen} of ${completeness.minExpected} expected for ${tier}, identityCheck=${!!completeness.identityCheck}) for contact ${contact.id}; deferring`);
     return json({
       success: false,
-      error: "Intake not yet complete; retry when all survey fields have landed",
+      error: "Intake not yet complete; retry when all survey fields have landed, or re-POST with allowPartial:true to process a historical/partial submission.",
       tier,
       contactId: contact.id,
       answersSeen: completeness.answersSeen,
       minExpected: completeness.minExpected,
+      identityCheck: !!completeness.identityCheck,
     }, 409);
+  }
+  if (completeness.partial) {
+    console.warn(`[from-ghl-survey] allowPartial=true — proceeding with ${completeness.answersSeen} intake answer(s) for contact ${contact.id}; Solomon's INCOMPLETE INTAKE rules take over.`);
   }
 
   const contactPayload = {

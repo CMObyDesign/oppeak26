@@ -84,10 +84,19 @@ export const QuestionCard = ({ question, selectedOption, onSelect }: QuestionCar
           <div className="space-y-6">
             <Textarea
               placeholder={question.placeholder || "Type your response here..."}
-              className="min-h-[160px] bg-secondary/40 border-border focus:border-primary focus:ring-primary/20 text-foreground resize-none rounded-xl p-6 text-lg"
+              className={`min-h-[160px] bg-secondary/40 border-border focus:border-primary focus:ring-primary/20 text-foreground resize-none rounded-xl p-6 text-lg ${
+                textError ? "border-destructive focus:border-destructive focus:ring-destructive/20" : ""
+              }`}
               value={openText}
-              onChange={(e) => setOpenText(e.target.value)}
+              onChange={(e) => { setOpenText(e.target.value); if (textError) setTextError(""); }}
+              aria-invalid={!!textError}
+              aria-describedby={textError ? `q${question.id}-err` : undefined}
             />
+            {textError && (
+              <p id={`q${question.id}-err`} className="text-sm text-destructive font-medium" role="alert">
+                {textError}
+              </p>
+            )}
             <Button
               onClick={handleTextSubmit}
               className="w-full h-16 bg-primary text-primary-foreground font-bold text-lg rounded-xl shadow-glow-gold hover:scale-[1.01] transition-transform"
@@ -101,10 +110,19 @@ export const QuestionCard = ({ question, selectedOption, onSelect }: QuestionCar
           <div className="space-y-6">
             <Input
               placeholder={question.placeholder || "Type your response here..."}
-              className="h-14 bg-secondary/40 border-border focus:border-primary focus:ring-primary/20 text-foreground rounded-xl px-6 text-lg"
+              className={`h-14 bg-secondary/40 border-border focus:border-primary focus:ring-primary/20 text-foreground rounded-xl px-6 text-lg ${
+                textError ? "border-destructive focus:border-destructive focus:ring-destructive/20" : ""
+              }`}
               value={openText}
-              onChange={(e) => setOpenText(e.target.value)}
+              onChange={(e) => { setOpenText(e.target.value); if (textError) setTextError(""); }}
+              aria-invalid={!!textError}
+              aria-describedby={textError ? `q${question.id}-err` : undefined}
             />
+            {textError && (
+              <p id={`q${question.id}-err`} className="text-sm text-destructive font-medium" role="alert">
+                {textError}
+              </p>
+            )}
             <Button
               onClick={handleTextSubmit}
               className="w-full h-16 bg-primary text-primary-foreground font-bold text-lg rounded-xl shadow-glow-gold hover:scale-[1.01] transition-transform"
