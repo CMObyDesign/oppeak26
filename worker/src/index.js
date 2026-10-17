@@ -157,16 +157,20 @@ const RUBRIC_VERSION     = "r3.6";  // ASSESSMENT_RUBRIC — Elizabeth-led rewri
                                      // next step (NOT the BGA upsell), and the
                                      // diagnostic is not the BGA / not a complete
                                      // 90-day plan.
-// buildPrompt() format. Bumped to p2.2: TIER_GUIDE.paid_297 was
-// rewritten to the Business Growth Analysis prompt (prioritized
-// 90-day growth plan built on the Full Diagnostic), which materially
-// changes the paid_297 generation; the previous Deep Dive instructions
-// are retired. p2.1 narrowed the output JSON `path` enum to
+// buildPrompt() format. Bumped to p2.3: added explicit JSON ESCAPING
+// section instructing the model to \"-escape inner double-quote
+// characters when echoing THEIR ANSWERS inside output string values —
+// prevents the Q7-referral-language-quote class of failures where a
+// client paste like `"They came out the same day…"` broke Solomon's
+// own JSON output (parse error at mid-doc position). p2.2 rewrote
+// TIER_GUIDE.paid_297 to the Business Growth Analysis prompt
+// (prioritized 90-day growth plan built on the Full Diagnostic).
+// p2.1 narrowed the output JSON `path` enum to
 // {rehab, needs-attention, growth} and tightened the strategistBrief
 // spec; the FACTS + DERIVED METRICS block structure (from p2.0) is
 // unchanged. Bumping lets `writeCanonicalRecord`-stored provenance
-// distinguish pre- and post-BGA paid_297 reports in D1.
-const PROMPT_VERSION     = "p2.2";
+// distinguish parse-hardening-era runs from earlier ones in D1.
+const PROMPT_VERSION     = "p2.3";
 
 const CONFIG = {
   CLAUDE_MODEL: "claude-sonnet-4-6",
@@ -1413,6 +1417,17 @@ ${answerBlock}
 ${factsBlock}
 TASK: Assess this business using the methodology in your system instructions. ${guide}
 Every sentence must reference THEIR actual answers — no generic filler, no invented numbers.
+
+JSON ESCAPING (strict — your output is parsed by JSON.parse):
+- THEIR ANSWERS above may contain double-quote characters (owners often
+  paste customer quotes verbatim, especially in Q7 "referral language"
+  and Q6 "unique value proposition"). When you quote or echo any of
+  their text inside a JSON string value in your response, every inner
+  double-quote MUST be escaped as \\" and every newline as \\n. Example:
+  if they wrote: They said "trust us" to me
+  you emit:     "opener": "...they said \\"trust us\\" to me..."
+- Do not emit raw unescaped quotes inside string values. Do not emit
+  trailing commas. Do not wrap the response in markdown code fences.
 
 Return ONLY valid JSON — no markdown code fences, no text before or after — in exactly this shape:
 {
@@ -2720,13 +2735,90 @@ ${couponRow}
 }
 
 // Tolerant JSON extraction — strips fences / preamble if the model adds any.
+// Also runs a conservative repair pass when strict JSON.parse fails: the
+// most common failure in production is that the model echoed quoted
+// customer text (Q7 referral language is literally a quote) into a string
+// value without escaping the inner `"` characters. Repair walks the
+// extracted slice as a state machine and `\`-escapes stray quotes that
+// appear mid-string, then retries JSON.parse. If repair still fails, we
+// throw the ORIGINAL parse error (not the post-repair one) so the caller
+// sees the real position.
 function parseAgentJson(text) {
   let t = text.trim();
   t = t.replace(/^```(?:json)?/i, "").replace(/```$/i, "").trim();
   const start = t.indexOf("{");
   const end = t.lastIndexOf("}");
   if (start === -1 || end === -1) throw new Error("Agent returned no JSON object");
-  return JSON.parse(t.slice(start, end + 1));
+  const slice = t.slice(start, end + 1);
+  try {
+    return JSON.parse(slice);
+  } catch (firstErr) {
+    const repaired = repairAgentJson(slice);
+    if (repaired !== slice) {
+      try {
+        return JSON.parse(repaired);
+      } catch (_secondErr) {
+        // fall through to original error
+      }
+    }
+    throw firstErr;
+  }
+}
+
+// Repair pass: escape stray unescaped `"` characters that appear INSIDE
+// JSON string literals. Walks the text as a state machine (outside /
+// inside string). When inside a string, if we see a `"` that is NOT
+// followed by a JSON structural character (`,`, `:`, `}`, `]`, whitespace
+// before one of those, or end-of-input), it's an unescaped inner quote —
+// escape it.
+//
+// This is deliberately conservative: it only fires on characters that
+// cannot be the real end of a string value in the shapes we emit (object
+// members, array elements, top-level return). It does NOT try to fix
+// stray newlines, trailing commas, or other classes of malformed JSON —
+// those are rare in production and the model's output is otherwise
+// disciplined.
+function repairAgentJson(src) {
+  const out = [];
+  let inStr = false;
+  let escaped = false;
+  for (let i = 0; i < src.length; i++) {
+    const ch = src[i];
+    if (!inStr) {
+      out.push(ch);
+      if (ch === '"') inStr = true;
+      continue;
+    }
+    // inside a string
+    if (escaped) {
+      out.push(ch);
+      escaped = false;
+      continue;
+    }
+    if (ch === "\\") {
+      out.push(ch);
+      escaped = true;
+      continue;
+    }
+    if (ch === '"') {
+      // Look ahead past whitespace for the next non-space character.
+      let j = i + 1;
+      while (j < src.length && (src[j] === " " || src[j] === "\t" || src[j] === "\n" || src[j] === "\r")) j++;
+      const next = j < src.length ? src[j] : "";
+      // Characters that legitimately follow the end of a JSON string:
+      // `,` `:` `}` `]` or end-of-input. Anything else means this quote
+      // is actually inside the string value and must be escaped.
+      if (next === "," || next === ":" || next === "}" || next === "]" || next === "") {
+        out.push(ch);
+        inStr = false;
+      } else {
+        out.push('\\"');
+      }
+      continue;
+    }
+    out.push(ch);
+  }
+  return out.join("");
 }
 
 // Mutates agent.structured_findings in place: non-arrays are forced to
@@ -6856,6 +6948,7 @@ export {
   PROMPT_VERSION,
   buildPrompt,
   parseAgentJson,
+  repairAgentJson,
   normalizeAnswers,
   checkIntakeCompleteness,
   updateGHLContact,
