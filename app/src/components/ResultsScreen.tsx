@@ -215,19 +215,41 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
         </div>
       </div>
 
-      {/* The Story Section */}
+      {/* The Story Section — locked founder-voice copy from Miguel (2026-10-17).
+          This section is founder/high-trust content; it stays in first-person
+          singular ("I") and does NOT get swapped for generic consultant framing.
+          Any edit here needs product sign-off because the brand reference
+          specifically names Health Check reports as a Miguel-voice surface. */}
       <div className="max-w-3xl mx-auto space-y-8 py-12">
         <div className="space-y-6">
           <h3 className="font-display text-3xl font-bold">The Story</h3>
           <div className="space-y-4 text-muted-foreground leading-relaxed text-lg">
             <p>
-              For over fifteen years, Miguel Hernandez and his team sat across from business owners making million dollar decisions off their bank balance instead of their real numbers. Owners who needed more than a bookkeeper. People who needed someone who understood corporate finance, mergers and acquisitions, debt strategy, and how to actually get funded. The team could only help so many at a time, and that never sat right with them.
+              For more than fifteen years, I've sat across from business owners making six- and seven-figure decisions without a clear enough view of the numbers behind them.
             </p>
             <p>
-              So they built something. They took the questions the team asks, the patterns they look for, and the financial framework Miguel has refined over years of working with business owners, and built those principles into Solomon. It runs your full diagnostic in minutes using the exact logic the team uses with their highest-value clients. That is what powers your report.
+              They usually didn't need another spreadsheet. They needed someone to connect what was happening with cash flow, debt, margins, receivables, taxes, and growth and tell them what actually mattered first.
+            </p>
+            <p>
+              Over time, you start seeing the same patterns.
+            </p>
+            <p>
+              The questions we ask. The answers that make us look twice. The numbers that tell us an owner has room to move and the ones that tell us to slow down before an expensive decision gets made.
+            </p>
+            <p className="text-foreground font-medium">
+              That's why we built Solomon.
+            </p>
+            <p>
+              We took the questions our team uses, the patterns we look for, and the financial framework I've refined through years of working with business owners and built them into the assessment process.
+            </p>
+            <p>
+              Solomon helps us surface those signals faster. But a report is not a relationship.
             </p>
             <p className="text-foreground font-medium italic">
-              A report is not a relationship. The assistant shows you what is happening. The team shows you what to do about it. That is why your $47 includes time with a real strategist, not just a download.
+              The report shows you what we're seeing. The CFO By Design team helps you decide what to do with it.
+            </p>
+            <p className="text-sm text-muted-foreground/80 pt-2">
+              Built on Miguel Hernandez's financial framework. Delivered by the CFO By Design team.
             </p>
           </div>
         </div>

@@ -31,8 +31,8 @@ import {
 } from "../src/index.js";
 
 describe("Rubric v3 — version bumps", () => {
-  it("RUBRIC_VERSION is r3.0", () => {
-    assert.equal(RUBRIC_VERSION, "r3.0");
+  it("RUBRIC_VERSION is r3.1 (bumped from r3.0 when VOICE DISCIPLINE was added)", () => {
+    assert.equal(RUBRIC_VERSION, "r3.1");
   });
 
   it("PROMPT_VERSION is p2.2 (bumped from p2.1 when TIER_GUIDE.paid_297 was rewritten for BGA)", () => {
@@ -56,6 +56,16 @@ describe("Rubric v3 — ASSESSMENT_RUBRIC content", () => {
     // regardless of surrounding punctuation.
     assert.match(ASSESSMENT_RUBRIC, /cash crisis/);
     assert.match(ASSESSMENT_RUBRIC, /existential threat/);
+  });
+
+  it("carries the VOICE DISCIPLINE counterpart (2026-10-17 customer directive)", () => {
+    // The brand rule: guardrails control truthfulness, not personality.
+    // Locked here so a future rubric edit can't silently neutralize
+    // Miguel's voice back to AI-safe consultant filler.
+    assert.match(ASSESSMENT_RUBRIC, /VOICE DISCIPLINE/);
+    assert.match(ASSESSMENT_RUBRIC, /guardrails control truthfulness, not personality/i);
+    assert.match(ASSESSMENT_RUBRIC, /Miguel's voice \+ Solomon's evidence discipline/);
+    assert.match(ASSESSMENT_RUBRIC, /NOT: AI-safe generic financial copy/);
   });
 
   it("qualifies Miguel's 'drown' phrase as internal philosophy only", () => {

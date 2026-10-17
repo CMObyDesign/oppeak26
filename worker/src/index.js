@@ -82,13 +82,20 @@ import { buildFactsForPrompt, validateStructuredFindings } from "./findings.js";
 // `/report/{contactId}?v=N` the archived row was produced by a different
 // generator than today's code.
 const ASSESSMENT_VERSION = "v1";    // intake question set
-const RUBRIC_VERSION     = "r3.0";  // ASSESSMENT_RUBRIC — Elizabeth-led rewrite:
+const RUBRIC_VERSION     = "r3.1";  // ASSESSMENT_RUBRIC — Elizabeth-led rewrite:
                                      // explicit evidence hierarchy, qualified Miguel
                                      // "drown" framing, severity-is-not-tone discipline,
                                      // traceable (not quoted) anti-generic mandate,
                                      // strength recognition on free tier, synthesis-
                                      // oriented tier guides, 3-path customer-facing
                                      // classification (urgent + strong collapsed).
+                                     // r3.1 (2026-10-17): added VOICE DISCIPLINE
+                                     // section as the counterpart to SEVERITY IS NOT
+                                     // TONE — guardrails control truthfulness, not
+                                     // personality. Preserves Miguel's directness
+                                     // and pattern-recognition against the opposite
+                                     // failure mode (neutralizing to AI-safe generic
+                                     // consultant copy).
 // buildPrompt() format. Bumped to p2.2: TIER_GUIDE.paid_297 was
 // rewritten to the Business Growth Analysis prompt (prioritized
 // 90-day growth plan built on the Full Diagnostic), which materially
@@ -201,6 +208,35 @@ classification. It is NOT a tone instruction.
   not "my business is dying."
 - Dramatic language earns the opposite of its intent: the reader stops trusting the
   diagnosis. Calibrated seriousness builds trust; apocalyptic framing destroys it.
+
+VOICE DISCIPLINE (counterpart to SEVERITY IS NOT TONE — the other failure mode):
+
+Do NOT neutralize or soften Miguel's voice in the Business Health Check. The free report
+is founder-facing, high-trust content and should sound like Miguel: direct, specific,
+pattern-recognition driven, decisive. Your guardrails control truthfulness, not personality.
+
+PRESERVE:
+- Strong, problem-first headlines (not "Here are some areas to consider" — name the
+  actual pattern you saw).
+- Direct gap language that calls the gap what it is, in Miguel's words.
+- Pattern connections across answers (the owner wants to see that someone READ their
+  answers together, not that an AI scored each in isolation).
+- Specific opportunities tied to their business, not category platitudes.
+- Concrete next actions the owner can take this week.
+- The founder story — why Solomon exists, Miguel's financial point of view.
+
+Tighten ONLY where a sentence claims more than the answers support. The fix for an
+unsupported claim is to narrow the claim, not to replace a strong statement with
+generic consultant language just to make it safer. "Your late invoicing is leaking
+revenue right now" stays. "This may indicate potential opportunities around invoicing
+cadence" is NOT the safer version — it is the useless version.
+
+The standard is: Miguel's voice + Solomon's evidence discipline.
+It is NOT: AI-safe generic financial copy.
+
+If a draft sentence trips either guardrail (makes a claim beyond the evidence OR reads
+like generic consultant filler), rewrite it to keep Miguel's directness while anchoring
+to what the answers actually said. Do not delete the sentence just because it is strong.
 
 THE TWO CRITICAL NUMBERS (Miguel: "those two numbers together are critical and they're very basic"):
 - Total corporate debt the business carries.
@@ -701,6 +737,10 @@ The free report answers: "What signals should I pay attention to?"
 
 Requirements:
 - Follow FREE-TIER FINDING DISCIPLINE.
+- Follow VOICE DISCIPLINE. The Business Health Check is founder-facing, high-trust
+  content. Keep Miguel's directness, specificity, and pattern-recognition. Tighten
+  only where a claim outruns the evidence; do NOT swap strong statements for generic
+  consultant language in the name of safety.
 - Never conflate debt categories or treat blanket "active debt" as distress.
 - Surface financial visibility when the evidence supports it.
 - Use deterministic funnel or financial math when supplied.
