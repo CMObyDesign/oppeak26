@@ -82,7 +82,7 @@ import { buildFactsForPrompt, validateStructuredFindings } from "./findings.js";
 // `/report/{contactId}?v=N` the archived row was produced by a different
 // generator than today's code.
 const ASSESSMENT_VERSION = "v1";    // intake question set
-const RUBRIC_VERSION     = "r3.5";  // ASSESSMENT_RUBRIC — Elizabeth-led rewrite:
+const RUBRIC_VERSION     = "r3.6";  // ASSESSMENT_RUBRIC — Elizabeth-led rewrite:
                                      // explicit evidence hierarchy, qualified Miguel
                                      // "drown" framing, severity-is-not-tone discipline,
                                      // traceable (not quoted) anti-generic mandate,
@@ -144,6 +144,19 @@ const RUBRIC_VERSION     = "r3.5";  // ASSESSMENT_RUBRIC — Elizabeth-led rewri
                                      // INCOMPLETE ANSWERS updated so [not provided]
                                      // reads as historical/malformed, not expected
                                      // on current submissions.
+                                     // r3.6 (2026-10-17): approved TIER_GUIDE.paid_47
+                                     // rewrite — PURPOSE / DIAGNOSTIC OUTPUT /
+                                     // PRIORITY ORDER / SYNTHESIS / FINANCIAL IMPACT
+                                     // / OPPORTUNITIES / FINANCIAL VISIBILITY /
+                                     // DEBT / UNRESOLVED QUESTIONS / FULL
+                                     // DIAGNOSTIC BOUNDARY / NEXT STEP / VOICE.
+                                     // Makes explicit: don't manufacture a third
+                                     // gap to fill the count, severity ≠ priority
+                                     // order carries into paid_47, the included
+                                     // 30-min strategist review is the primary
+                                     // next step (NOT the BGA upsell), and the
+                                     // diagnostic is not the BGA / not a complete
+                                     // 90-day plan.
 // buildPrompt() format. Bumped to p2.2: TIER_GUIDE.paid_297 was
 // rewritten to the Business Growth Analysis prompt (prioritized
 // 90-day growth plan built on the Full Diagnostic), which materially
@@ -1109,24 +1122,216 @@ INCOMPLETE INTAKE rules rather than fabricating an answer.
 Customer-facing classification may ONLY be:
 growth, needs-attention, or rehab.`,
 
-  paid_47: `$47 FULL DIAGNOSTIC: go beyond identifying signals and synthesize the complete picture.
+  paid_47: `$47 FULL DIAGNOSTIC
 
-The paid diagnostic answers:
-"What is actually happening, how significant is it, how do the issues interact, and what should I prioritize?"
+PURPOSE
 
-Produce 3 primary gaps and 2 opportunities.
+Go beyond identifying individual signals and synthesize the financial
+picture supported by the assessment.
 
-Requirements:
-- Be specific, prioritized, and decision-oriented.
-- Evaluate interactions between cash flow, debt, profitability, receivables, revenue concentration, sales leakage, financial visibility, and growth capacity when the data supports them.
-- Quantify financial impact ONLY when supplied facts or deterministic derived metrics support the number.
-- If exact financial impact cannot be established, explain the exposure and state what remains unknown.
-- Distinguish known fact from inference.
-- Identify unresolved questions the strategist should clarify.
-- Never conflate debt categories or imply delinquency/distress without evidence.
-- Do not treat severity as permission for dramatic or crisis language.
+The Full Diagnostic answers:
 
-Customer-facing classification may ONLY be: growth, needs-attention, or rehab.`,
+"What is actually happening, how significant does it appear to be,
+how do the issues interact, and what deserves attention first?"
+
+This is deeper diagnosis than the free Business Health Check, but it is
+not the Business Growth Analysis and it is not a complete implementation
+roadmap.
+
+DIAGNOSTIC OUTPUT
+
+Produce 3 primary gaps and 2 opportunities when the evidence supports them.
+
+Do not manufacture a third gap or second opportunity simply to fill the
+requested count. If the intake does not support the full count with
+confidence, return fewer and explain what remains unknown.
+
+For each primary gap:
+
+- State the issue clearly in language the owner would recognize.
+- Identify the specific evidence supporting it.
+- Explain why it matters financially or operationally.
+- Connect it to other findings when the relationship is supported.
+- Distinguish what is known from what is inferred.
+- State what remains unknown when the assessment cannot establish
+  magnitude, root cause, or financial impact.
+- Assign severity based on evidence, not tone.
+- Order the gaps by what deserves attention or clarification first.
+
+PRIORITY ORDER
+
+Severity and priority order are different.
+
+Multiple findings may honestly carry the same severity.
+
+The first finding should be the issue Miguel would start with if he were
+reviewing this diagnostic with the owner.
+
+Use immediacy, financial consequence, dependency, and decision impact to
+determine the order.
+
+SYNTHESIS
+
+Do not analyze each answer in isolation.
+
+Evaluate how the supported signals interact across areas such as:
+
+- cash flow
+- corporate debt and monthly debt service
+- profitability and margins
+- accounts receivable
+- revenue concentration
+- sales or revenue leakage
+- financial visibility
+- reporting discipline
+- operating runway
+- growth capital
+- growth capacity
+
+Connect answers when they belong in the same financial conversation.
+
+Example:
+Late invoicing + weak AR discipline + decisions based partly on bank
+balance may point to a broader cash-visibility problem.
+
+Do not invent a causal relationship simply because two issues appear
+together.
+
+FINANCIAL IMPACT
+
+Use actual numbers aggressively when the owner supplied them or when a
+deterministic FACT / DERIVED METRIC provides them.
+
+Quantify financial impact ONLY when the evidence supports the number.
+
+When exact impact cannot be established:
+
+- explain the economic exposure,
+- explain why it matters,
+- and state the missing number or fact needed to measure it.
+
+Do not convert a hypothetical answer, estimate, or recommendation into a
+proven financial result.
+
+OPPORTUNITIES
+
+Identify up to 2 opportunities that are directly supported by the intake.
+
+Tie each opportunity to a real economic mechanism such as:
+
+- revenue capture
+- margin protection
+- better cash timing
+- recurring revenue
+- reduced concentration
+- cost control
+- capital readiness
+- better use of operating capacity
+- or stronger financial decision-making
+
+Use dollar amounts or percentages only when supplied facts support them.
+
+Do not invent ROI.
+
+FINANCIAL VISIBILITY
+
+Miguel's bank-balance question remains a core diagnostic signal.
+
+When the owner says decisions are made from bank balance, somewhere in
+between, or they are unsure, connect that answer to the other financial
+signals in the intake.
+
+Do not assume stale books, poor cash flow, missing KPIs, or inaccurate
+financial statements unless another answer establishes those facts.
+
+DEBT
+
+Follow the universal debt-subtype discipline exactly.
+
+Never conflate:
+
+- managed business debt,
+- revolving credit,
+- tax debt,
+- judgments or liens,
+- delinquent debt,
+- or unknown debt.
+
+Total corporate debt and monthly debt service are foundational diagnostic
+numbers when available.
+
+Do not use debt existence alone as evidence of distress.
+
+UNRESOLVED QUESTIONS
+
+Identify the highest-value questions the strategist should clarify during
+the included 30-minute review.
+
+These should be questions that could:
+
+- change the priority order,
+- materially change the interpretation,
+- clarify an unsupported assumption,
+- establish financial magnitude,
+- or affect the owner's next decision.
+
+Do not use generic discovery questions.
+
+FULL DIAGNOSTIC BOUNDARY
+
+The Full Diagnostic should:
+
+- connect the signals,
+- explain how they interact,
+- rank what matters,
+- identify meaningful opportunities,
+- name what remains unresolved,
+- and give the owner a clearer basis for the next financial decision.
+
+It should NOT:
+
+- pretend verified financial documents were reviewed when they were not,
+- produce the full 90-day / 6-month / 12-month Business Growth Plan,
+- present CFO By Design fractional-service recommendations as though the
+  BGA process has already happened,
+- or skip the human strategist review.
+
+NEXT STEP
+
+The primary next step after the $47 Full Diagnostic is the INCLUDED
+30-minute CFO By Design strategist review.
+
+The report should prepare the owner for that conversation.
+
+The strategist review is where the team:
+
+- clarifies unresolved questions,
+- challenges assumptions,
+- interprets the findings in context,
+- and helps determine the first financial move worth addressing.
+
+Do not make the Business Growth Analysis purchase the primary CTA inside
+the Full Diagnostic report.
+
+VOICE
+
+Inherit the Miguel voice and evidence discipline from ASSESSMENT_RUBRIC.
+
+Be:
+
+- direct,
+- specific,
+- numbers-first,
+- plainspoken,
+- confident when evidence is clear,
+- and explicit when something remains unknown.
+
+Do not soften a supported conclusion into generic consultant language.
+
+Do not overstate certainty simply to make the report sound authoritative.
+
+Customer-facing classification may ONLY be:
+growth, needs-attention, or rehab.`,
 
   paid_297: `$297 BUSINESS GROWTH ANALYSIS (BGA): senior-level strategic analysis that turns the Full Diagnostic into a prioritized 90-day growth plan.
 

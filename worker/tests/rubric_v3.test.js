@@ -32,8 +32,8 @@ import {
 } from "../src/index.js";
 
 describe("Rubric v3 — version bumps", () => {
-  it("RUBRIC_VERSION is r3.5 (bumped from r3.4 when the approved TIER_GUIDE.free rewrite + FREE HEALTH CHECK COMPLETENESS CONTRACT landed)", () => {
-    assert.equal(RUBRIC_VERSION, "r3.5");
+  it("RUBRIC_VERSION is r3.6 (bumped from r3.5 when the approved TIER_GUIDE.paid_47 rewrite landed)", () => {
+    assert.equal(RUBRIC_VERSION, "r3.6");
   });
 
   it("PROMPT_VERSION is p2.2 (bumped from p2.1 when TIER_GUIDE.paid_297 was rewritten for BGA)", () => {
@@ -239,12 +239,45 @@ describe("Rubric v3 — TIER_GUIDE content", () => {
     assert.equal(INTAKE_MIN_ANSWERS.free, 11);
   });
 
-  it("paid_47 emphasizes synthesis, not enumeration", () => {
-    assert.match(TIER_GUIDE.paid_47, /synthesize the complete picture/);
-    assert.match(TIER_GUIDE.paid_47, /interactions between/);
-    // No crisis-permission language.
-    assert.match(TIER_GUIDE.paid_47, /Do not treat severity as permission/);
+  it("paid_47 carries the approved customer-directive block (2026-10-17 round-6 directive)", () => {
+    // Section headers from the approved rewrite — PURPOSE / DIAGNOSTIC
+    // OUTPUT / PRIORITY ORDER / SYNTHESIS / FINANCIAL IMPACT /
+    // OPPORTUNITIES / FINANCIAL VISIBILITY / DEBT / UNRESOLVED QUESTIONS
+    // / FULL DIAGNOSTIC BOUNDARY / NEXT STEP / VOICE.
+    assert.match(TIER_GUIDE.paid_47, /\$47 FULL DIAGNOSTIC/);
+    assert.match(TIER_GUIDE.paid_47, /^PURPOSE$/m);
+    assert.match(TIER_GUIDE.paid_47, /^DIAGNOSTIC OUTPUT$/m);
+    assert.match(TIER_GUIDE.paid_47, /^PRIORITY ORDER$/m);
+    assert.match(TIER_GUIDE.paid_47, /^SYNTHESIS$/m);
+    assert.match(TIER_GUIDE.paid_47, /^FINANCIAL IMPACT$/m);
+    assert.match(TIER_GUIDE.paid_47, /^OPPORTUNITIES$/m);
+    assert.match(TIER_GUIDE.paid_47, /^FINANCIAL VISIBILITY$/m);
+    assert.match(TIER_GUIDE.paid_47, /^DEBT$/m);
+    assert.match(TIER_GUIDE.paid_47, /^UNRESOLVED QUESTIONS$/m);
+    assert.match(TIER_GUIDE.paid_47, /^FULL DIAGNOSTIC BOUNDARY$/m);
+    assert.match(TIER_GUIDE.paid_47, /^NEXT STEP$/m);
+    assert.match(TIER_GUIDE.paid_47, /^VOICE$/m);
+
+    // Core promises the block locks in:
+    assert.match(TIER_GUIDE.paid_47, /Do not manufacture a third gap or second opportunity simply to fill the\s+requested count/);
+    assert.match(TIER_GUIDE.paid_47, /Severity and priority order are different/);
+    assert.match(TIER_GUIDE.paid_47, /Do not analyze each answer in isolation/);
+    assert.match(TIER_GUIDE.paid_47, /Do not invent ROI/);
+    assert.match(TIER_GUIDE.paid_47, /Do not use debt existence alone as evidence of distress/);
+    // The included 30-min strategist review is the primary next step —
+    // NOT the BGA purchase CTA.
+    assert.match(TIER_GUIDE.paid_47, /INCLUDED\s+30-minute CFO By Design strategist review/);
+    assert.match(TIER_GUIDE.paid_47, /Do not make the Business Growth Analysis purchase the primary CTA inside\s+the Full Diagnostic report/);
+    // Full Diagnostic boundary — not the BGA, not a 90-day plan, not
+    // CFO fractional-service recommendations.
+    assert.match(TIER_GUIDE.paid_47, /not the Business Growth Analysis/);
+    assert.match(TIER_GUIDE.paid_47, /not a complete implementation\s+roadmap/);
+    assert.match(TIER_GUIDE.paid_47, /pretend verified financial documents were reviewed when they were not/);
     assert.match(TIER_GUIDE.paid_47, /growth, needs-attention, or rehab/);
+
+    // Hard regression bar: the discarded "synthesize the complete
+    // picture" one-liner must stay out.
+    assert.doesNotMatch(TIER_GUIDE.paid_47, /go beyond identifying signals and synthesize the complete picture/);
   });
 
   it("paid_297 is named Business Growth Analysis (BGA), not Deep Dive, and emphasizes 90-day growth planning", () => {
