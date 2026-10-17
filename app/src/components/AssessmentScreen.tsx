@@ -18,6 +18,14 @@ interface AssessmentScreenProps {
   onComplete: (answers: Record<number, any>, leadData?: { name: string; email: string; businessName?: string; contactId?: string }) => void;
 }
 
+// Shape of a public business email that we'll accept at the gate. Rejects
+// bare words and obviously-not-email strings, which the HTML5 `required`
+// attribute passes through. Server-side validation is a separate, stricter
+// pass; this one just stops the obvious typos ("name", "name@") and the
+// "I pasted my business name instead of my email" case from creating a
+// contact + report flow at all.
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
 export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<number, any>>({});
@@ -31,6 +39,22 @@ export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
   const [contactId, setContactId] = useState<string | undefined>(undefined);
   const [showResumePrompt, setShowResumePrompt] = useState(false);
   const [pendingDraft, setPendingDraft] = useState<Record<string, any> | null>(null);
+
+  // Per-field validation. Empty string = clean; non-empty string = the
+  // message to render inline under the field. Cleared on edit so the
+  // customer gets immediate feedback that the fix was accepted.
+  const [errName, setErrName] = useState("");
+  const [errBusinessName, setErrBusinessName] = useState("");
+  const [errEmail, setErrEmail] = useState("");
+
+  // Mid-flow email edit (shown after the contact gate — "Report email: X · Edit").
+  // Solves the "wrong email, trapped by Back" problem the Codex review called
+  // out: a customer who typo'd their email during the gate can fix it without
+  // walking back through every answered question. Edits only update local
+  // state; the next survey submit re-POSTs with the corrected address and
+  // HL's upsert handles reconciliation.
+  const [editingEmail, setEditingEmail] = useState(false);
+  const [emailDraft, setEmailDraft] = useState("");
 
   // Flatten questions and inject section titles
   const questions = FREE_ASSESSMENT_SECTIONS.flatMap(section => 
@@ -77,8 +101,27 @@ export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
 
   const handleSubmitLead = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !email) return;
-    
+
+    // Field-by-field validation with inline error messages. The wording is
+    // locked by product (Codex #133 directive 2026-10-17): kept verbatim.
+    const trimmedName = name.trim();
+    const trimmedBiz  = businessName.trim();
+    const trimmedEmail = email.trim();
+    let hasError = false;
+    if (!trimmedName) {
+      setErrName("Please enter your name.");
+      hasError = true;
+    } else { setErrName(""); }
+    if (!trimmedBiz) {
+      setErrBusinessName("Please enter your business name.");
+      hasError = true;
+    } else { setErrBusinessName(""); }
+    if (!trimmedEmail || !EMAIL_RE.test(trimmedEmail)) {
+      setErrEmail("Please enter a valid email address, like name@company.com.");
+      hasError = true;
+    } else { setErrEmail(""); }
+    if (hasError) return;
+
     setIsSubmitting(true);
     
     try {
@@ -247,6 +290,66 @@ export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
           )}
         </div>
 
+        {/* Persistent "Report email" affordance — shown after the contact gate
+            so a buyer who typo'd their address can fix it without walking back
+            through every answered question (Codex #133 directive 2026-10-17).
+            Only renders in the quiz view, not during the lead-capture form or
+            while editing (the gate form is already an editable surface). */}
+        {hasCapturedLead && !showLeadCapture && email && (
+          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+            {editingEmail ? (
+              <form
+                className="flex items-stretch gap-2 w-full max-w-md"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const trimmed = emailDraft.trim();
+                  if (!EMAIL_RE.test(trimmed)) {
+                    setErrEmail("Please enter a valid email address, like name@company.com.");
+                    return;
+                  }
+                  setEmail(trimmed);
+                  setEditingEmail(false);
+                  setErrEmail("");
+                }}
+              >
+                <Input
+                  type="email"
+                  value={emailDraft}
+                  onChange={(e) => setEmailDraft(e.target.value)}
+                  placeholder="name@company.com"
+                  className="h-9 flex-1 bg-background text-sm"
+                  autoFocus
+                />
+                <Button type="submit" size="sm" className="h-9 px-3">Save</Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 px-3"
+                  onClick={() => { setEditingEmail(false); setErrEmail(""); }}
+                >
+                  Cancel
+                </Button>
+              </form>
+            ) : (
+              <>
+                <span>Report email: <span className="text-foreground font-medium">{email}</span></span>
+                <span aria-hidden>·</span>
+                <button
+                  type="button"
+                  onClick={() => { setEmailDraft(email); setEditingEmail(true); }}
+                  className="text-primary hover:underline font-medium"
+                >
+                  Edit
+                </button>
+              </>
+            )}
+          </div>
+        )}
+        {hasCapturedLead && !showLeadCapture && errEmail && !editingEmail && (
+          <p className="text-xs text-destructive text-center">{errEmail}</p>
+        )}
+
         <AnimatePresence mode="wait">
           {showLeadCapture ? (
             <motion.div
@@ -257,47 +360,63 @@ export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
               className="bg-card border border-border rounded-2xl p-8 md:p-12 shadow-xl"
             >
               <div className="text-center space-y-4 mb-8">
-                <h2 className="font-display text-3xl font-bold text-foreground">Where should we send your report?</h2>
-                <p className="text-muted-foreground">Your free Business Health Report is yours — tell us where to send it and we'll keep building it as you finish the remaining questions.</p>
+                <h2 className="font-display text-3xl font-bold text-foreground">Where should we send your Business Health Check?</h2>
+                <p className="text-muted-foreground">Enter your information below and we'll email you a copy of your results.</p>
               </div>
-              
-              <form onSubmit={handleSubmitLead} className="space-y-6">
+
+              <form onSubmit={handleSubmitLead} className="space-y-6" noValidate>
                 <div className="space-y-2">
-                  <Label htmlFor="name">Full Name</Label>
-                  <Input 
-                    id="name" 
-                    value={name} 
-                    onChange={(e) => setName(e.target.value)} 
-                    placeholder="John Doe" 
-                    required 
+                  <Label htmlFor="name">First and Last Name</Label>
+                  <Input
+                    id="name"
+                    value={name}
+                    onChange={(e) => { setName(e.target.value); if (errName) setErrName(""); }}
+                    placeholder="John Doe"
                     className="h-14 bg-background"
+                    aria-invalid={!!errName}
+                    aria-describedby={errName ? "err-name" : undefined}
                   />
+                  {errName && (
+                    <p id="err-name" className="text-sm text-destructive">{errName}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="businessName">Business Name</Label>
-                  <Input 
-                    id="businessName" 
-                    value={businessName} 
-                    onChange={(e) => setBusinessName(e.target.value)} 
-                    placeholder="Acme Corp" 
-                    required 
+                  <Input
+                    id="businessName"
+                    value={businessName}
+                    onChange={(e) => { setBusinessName(e.target.value); if (errBusinessName) setErrBusinessName(""); }}
+                    placeholder="Acme Corp"
                     className="h-14 bg-background"
+                    aria-invalid={!!errBusinessName}
+                    aria-describedby={errBusinessName ? "err-business" : undefined}
                   />
+                  {errBusinessName && (
+                    <p id="err-business" className="text-sm text-destructive">{errBusinessName}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <Input 
-                    id="email" 
-                    type="email" 
-                    value={email} 
-                    onChange={(e) => setEmail(e.target.value)} 
-                    placeholder="john@company.com" 
-                    required 
+                  <Label htmlFor="email">Email Address</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => { setEmail(e.target.value); if (errEmail) setErrEmail(""); }}
+                    placeholder="john@company.com"
                     className="h-14 bg-background"
+                    aria-invalid={!!errEmail}
+                    aria-describedby={errEmail ? "err-email" : "email-helper"}
                   />
+                  {errEmail ? (
+                    <p id="err-email" className="text-sm text-destructive">{errEmail}</p>
+                  ) : (
+                    <p id="email-helper" className="text-xs text-muted-foreground">
+                      We'll use this email to send your results and related follow-up from CFO By Design.
+                    </p>
+                  )}
                 </div>
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   className="w-full h-14 text-lg font-bold bg-primary hover:bg-primary/90 text-primary-foreground"
                   disabled={isSubmitting}
                 >
