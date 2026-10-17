@@ -1,81 +1,96 @@
-import { motion } from "framer-motion";
 import { Card } from "@/components/ui/card";
 
-interface SwotQuadrantProps {
-  categoryScores: Record<string, number>;
-  score: number;
+// Label-only Financial Health Snapshot card. Replaces the previous SWOT
+// percentage quadrant (Codex #133 copy directive 2026-10-17) — the old
+// numbers (60/90/75/80) came from a path-score threshold rather than any
+// documented formula, so showing them to the owner was pseudo-precision.
+// The locked customer-facing product is "Business Health Check," so no
+// "SWOT" wording appears in the public UI.
+//
+// Each slot renders a short category label (locked by product) and a
+// one-liner narrative drawn from the report. The caller passes an
+// `items` map with the four slot narratives; a sensible fallback is used
+// when the report hasn't produced one.
+
+interface SnapshotItems {
+  strength?: string;
+  needsAttention?: string;
+  opportunity?: string;
+  watch?: string;
 }
 
-export const SwotQuadrant = ({ categoryScores, score }: SwotQuadrantProps) => {
-  // Simplified mapping for the quadrant visualization
-  const quadrants = [
-    { 
-      label: "S", 
-      title: "Strengths", 
-      color: "text-primary", 
-      bg: "bg-primary/5", 
-      val: score > 20 ? 85 : 60 
-    },
-    { 
-      label: "W", 
-      title: "Weaknesses", 
-      color: "text-destructive", 
-      bg: "bg-destructive/5", 
-      val: score < 15 ? 90 : 40 
-    },
-    { 
-      label: "O", 
-      title: "Opportunities", 
-      color: "text-accent", 
-      bg: "bg-accent/5", 
-      val: 75 
-    },
-    { 
-      label: "T", 
-      title: "Threats", 
-      color: "text-orange-500", 
-      bg: "bg-orange-500/5", 
-      val: score < 18 ? 80 : 30 
-    },
-  ];
+interface Props {
+  // Kept for backwards compatibility with the ResultsScreen call site;
+  // ignored by the new card (which carries no numeric scoring).
+  categoryScores?: Record<string, number>;
+  score?: number;
+  items?: SnapshotItems;
+}
 
+const SLOTS = [
+  {
+    label: "STRENGTH",
+    heading: "Clear client value",
+    key: "strength" as const,
+    tone: "text-primary border-primary/20 bg-primary/5",
+    chip: "bg-primary/10 text-primary",
+    fallback: "Signals in your answers that are already working for you.",
+  },
+  {
+    label: "NEEDS ATTENTION",
+    heading: "Revenue capture",
+    key: "needsAttention" as const,
+    tone: "text-accent border-accent/20 bg-accent/5",
+    chip: "bg-accent/10 text-accent",
+    fallback: "A friction point worth a closer look before you push harder on growth.",
+  },
+  {
+    label: "OPPORTUNITY",
+    heading: "Recurring revenue",
+    key: "opportunity" as const,
+    tone: "text-foreground border-white/10 bg-secondary/20",
+    chip: "bg-foreground/5 text-foreground",
+    fallback: "A direction your answers hint at that could compound over time.",
+  },
+  {
+    label: "WATCH",
+    heading: "Client concentration",
+    key: "watch" as const,
+    tone: "text-destructive border-destructive/20 bg-destructive/5",
+    chip: "bg-destructive/10 text-destructive",
+    fallback: "Something to monitor so it doesn't become a bigger problem later.",
+  },
+];
+
+export const SwotQuadrant = ({ items }: Props) => {
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {quadrants.map((item, i) => (
-        <Card key={i} className={`p-8 glass-card border-white/5 ${item.bg} space-y-6 overflow-hidden relative group`}>
-          <div className="flex items-center justify-between relative z-10">
-            <div className="flex items-center gap-4">
-              <span className={`font-display text-4xl font-bold ${item.color}`}>{item.label}</span>
-              <span className="font-display font-bold uppercase tracking-[0.2em] text-sm opacity-70">{item.title}</span>
-            </div>
-          </div>
-          <div className="space-y-3 relative z-10">
-            <div className="h-2 w-full bg-white/5 rounded-full overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                whileInView={{ width: `${item.val}%` }}
-                viewport={{ once: true }}
-                transition={{ delay: 0.5 + i * 0.15, duration: 1, ease: "easeOut" }}
-                className={`h-full ${
-                  item.label === "S" ? "bg-primary" : 
-                  item.label === "W" ? "bg-destructive" : 
-                  item.label === "O" ? "bg-accent" : 
-                  "bg-orange-500"
-                }`}
-              />
-            </div>
-            <div className="flex justify-between font-mono text-[10px] text-muted-foreground uppercase tracking-widest">
-              <span>Analysis Level</span>
-              <span>{item.val}%</span>
-            </div>
-          </div>
-          {/* Decorative background letter */}
-          <div className="absolute -right-4 -bottom-8 text-[120px] font-display font-bold opacity-[0.03] select-none group-hover:opacity-[0.06] transition-opacity">
-            {item.label}
-          </div>
-        </Card>
-      ))}
+    <div className="space-y-6">
+      <h3 className="font-display text-2xl md:text-3xl font-bold text-center text-foreground">
+        Your Financial Health Snapshot
+      </h3>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {SLOTS.map((slot) => {
+          const body = items?.[slot.key] || slot.fallback;
+          return (
+            <Card
+              key={slot.key}
+              className={`p-6 glass-card border space-y-3 ${slot.tone}`}
+            >
+              <span
+                className={`inline-block px-3 py-1 rounded-full font-mono text-[10px] font-bold tracking-[0.18em] uppercase ${slot.chip}`}
+              >
+                {slot.label}
+              </span>
+              <p className="font-display text-lg md:text-xl font-bold leading-tight">
+                {slot.heading}
+              </p>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                {body}
+              </p>
+            </Card>
+          );
+        })}
+      </div>
     </div>
   );
 };
-

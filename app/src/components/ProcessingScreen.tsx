@@ -1,84 +1,114 @@
 import { motion } from "framer-motion";
-import { Check, Activity } from "lucide-react";
+import { Activity } from "lucide-react";
 import { useEffect, useState } from "react";
 
-export const ProcessingScreen = ({ onComplete }: { onComplete: () => void }) => {
-  // Progress bar hits 100% at 3.5s but the Claude call typically takes 15-30s.
-  // Show a "still working" note once the bar completes so users don't think the page froze.
-  const [barDone, setBarDone] = useState(false);
+// Rotating status lines shown one at a time while the Worker generates the
+// Business Health Check. These are deliberately noncommittal — each one
+// describes an actual pass the Worker makes against the submitted answers,
+// not a specific calculation we may or may not have performed. Replaces
+// the previous hard-coded checklist (which overstated what was measured
+// with claims about "funding readiness scored" and "2,400+ business
+// profiles" that no runtime source backed up).
+const STATUS_LINES = [
+  "Reviewing your business profile",
+  "Checking financial decision-making and debt context",
+  "Reviewing revenue leaks and business strengths",
+  "Looking at growth and concentration signals",
+  "Prioritizing the strongest findings",
+  "Building your Business Health Check",
+];
 
+// Visual progress caps at 92% while we wait for the actual worker response.
+// The remaining 8% is reserved for the parent's screen transition so the
+// bar never sits at 100% while the user stares at a frozen page. Codex
+// #133 copy directive 2026-10-17.
+const PROGRESS_CAP = 92;
+
+// Minimum visible duration before onComplete fires. The parent transitions
+// to results when BOTH the worker response has landed AND this timer has
+// fired — so this acts as a floor (don't flash past the loading screen on
+// fast responses), not a ceiling. The customer never waits longer than
+// the worker takes.
+const MIN_VISIBLE_MS = 5000;
+
+// Cadence for rotating status lines (ms per line). Six lines × 6s = 36s
+// per full loop; we keep cycling if the worker takes longer than that
+// since each line is still a plausible description of what's happening.
+const LINE_ROTATE_MS = 6000;
+
+// How long we animate from 0% → PROGRESS_CAP in the visual bar. Set wide
+// so the bar typically doesn't reach the cap before the worker responds;
+// if it does, it holds at 92% until the response arrives.
+const BAR_FILL_MS = 60000;
+
+export const ProcessingScreen = ({ onComplete }: { onComplete: () => void }) => {
+  const [lineIdx, setLineIdx] = useState(0);
+
+  // Fire onComplete once the minimum visible window has elapsed so the
+  // parent can transition the moment the worker response arrives.
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setBarDone(true);
-      onComplete();
-    }, 3500);
-    return () => clearTimeout(timer);
+    const t = setTimeout(() => onComplete(), MIN_VISIBLE_MS);
+    return () => clearTimeout(t);
   }, [onComplete]);
 
-  const lines = [
-    { text: "✓ Revenue patterns evaluated", delay: 0.3 },
-    { text: "✓ Funding readiness scored", delay: 0.8 },
-    { text: "✓ Credit position assessed", delay: 1.3 },
-    { text: "✓ Cash flow risk calculated", delay: 1.8 },
-    { text: "✓ Comparing to 2,400+ business profiles...", delay: 2.3 },
-    { text: "⚡ Generating your personalized report...", delay: 2.8, gold: true },
-  ];
+  // Cycle through STATUS_LINES one-at-a-time. Loops back to the first
+  // once we've shown them all, so a slow response never leaves the screen
+  // stuck on "Building your Business Health Check" for 90 seconds.
+  useEffect(() => {
+    const i = setInterval(() => {
+      setLineIdx((prev) => (prev + 1) % STATUS_LINES.length);
+    }, LINE_ROTATE_MS);
+    return () => clearInterval(i);
+  }, []);
+
+  const currentLine = STATUS_LINES[lineIdx];
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 pt-48 md:pt-64 relative overflow-hidden">
-      <div className="relative z-10 text-center space-y-12 w-full max-w-lg">
-        <div className="space-y-6">
+      <div className="relative z-10 text-center space-y-10 w-full max-w-xl">
+        <div className="space-y-4">
           <motion.h3
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             className="font-display text-4xl text-foreground font-bold"
           >
-            Analyzing Your Business Profile...
+            Reviewing your Business Health Check
           </motion.h3>
+          <p className="text-muted-foreground text-base leading-relaxed max-w-md mx-auto">
+            We're reviewing your answers for the strongest financial and operating signals worth a closer look.
+          </p>
+        </div>
 
-          <div className="space-y-4 text-left max-w-sm mx-auto">
-            {lines.map((line, i) => (
-              <motion.div
-                key={i}
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: line.delay }}
-                className={`flex items-center gap-3 ${
-                  line.gold ? "text-primary font-bold text-lg mt-6" : "text-muted-foreground text-sm"
-                }`}
-              >
-                {line.gold ? (
-                  <Activity className="h-5 w-5 text-primary animate-pulse" />
-                ) : (
-                  <Check className="h-4 w-4 text-accent" />
-                )}
-                <span className="font-body">{line.text}</span>
-              </motion.div>
-            ))}
-          </div>
+        {/* Single rotating status line. Fades between lines with
+            AnimatePresence-style key-swapped motion. */}
+        <div className="h-8 flex items-center justify-center">
+          <motion.div
+            key={lineIdx}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -6 }}
+            transition={{ duration: 0.4 }}
+            className="flex items-center gap-3 text-primary font-medium"
+          >
+            <Activity className="h-4 w-4 animate-pulse" />
+            <span className="font-body">{currentLine}</span>
+          </motion.div>
         </div>
 
         <div className="w-full space-y-2">
           <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
             <motion.div
               initial={{ width: 0 }}
-              animate={{ width: "100%" }}
-              transition={{ duration: 3.5, ease: "linear" }}
+              animate={{ width: `${PROGRESS_CAP}%` }}
+              transition={{ duration: BAR_FILL_MS / 1000, ease: "linear" }}
               className="h-full bg-primary"
             />
           </div>
         </div>
 
-        {barDone && (
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.4 }}
-            className="text-sm text-muted-foreground font-body pt-4"
-          >
-            Finalizing your report — this usually takes another 20–40 seconds. Please keep this tab open.
-          </motion.p>
-        )}
+        <p className="text-sm text-muted-foreground font-body pt-4 max-w-sm mx-auto">
+          This may take about a minute. Keep this page open while we finish your results.
+        </p>
       </div>
 
       {/* Background SWOT Grid Animation */}
@@ -117,4 +147,3 @@ export const ProcessingScreen = ({ onComplete }: { onComplete: () => void }) => 
     </div>
   );
 };
-
