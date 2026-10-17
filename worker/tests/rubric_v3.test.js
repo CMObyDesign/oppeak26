@@ -31,8 +31,8 @@ import {
 } from "../src/index.js";
 
 describe("Rubric v3 — version bumps", () => {
-  it("RUBRIC_VERSION is r3.2 (bumped from r3.1 when MIGUEL'S POINT OF VIEW block + TWO CRITICAL DEBT NUMBERS rewrite landed)", () => {
-    assert.equal(RUBRIC_VERSION, "r3.2");
+  it("RUBRIC_VERSION is r3.3 (bumped from r3.2 when CASH-FLOW/VISIBILITY split + FREE-tier bank-balance anchor landed)", () => {
+    assert.equal(RUBRIC_VERSION, "r3.3");
   });
 
   it("PROMPT_VERSION is p2.2 (bumped from p2.1 when TIER_GUIDE.paid_297 was rewritten for BGA)", () => {
@@ -81,6 +81,38 @@ describe("Rubric v3 — ASSESSMENT_RUBRIC content", () => {
     // Both halves of the supported/not-supported example pair must be present.
     assert.match(ASSESSMENT_RUBRIC, /Those two answers belong in the same[\s\S]+?conversation/);
     assert.match(ASSESSMENT_RUBRIC, /Moving to retainers will reduce your client concentration/);
+  });
+
+  it("separates CASH-FLOW STRESS from FINANCIAL-VISIBILITY GAPS (2026-10-17 round-3 directive)", () => {
+    // Not having an audit is not proof of cash-flow stress. These are
+    // two different signal buckets and the rubric must say so, with
+    // explicit evidence lists for each.
+    assert.match(ASSESSMENT_RUBRIC, /CASH-FLOW AND FINANCIAL-VISIBILITY SIGNALS/);
+    assert.match(ASSESSMENT_RUBRIC, /Do not confuse financial visibility with actual cash-flow distress/);
+    assert.match(ASSESSMENT_RUBRIC, /CASH-FLOW STRESS requires evidence such as/);
+    assert.match(ASSESSMENT_RUBRIC, /materially aged receivables/);
+    assert.match(ASSESSMENT_RUBRIC, /FINANCIAL-VISIBILITY GAPS include/);
+    assert.match(ASSESSMENT_RUBRIC, /making decisions primarily from bank balance/);
+    assert.match(ASSESSMENT_RUBRIC, /A visibility gap matters because it makes decisions harder to evaluate/);
+    assert.match(ASSESSMENT_RUBRIC, /It is NOT automatically proof that cash flow is bad/);
+    // Hard regression bar: the discarded "no documented financial plan /
+    // never had a financial audit" bullet must stay out of the cash-flow
+    // stress list — that was the overclaim being corrected.
+    assert.doesNotMatch(ASSESSMENT_RUBRIC, /No documented financial plan or budget; never had a financial audit or deep dive\./);
+  });
+
+  it("anchors FREE-TIER FINANCIAL VISIBILITY to the owner's actual answer (2026-10-17 round-3 directive)", () => {
+    // The replacement block uses the bank-balance answer as the anchor
+    // and explicitly bans four over-claims the previous hard-coded line
+    // was quietly licensing.
+    assert.match(ASSESSMENT_RUBRIC, /FINANCIAL VISIBILITY ON THE FREE TIER/);
+    assert.match(ASSESSMENT_RUBRIC, /The bank-balance question is one of Miguel's core diagnostic questions/);
+    assert.match(ASSESSMENT_RUBRIC, /Anchor the finding to what the owner actually said/);
+    assert.match(ASSESSMENT_RUBRIC, /somewhere between the actual numbers\s+and what's in the bank account/);
+    assert.match(ASSESSMENT_RUBRIC, /A bank balance shows what is there today/);
+    assert.match(ASSESSMENT_RUBRIC, /Do NOT claim the books are stale, KPIs are missing, reports are inaccurate,\s+or cash flow is weak unless another answer establishes that/);
+    // Hard regression bar: the discarded hard-coded sentence must stay out.
+    assert.doesNotMatch(ASSESSMENT_RUBRIC, /You know several important numbers, but\s+decisions are not consistently being made from clean financials and a complete KPI\s+picture/);
   });
 
   it("carries THE TWO CRITICAL DEBT NUMBERS (rewrite that drops the cash-flow overclaim)", () => {

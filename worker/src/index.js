@@ -82,7 +82,7 @@ import { buildFactsForPrompt, validateStructuredFindings } from "./findings.js";
 // `/report/{contactId}?v=N` the archived row was produced by a different
 // generator than today's code.
 const ASSESSMENT_VERSION = "v1";    // intake question set
-const RUBRIC_VERSION     = "r3.2";  // ASSESSMENT_RUBRIC — Elizabeth-led rewrite:
+const RUBRIC_VERSION     = "r3.3";  // ASSESSMENT_RUBRIC — Elizabeth-led rewrite:
                                      // explicit evidence hierarchy, qualified Miguel
                                      // "drown" framing, severity-is-not-tone discipline,
                                      // traceable (not quoted) anti-generic mandate,
@@ -106,6 +106,17 @@ const RUBRIC_VERSION     = "r3.2";  // ASSESSMENT_RUBRIC — Elizabeth-led rewri
                                      // the overclaim ("together these tell you
                                      // whether cash flow can support the business"),
                                      // adds the free-tier info-gap script.
+                                     // r3.3 (2026-10-17): split CASH-FLOW STRESS
+                                     // from FINANCIAL-VISIBILITY GAPS (not having
+                                     // an audit is not proof of cash-flow stress).
+                                     // Replaced the hard-coded "financial visibility
+                                     // is incomplete / clean financials and a
+                                     // complete KPI picture" sentence with a free-
+                                     // tier block anchored to the owner's actual
+                                     // bank-balance answer, with explicit "do not
+                                     // claim books are stale / KPIs are missing /
+                                     // reports are inaccurate / cash flow is weak
+                                     // unless another answer establishes that."
 // buildPrompt() format. Bumped to p2.2: TIER_GUIDE.paid_297 was
 // rewritten to the Business Growth Analysis prompt (prioritized
 // 90-day growth plan built on the Full Diagnostic), which materially
@@ -376,10 +387,27 @@ is unknown and what the paid tier would clarify. Example:
 The second version is a STRONGER bridge to the paid tier because it names the specific
 information gap, not a dramatic verdict the evidence does not support.
 
-CASH-FLOW STRESS SIGNALS (independent of debt — each requires its own explicit evidence):
-- Accounts receivable aging — 30 days is normal; 60+ days is when it becomes a problem.
-- Corporate debt whose status is stretched or unmanaged (it is "status," never "relationship").
-- No documented financial plan or budget; never had a financial audit or deep dive.
+CASH-FLOW AND FINANCIAL-VISIBILITY SIGNALS
+
+Do not confuse financial visibility with actual cash-flow distress.
+
+CASH-FLOW STRESS requires evidence such as:
+- materially aged receivables when actual aging is provided,
+- explicitly stretched or delinquent obligations,
+- thin operating runway when supplied,
+- inability to cover stated obligations,
+- or another explicit cash-pressure fact.
+
+FINANCIAL-VISIBILITY GAPS include:
+- making decisions primarily from bank balance,
+- not knowing key financial numbers,
+- materially delayed financial closes,
+- no consistent reporting cadence,
+- or another explicit indication that the owner lacks a current financial
+  picture.
+
+A visibility gap matters because it makes decisions harder to evaluate.
+It is NOT automatically proof that cash flow is bad.
 
 PATH SELECTION — choose exactly one. CUSTOMER-FACING classification MUST be one of the
 three values below. Each path requires EXPLICIT evidence of its trigger (see DEBT SUBTYPE
@@ -420,12 +448,30 @@ FREE-TIER FINDING DISCIPLINE (applies when tier is "free"):
   curiosity funnel, not an adversarial catalog of weaknesses. Where it fits the output
   schema, surface the strength in the "opener" paragraph or as the first entry in
   opportunities[] (framed as "this is working — here's how to lean on it").
-- "Financial visibility" (decisions somewhere between numbers and bank balance) is a
-  primary finding when the magic-question evidence supports it. Phrasing to use:
-  "Your financial visibility is incomplete. You know several important numbers, but
-  decisions are not consistently being made from clean financials and a complete KPI
-  picture. That makes hiring, pricing, debt reduction, and marketing decisions harder
-  to evaluate confidently."
+- FINANCIAL VISIBILITY ON THE FREE TIER
+
+  The bank-balance question is one of Miguel's core diagnostic questions.
+
+  When the owner says decisions are based on bank balance, somewhere in
+  between, or they are not sure, financial visibility may be a primary
+  finding.
+
+  Anchor the finding to what the owner actually said.
+
+  Example:
+
+  "You told us your decisions are made somewhere between the actual numbers
+  and what's in the bank account. That tells me the financial picture is not
+  yet consistently driving the decision."
+
+  Then explain the consequence at the level the evidence supports:
+
+  "A bank balance shows what is there today. It does not, by itself, tell you
+  what is already committed or whether the next hiring, pricing, debt, or
+  spending decision fits the larger financial picture."
+
+  Do NOT claim the books are stale, KPIs are missing, reports are inaccurate,
+  or cash flow is weak unless another answer establishes that.
 - When funnel numbers are provided in the answers (any mix of leads, booked appointments,
   show rate, offers made, closes), COMPUTE conversion rates and surface the biggest leak
   with specific percentages and the dollar implication (if average sale is given).
