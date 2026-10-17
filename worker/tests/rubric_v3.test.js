@@ -31,8 +31,8 @@ import {
 } from "../src/index.js";
 
 describe("Rubric v3 — version bumps", () => {
-  it("RUBRIC_VERSION is r3.1 (bumped from r3.0 when VOICE DISCIPLINE was added)", () => {
-    assert.equal(RUBRIC_VERSION, "r3.1");
+  it("RUBRIC_VERSION is r3.2 (bumped from r3.1 when MIGUEL'S POINT OF VIEW block + TWO CRITICAL DEBT NUMBERS rewrite landed)", () => {
+    assert.equal(RUBRIC_VERSION, "r3.2");
   });
 
   it("PROMPT_VERSION is p2.2 (bumped from p2.1 when TIER_GUIDE.paid_297 was rewritten for BGA)", () => {
@@ -66,6 +66,35 @@ describe("Rubric v3 — ASSESSMENT_RUBRIC content", () => {
     assert.match(ASSESSMENT_RUBRIC, /guardrails control truthfulness, not personality/i);
     assert.match(ASSESSMENT_RUBRIC, /Miguel's voice \+ Solomon's evidence discipline/);
     assert.match(ASSESSMENT_RUBRIC, /NOT: AI-safe generic financial copy/);
+  });
+
+  it("carries MIGUEL'S POINT OF VIEW / SOLOMON'S VOICE block (2026-10-17 round-2 directive)", () => {
+    // Explicit Miguel voice description — cadence, write-like-a-CFO stance,
+    // supported/not-supported examples, no em dashes, no impersonation.
+    // Locked here so this block can't be stripped or softened.
+    assert.match(ASSESSMENT_RUBRIC, /MIGUEL'S POINT OF VIEW \/ SOLOMON'S VOICE/);
+    assert.match(ASSESSMENT_RUBRIC, /Write like an experienced CFO sitting across the table from an owner/);
+    assert.match(ASSESSMENT_RUBRIC, /Confidence is not permission to overstate/);
+    assert.match(ASSESSMENT_RUBRIC, /When the evidence stops, the claim stops/);
+    assert.match(ASSESSMENT_RUBRIC, /Do not use em dashes in customer-facing output/);
+    assert.match(ASSESSMENT_RUBRIC, /Do not impersonate Miguel/);
+    // Both halves of the supported/not-supported example pair must be present.
+    assert.match(ASSESSMENT_RUBRIC, /Those two answers belong in the same[\s\S]+?conversation/);
+    assert.match(ASSESSMENT_RUBRIC, /Moving to retainers will reduce your client concentration/);
+  });
+
+  it("carries THE TWO CRITICAL DEBT NUMBERS (rewrite that drops the cash-flow overclaim)", () => {
+    // Keeps Miguel's concept; drops the previous "together these tell you
+    // whether cash flow can actually support the business" overclaim.
+    // The free-tier info-gap script must stay verbatim so a healthy Q4
+    // "managed debt" answer never gets flipped into evidence of distress.
+    assert.match(ASSESSMENT_RUBRIC, /THE TWO CRITICAL DEBT NUMBERS/);
+    assert.match(ASSESSMENT_RUBRIC, /are two of the most\s+basic numbers an owner should know/);
+    assert.match(ASSESSMENT_RUBRIC, /Do not treat them as sufficient, by themselves/);
+    assert.match(ASSESSMENT_RUBRIC, /What this Health Check cannot tell us is how much the business is carrying/);
+    assert.match(ASSESSMENT_RUBRIC, /legitimate information gap and a reason for deeper diagnosis/);
+    // Hard regression bar: the discarded overclaim must stay out.
+    assert.doesNotMatch(ASSESSMENT_RUBRIC, /these tell you whether cash flow can actually support the business/);
   });
 
   it("qualifies Miguel's 'drown' phrase as internal philosophy only", () => {
