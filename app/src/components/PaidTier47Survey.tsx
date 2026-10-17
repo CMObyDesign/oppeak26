@@ -1,16 +1,16 @@
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { ArrowLeft } from "lucide-react";
 import {
   PAID_TIER_47_BUSINESS_INFO,
-  getPaid47Sections,
+  PAID_TIER_47_QUESTIONS,
   PaidTier47Question,
 } from "@/data/paidTier47Questions";
 import { SaveForLater } from "@/components/SaveForLater";
+import { TieredQuestionCard, TierEyebrow } from "@/components/TieredQuestionCard";
 import { requestParentScrollToTop } from "@/lib/iframe-resize";
 
 interface Props {
@@ -19,11 +19,18 @@ interface Props {
   onComplete: (answers: Record<string, any>) => void;
 }
 
+// One-question-per-screen flow matching the free tier's visual language.
+// Index 0 = batched business-info step (name/email + Business Info fields —
+// kept batched because typing a form is faster than four clicks). Indices
+// 1..N = Q12..Q28 diagnostic questions, one per screen.
 export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props) => {
-  const [sectionIdx, setSectionIdx] = useState(0);
+  const [stepIdx, setStepIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<string, any>>({});
+  // Separate draft state for free-form questions so the typed value survives
+  // until the user clicks Continue. Mirrors the free-tier QuestionCard pattern.
+  const [draft, setDraft] = useState<string>("");
 
-  // Per-browser resume: a paid customer who drops mid-survey picks back up.
+  // Per-browser resume (unchanged from previous version).
   const PROGRESS_KEY = `swot_paid47_progress_${contact.contactId || "anon"}`;
   useEffect(() => {
     try {
@@ -32,142 +39,125 @@ export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props
       const s = JSON.parse(raw);
       if (s && typeof s === "object") {
         if (s.answers && typeof s.answers === "object") setAnswers(s.answers);
-        if (typeof s.sectionIdx === "number") setSectionIdx(s.sectionIdx);
+        if (typeof s.stepIdx === "number") setStepIdx(s.stepIdx);
       }
     } catch { /* private mode or bad JSON — start fresh */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [PROGRESS_KEY]);
   useEffect(() => {
     try {
-      localStorage.setItem(PROGRESS_KEY, JSON.stringify({ answers, sectionIdx }));
+      localStorage.setItem(PROGRESS_KEY, JSON.stringify({ answers, stepIdx }));
     } catch { /* localStorage disabled — skip */ }
-  }, [PROGRESS_KEY, answers, sectionIdx]);
+  }, [PROGRESS_KEY, answers, stepIdx]);
 
-  // Scroll to top on mount and on every section change. Covers:
-  //   - initial load (otherwise the pt-48/pt-64 container renders below the
-  //     fold and the first question gets cut off, especially on the final step)
-  //   - resume-from-localStorage (sectionIdx may restore to a non-zero value
-  //     before the user sees the page)
-  //   - next/back navigation (replaces the ad-hoc scrollTo calls that used to
-  //     live inside handleNext/handleBack)
-  //
-  // Fires BOTH window.scrollTo (standalone deploy) AND the parent-scroll
-  // bridge (HL iframe deploy — initIframeResize disables the iframe's own
-  // scrollbar, so the inner window.scrollTo can't move the viewport the
-  // customer actually sees; the parent page owns scrolling and only responds
-  // to the postMessage bridge). requestParentScrollToTop no-ops when not
-  // embedded.
+  const totalSteps = 1 + PAID_TIER_47_QUESTIONS.length;
+  const isBusinessInfoStep = stepIdx === 0;
+  const currentQ: PaidTier47Question | null = isBusinessInfoStep
+    ? null
+    : PAID_TIER_47_QUESTIONS[stepIdx - 1];
+  const isLast = stepIdx === totalSteps - 1;
+  const isFirst = stepIdx === 0;
+
+  // Load draft text from stored answer whenever the question changes so a
+  // buyer who navigates back sees their earlier text.
+  useEffect(() => {
+    if (currentQ) {
+      setDraft(answers[currentQ.id] || "");
+    }
+  }, [stepIdx, currentQ, answers]);
+
+  // Scroll bridge (standalone + HL iframe) on every step change.
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: "smooth" });
     requestParentScrollToTop();
-  }, [sectionIdx]);
-
-  const questionSections = getPaid47Sections();
-  // Business info is the first section
-  const allSections = [
-    { name: "Business Information", questions: [], isBusinessInfo: true },
-    ...questionSections.map(s => ({ ...s, isBusinessInfo: false })),
-  ] as any[];
-
-  const currentSection = allSections[sectionIdx];
-  const isLast = sectionIdx === allSections.length - 1;
-  const isFirst = sectionIdx === 0;
+  }, [stepIdx]);
 
   const setAnswer = (id: string, value: any) =>
     setAnswers(prev => ({ ...prev, [id]: value }));
 
-  const handleNext = () => {
+  const advance = () => {
     if (isLast) {
       try { localStorage.removeItem(PROGRESS_KEY); } catch { /* ignore */ }
       onComplete(answers);
-    } else {
-      setSectionIdx(i => i + 1);
+      return;
     }
+    setStepIdx(i => i + 1);
   };
 
   const handleBack = () => {
-    if (!isFirst) {
-      setSectionIdx(i => i - 1);
-    }
+    if (!isFirst) setStepIdx(i => i - 1);
   };
 
-  const renderQuestion = (q: PaidTier47Question) => {
-    const value = answers[q.id] || "";
-    switch (q.type) {
-      case "dollar":
-        return (
-          <Input
-            type="text"
-            value={value}
-            onChange={(e) => setAnswer(q.id, e.target.value)}
-            placeholder={q.placeholder}
-            className="h-14 bg-secondary/40"
-          />
-        );
-      case "textarea":
-        return (
-          <Textarea
-            value={value}
-            onChange={(e) => setAnswer(q.id, e.target.value)}
-            placeholder={q.placeholder || "Type your response here"}
-            className="min-h-[120px] bg-secondary/40"
-          />
-        );
-      case "select":
-        return (
-          <div className="space-y-3">
-            {q.options?.map((opt) => (
-              <button
-                key={opt.value}
-                onClick={() => setAnswer(q.id, opt.value)}
-                className={`w-full text-left p-4 rounded-xl border transition-all ${
-                  value === opt.value
-                    ? "bg-primary/10 border-primary"
-                    : "bg-secondary/40 border-border hover:border-primary/50"
-                }`}
-              >
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        );
-      default:
-        return null;
-    }
+  // For free-form questions, write the draft to answers on Continue so a
+  // typo-fix mid-sentence doesn't rewrite history on every keystroke.
+  const handleContinueText = () => {
+    if (!currentQ) return;
+    const trimmed = draft.trim();
+    if (currentQ.required && !trimmed) return;
+    setAnswer(currentQ.id, draft);
+    advance();
   };
+
+  // Select questions auto-advance (same as the free tier).
+  const handleSelect = (value: string) => {
+    if (!currentQ) return;
+    setAnswer(currentQ.id, value);
+    advance();
+  };
+
+  const progress = `${stepIdx + 1}/${totalSteps}`;
 
   return (
-    <div className="w-full max-w-3xl mx-auto pt-48 md:pt-64 pb-32 px-4 space-y-8">
-      <div className="text-center space-y-2">
-        <p className="text-xs font-bold text-accent uppercase tracking-[0.3em]">
-          {isLast ? "LAST STEP" : "$47 FULL DIAGNOSTIC"}
-        </p>
-        <h2 className="font-display text-3xl md:text-4xl font-bold">{currentSection.name}</h2>
-        <p className="text-sm text-muted-foreground">Section {sectionIdx + 1} of {allSections.length}</p>
+    <div className="w-full max-w-[720px] mx-auto pt-48 md:pt-64 pb-32 px-4 space-y-8">
+      <div className="flex items-center justify-between">
+        <button
+          onClick={handleBack}
+          className={`flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors text-sm font-medium ${
+            isFirst ? "invisible" : ""
+          }`}
+        >
+          <ArrowLeft className="h-4 w-4" /> Back
+        </button>
+        <TierEyebrow tier="paid_47" progress={progress} />
       </div>
 
       <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden">
         <motion.div
           className="h-full bg-primary"
           initial={{ width: 0 }}
-          animate={{ width: `${((sectionIdx + 1) / allSections.length) * 100}%` }}
+          animate={{ width: `${((stepIdx + 1) / totalSteps) * 100}%` }}
           transition={{ duration: 0.4 }}
         />
       </div>
 
       <AnimatePresence mode="wait">
-        <motion.div
-          key={sectionIdx}
-          initial={{ opacity: 0, x: 20 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: -20 }}
-          className="space-y-8 bg-card/40 border border-white/5 rounded-2xl p-8"
-        >
-          {currentSection.isBusinessInfo ? (
-            <>
+        {isBusinessInfoStep ? (
+          <motion.div
+            key="biz-info"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+            className="space-y-8 p-8 md:p-12 glass-card rounded-2xl border border-white/5 bg-card/40 backdrop-blur-xl shadow-card"
+          >
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <span className="flex h-7 min-w-[1.75rem] px-1.5 items-center justify-center rounded-full bg-primary/20 text-[11px] font-bold text-primary font-mono">
+                  0
+                </span>
+                <h3 className="font-display text-3xl md:text-4xl text-foreground font-bold leading-tight">
+                  Business Information
+                </h3>
+              </div>
+              <p className="text-muted-foreground text-lg mt-2">
+                A few quick details so we can anchor your diagnostic in the right context.
+              </p>
+            </div>
+
+            <div className="space-y-6">
               <div className="space-y-4">
-                <h3 className="font-display text-lg font-bold">Contact</h3>
-                <div className="space-y-3">
+                <h4 className="font-display text-lg font-bold text-foreground">Contact</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <Label htmlFor="contact-name">Your Name</Label>
                     <Input
@@ -190,7 +180,7 @@ export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props
                 </div>
               </div>
               <div className="space-y-4">
-                <h3 className="font-display text-lg font-bold">Business</h3>
+                <h4 className="font-display text-lg font-bold text-foreground">Business</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {PAID_TIER_47_BUSINESS_INFO.map((f) => {
                     const wide = f.id === "organization" || f.id === "website" || f.id === "industry";
@@ -209,34 +199,47 @@ export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props
                   })}
                 </div>
               </div>
-            </>
-          ) : (
-            currentSection.questions.map((q: PaidTier47Question) => (
-              <div key={q.id} className="space-y-3">
-                <div className="space-y-1">
-                  <p className="text-xs text-accent font-mono uppercase tracking-widest">{q.qNumber} · {q.title}</p>
-                  <p className="text-base text-foreground font-medium">{q.text}</p>
-                </div>
-                {renderQuestion(q)}
-              </div>
-            ))
-          )}
-        </motion.div>
-      </AnimatePresence>
+            </div>
 
-      <div className="flex justify-between items-center pt-4">
-        {!isFirst ? (
-          <Button onClick={handleBack} variant="ghost" className="text-muted-foreground hover:text-foreground">
-            <ArrowLeft className="h-4 w-4 mr-2" /> Back
-          </Button>
-        ) : <div />}
-        <Button onClick={handleNext} className="h-14 px-8 bg-primary hover:bg-primary/90 text-primary-foreground font-bold rounded-xl">
-          {isLast ? "Generate My Diagnostic →" : "Continue →"}
-        </Button>
-      </div>
+            <Button
+              onClick={advance}
+              className="w-full h-16 bg-primary text-primary-foreground font-bold text-lg rounded-xl shadow-glow-gold hover:scale-[1.01] transition-transform"
+            >
+              Continue →
+            </Button>
+          </motion.div>
+        ) : currentQ ? (
+          <motion.div
+            key={currentQ.id}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+          >
+            <TieredQuestionCard
+              badgeNumber={currentQ.qNumber.replace(/^Q/i, "")}
+              title={currentQ.title}
+              text={currentQ.text}
+              type={
+                currentQ.type === "dollar" ? "dollar" :
+                currentQ.type === "select" ? "select" :
+                "textarea"
+              }
+              value={draft}
+              onChange={setDraft}
+              onContinue={handleContinueText}
+              onSelect={handleSelect}
+              selectedValue={answers[currentQ.id]}
+              placeholder={currentQ.placeholder}
+              options={currentQ.options}
+              continueLabel={isLast ? "Generate My Diagnostic →" : "Continue →"}
+              continueDisabled={currentQ.required && !draft.trim()}
+            />
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
 
       <SaveForLater emailHint />
     </div>
   );
 };
-
