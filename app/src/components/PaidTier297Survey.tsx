@@ -4,6 +4,7 @@ import { ArrowLeft } from "lucide-react";
 import {
   PAID_TIER_297_QUESTIONS,
   PaidTier297Question,
+  getPaid297Sections,
 } from "@/data/paidTier297Questions";
 import { uploadFile } from "@/lib/assessment";
 import { SaveForLater } from "@/components/SaveForLater";
@@ -25,6 +26,23 @@ interface Props {
 }
 
 interface UploadedFile { url: string; fileName: string; }
+
+// Legacy-cursor migration (Codex P2 on #133). Pre-refactor $297 drafts
+// stored sectionIdx against getPaid297Sections() — the first section
+// held just annual_revenue, later sections held Q_A, Q_B, Q_C, etc. The
+// new survey stores stepIdx against the flat PAID_TIER_297_QUESTIONS
+// array, so a buyer who dropped mid-BGA before the refactor still lands
+// close to where they stopped rather than being booted back to Q0.
+function migrateLegacySectionIdx297(sectionIdx: number): number {
+  if (sectionIdx <= 0) return 0;
+  const sections = getPaid297Sections();
+  if (sectionIdx >= sections.length) return PAID_TIER_297_QUESTIONS.length - 1;
+  let offset = 0;
+  for (let i = 0; i < sectionIdx; i++) {
+    offset += sections[i].questions.length;
+  }
+  return Math.min(offset, PAID_TIER_297_QUESTIONS.length - 1);
+}
 
 // One-question-per-screen BGA intake using the shared TieredQuestionCard.
 // Matches the free-tier visual language (gold numbered badge, Playfair
@@ -65,7 +83,12 @@ export const PaidTier297Survey = ({ contact, onComplete, initialAnswers }: Props
         if (s.answers && typeof s.answers === "object") {
           setAnswers((prev) => ({ ...prev, ...s.answers }));
         }
-        if (typeof s.stepIdx === "number") setStepIdx(s.stepIdx);
+        if (typeof s.stepIdx === "number") {
+          setStepIdx(s.stepIdx);
+        } else if (typeof s.sectionIdx === "number") {
+          // Codex P2 on #133 — legacy cursor migration.
+          setStepIdx(migrateLegacySectionIdx297(s.sectionIdx));
+        }
         if (Array.isArray(s.uploadedFiles)) setUploadedFiles(s.uploadedFiles);
       }
     } catch { /* private mode or bad JSON — start fresh */ }
@@ -97,29 +120,45 @@ export const PaidTier297Survey = ({ contact, onComplete, initialAnswers }: Props
   const setAnswer = (id: string, value: any) =>
     setAnswers(prev => ({ ...prev, [id]: value }));
 
-  const missingRequired = (): { q: PaidTier297Question; stepIdx: number } | null => {
+  // Takes answers as a parameter so finishIntake can validate against the
+  // final nextAnswers object (built inline from draft + answers) rather
+  // than against the state closure that hasn't batched yet. Codex P1 on
+  // #133 — otherwise the last BGA question's response is dropped before
+  // the worker request.
+  const missingRequired = (
+    answersSrc: Record<string, any>,
+  ): { q: PaidTier297Question; stepIdx: number } | null => {
     for (let i = 0; i < PAID_TIER_297_QUESTIONS.length; i++) {
       const q = PAID_TIER_297_QUESTIONS[i];
       if (!q.required) continue;
-      const v = answers[q.id];
+      const v = answersSrc[q.id];
       if (typeof v !== "string" || !v.trim()) return { q, stepIdx: i };
     }
     return null;
   };
 
-  const finishIntake = () => {
-    const missing = missingRequired();
+  // finishIntake takes the authoritative answers object directly rather
+  // than reading from state. Fixes Codex P1 on #133: the previous shape
+  // called setAnswer() (async) then relied on a setTimeout(() => finishIntake())
+  // one tick later to read the "updated" answers — but React batches state
+  // updates and the closure still captured the stale object, so the last
+  // BGA question's response was being dropped before the worker request.
+  // Callers now build nextAnswers inline and pass it here.
+  const finishIntake = (nextAnswers: Record<string, any>) => {
+    const missing = missingRequired(nextAnswers);
     if (missing) {
+      setAnswers(nextAnswers);
       setRequiredError(
         `Please answer "${missing.q.title}" before generating your report. This is the single most important input for your strategist call.`,
       );
       setStepIdx(missing.stepIdx);
       return;
     }
+    setAnswers(nextAnswers);
     setRequiredError(null);
     try { localStorage.removeItem(PROGRESS_KEY); } catch { /* ignore */ }
     onComplete({
-      ...answers,
+      ...nextAnswers,
       supporting_documents: uploadedFiles.map(f => f.url),
     });
   };
@@ -133,19 +172,22 @@ export const PaidTier297Survey = ({ contact, onComplete, initialAnswers }: Props
       return;
     }
     setRequiredError(null);
-    setAnswer(currentQ.id, draft);
+    const nextAnswers = { ...answers, [currentQ.id]: draft };
     if (isLast) {
-      // Commit the draft to answers then run the full-form validation.
-      setTimeout(() => finishIntake(), 0);
+      finishIntake(nextAnswers);
       return;
     }
+    setAnswers(nextAnswers);
     setStepIdx(i => i + 1);
   };
 
   const handleFileContinue = () => {
     setRequiredError(null);
     if (isLast) {
-      setTimeout(() => finishIntake(), 0);
+      // File-upload questions don't write to `answers` — uploads live in
+      // their own `uploadedFiles` state and are folded into the payload
+      // by finishIntake. Pass the current answers through unchanged.
+      finishIntake(answers);
       return;
     }
     setStepIdx(i => i + 1);

@@ -47,14 +47,24 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
   const isBeta = location.pathname.startsWith("/beta");
   const [couponCode, setCouponCode] = useState("");
   const [couponStatus, setCouponStatus] = useState<"idle" | "invalid" | "applying" | "applied">("idle");
+  // Surfaces the real reason a coupon apply failed (rate limit, origin block,
+  // missing identifier, GHL upsert error, network error). Without this,
+  // every failure rendered the same generic "wrong code" message — which
+  // left customers stuck on legitimate codes that failed for infrastructure
+  // reasons they couldn't diagnose. The server's own `error` string is
+  // trusted; a client-side friendly fallback covers wrong-code and
+  // network-error paths that don't produce one.
+  const [couponErrDetail, setCouponErrDetail] = useState<string | null>(null);
 
   const handleApplyCoupon = async () => {
     const code = couponCode.trim().toUpperCase();
     if (code !== "SOLOMON50") {
       setCouponStatus("invalid");
+      setCouponErrDetail("That code isn't recognized. Beta codes are case-sensitive and come in the welcome email.");
       return;
     }
     setCouponStatus("applying");
+    setCouponErrDetail(null);
     // Confirm the tag write BEFORE navigating. The paid survey webhook rejects
     // (403) any submission whose contact lacks swot_solomon50_applied, so
     // sending the user forward on a failed tag write would leave them able to
@@ -67,6 +77,8 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
     // the mid-analysis redirect carries it and downstream tier gates work.
     let resolvedContactId: string | undefined = leadData?.contactId;
     let ok = false;
+    let serverErr: string | null = null;
+    let httpStatus: number | null = null;
     try {
       const res = await fetch(APPLY_SOLOMON50_URL, {
         method: "POST",
@@ -79,16 +91,35 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
           code,
         }),
       });
+      httpStatus = res.status;
       const data = await res.json().catch(() => ({}));
       if (res.ok && data?.success) {
         ok = true;
         if (data?.contactId) resolvedContactId = data.contactId;
+      } else {
+        // Grab the server's own error so the customer sees the real reason
+        // (rate limit, origin block, missing identifier, upsert failure).
+        serverErr = (data && typeof data.error === "string") ? data.error : null;
       }
-    } catch {
-      // Network error — fall through to failure branch.
+    } catch (e: any) {
+      serverErr = `Network error — ${e?.message || "could not reach the server"}. Check your connection or try again.`;
     }
     if (!ok) {
       setCouponStatus("invalid");
+      // Build a human-readable detail that maps the common server responses
+      // to actionable advice. Falls back to the raw server string when we
+      // haven't seen the shape before.
+      let detail = serverErr || "Something went wrong applying your code.";
+      if (httpStatus === 429 || /too many attempts/i.test(serverErr || "")) {
+        detail = "Too many attempts from this network — wait about an hour and try again, or switch networks.";
+      } else if (httpStatus === 403 && /origin/i.test(serverErr || "")) {
+        detail = `The page you're on isn't allowed to apply this code (origin block). Try the link in your welcome email instead, or send this to support: "${serverErr}".`;
+      } else if (httpStatus === 400 && /need email or contactid/i.test(serverErr || "")) {
+        detail = "We don't have an email or contact ID on this page — reload from the link in your welcome email so your contact info is attached.";
+      } else if (httpStatus === 500) {
+        detail = `Server error — ${serverErr || "something went wrong on our end"}. Please try again or email support@cfobydesign.com.`;
+      }
+      setCouponErrDetail(detail);
       return;
     }
     setCouponStatus("applied");
@@ -347,8 +378,8 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
                 </Button>
               </div>
               {couponStatus === "invalid" && (
-                <p className="text-sm text-destructive font-mono text-center">
-                  We couldn't apply that code. Check the spelling, or try again in a moment.
+                <p className="text-sm text-destructive font-mono text-center leading-relaxed">
+                  {couponErrDetail || "We couldn't apply that code. Check the spelling, or try again in a moment."}
                 </p>
               )}
               <p className="text-xs text-muted-foreground text-center">
