@@ -6,6 +6,7 @@ import { GHL_SURVEY_SUBMIT_URL } from "@/lib/ghl-config";
 import { QuestionCard } from "./QuestionCard";
 import { ProgressBar } from "./ProgressBar";
 import { SaveForLater } from "./SaveForLater";
+import { TierEyebrow } from "./TieredQuestionCard";
 import { ArrowLeft } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -239,9 +240,10 @@ export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
             <ArrowLeft className="h-4 w-4" /> Back
           </button>
           {!showLeadCapture && (
-            <span className="font-mono text-[10px] text-accent uppercase tracking-widest">
-              {currentQuestion?.sectionTitle} — {currentIdx + 1}/{questions.length}
-            </span>
+            <TierEyebrow
+              tier="free"
+              progress={`${currentIdx + 1}/${questions.length}`}
+            />
           )}
         </div>
 

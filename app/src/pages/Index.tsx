@@ -207,7 +207,7 @@ const Index = () => {
             Privacy
           </a>
           <a
-            href="https://www.cfobydesign.com/tos"
+            href="https://success.cfobydesign.com/tc-page"
             target="_blank"
             rel="noopener noreferrer"
             className="text-xs uppercase tracking-widest font-mono hover:text-primary transition-colors text-foreground"

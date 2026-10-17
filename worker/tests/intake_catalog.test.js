@@ -274,8 +274,13 @@ describe("BGA — Q_O is required in the production survey (blocks intake submis
   it("PaidTier297Survey enforces required answers before onComplete fires", () => {
     assert.match(surveySrc, /missingRequired\(/);
     assert.match(surveySrc, /missing\.q\.title/);
-    // The error UI slot must render requiredError.
-    assert.match(surveySrc, /\{requiredError &&/);
+    // The error UI slot must render requiredError. Accept either the
+    // original inline JSX pattern (`{requiredError && ...}`) or the
+    // ternary pattern used when requiredError is passed as a footerSlot
+    // prop (`requiredError ? ( ... ) : null`). The invariant is that
+    // requiredError feeds the rendered error UI; the exact JSX syntax
+    // is not what we're enforcing.
+    assert.match(surveySrc, /\{requiredError &&|requiredError \?/);
   });
 });
 

@@ -15,7 +15,7 @@
   var LOGO_URL = "https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png";
   var SITE_URL = "https://www.cfobydesign.com";
   var PRIVACY_URL = "https://www.cfobydesign.com/privacy";
-  var TERMS_URL = "https://www.cfobydesign.com/tos";
+  var TERMS_URL = "https://success.cfobydesign.com/tc-page";
 
   function ready(fn) {
     if (document.readyState === "loading") {
