@@ -8,6 +8,7 @@ import {
   PAID_TIER_47_BUSINESS_INFO,
   PAID_TIER_47_QUESTIONS,
   PaidTier47Question,
+  getPaid47Sections,
 } from "@/data/paidTier47Questions";
 import { SaveForLater } from "@/components/SaveForLater";
 import { TieredQuestionCard, TierEyebrow } from "@/components/TieredQuestionCard";
@@ -17,6 +18,23 @@ interface Props {
   contact: { name: string; email: string; contactId?: string };
   onContactChange: (c: { name: string; email: string; contactId?: string }) => void;
   onComplete: (answers: Record<string, any>) => void;
+}
+
+// Legacy-cursor migration (Codex P2 on #133). The pre-refactor survey
+// stored sectionIdx against a section list that put business-info at
+// index 0 and the diagnostic question sections at 1..N. The new survey
+// stores stepIdx against the flat list [bizInfo, Q12, Q13, …, Q28].
+// Map each old section back to the first question step that section
+// owned so a resuming customer lands close to where they stopped.
+function migrateLegacySectionIdx47(sectionIdx: number): number {
+  if (sectionIdx <= 0) return 0; // business info
+  const sections = getPaid47Sections();
+  if (sectionIdx > sections.length) return 1;
+  let offset = 1; // step 0 = business info
+  for (let i = 0; i < sectionIdx - 1; i++) {
+    offset += sections[i].questions.length;
+  }
+  return offset;
 }
 
 // One-question-per-screen flow matching the free tier's visual language.
@@ -30,7 +48,11 @@ export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props
   // until the user clicks Continue. Mirrors the free-tier QuestionCard pattern.
   const [draft, setDraft] = useState<string>("");
 
-  // Per-browser resume (unchanged from previous version).
+  // Per-browser resume. Also handles the pre-deploy `sectionIdx` cursor by
+  // mapping each legacy section back to the first question step it owned,
+  // so a paid customer who dropped mid-survey before the one-per-screen
+  // refactor still picks back up near where they stopped — not booted
+  // back to the business-info screen. Codex P2 on #133.
   const PROGRESS_KEY = `swot_paid47_progress_${contact.contactId || "anon"}`;
   useEffect(() => {
     try {
@@ -39,7 +61,11 @@ export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props
       const s = JSON.parse(raw);
       if (s && typeof s === "object") {
         if (s.answers && typeof s.answers === "object") setAnswers(s.answers);
-        if (typeof s.stepIdx === "number") setStepIdx(s.stepIdx);
+        if (typeof s.stepIdx === "number") {
+          setStepIdx(s.stepIdx);
+        } else if (typeof s.sectionIdx === "number") {
+          setStepIdx(migrateLegacySectionIdx47(s.sectionIdx));
+        }
       }
     } catch { /* private mode or bad JSON — start fresh */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -75,7 +101,26 @@ export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props
   const setAnswer = (id: string, value: any) =>
     setAnswers(prev => ({ ...prev, [id]: value }));
 
-  const advance = () => {
+  // Finish/advance helper that takes the authoritative answers object
+  // directly rather than reading from state. Fixes Codex P1 on #133:
+  // the previous shape called setAnswer() (async) then onComplete(answers)
+  // (sync) on the final question, which handed the worker a stale object
+  // missing the last answer — every $47 diagnostic was shipping without
+  // q28_twelve_month_objectives. Callers now build nextAnswers inline and
+  // pass it here, so onComplete sees the committed final value.
+  const finishOrAdvance = (nextAnswers: Record<string, any>) => {
+    setAnswers(nextAnswers);
+    if (isLast) {
+      try { localStorage.removeItem(PROGRESS_KEY); } catch { /* ignore */ }
+      onComplete(nextAnswers);
+      return;
+    }
+    setStepIdx(i => i + 1);
+  };
+
+  // Business-info step uses the current answers object as-is (buyer edits
+  // multiple fields in-place; nothing further to commit at step-change).
+  const advanceFromBizInfo = () => {
     if (isLast) {
       try { localStorage.removeItem(PROGRESS_KEY); } catch { /* ignore */ }
       onComplete(answers);
@@ -94,15 +139,15 @@ export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props
     if (!currentQ) return;
     const trimmed = draft.trim();
     if (currentQ.required && !trimmed) return;
-    setAnswer(currentQ.id, draft);
-    advance();
+    const nextAnswers = { ...answers, [currentQ.id]: draft };
+    finishOrAdvance(nextAnswers);
   };
 
   // Select questions auto-advance (same as the free tier).
   const handleSelect = (value: string) => {
     if (!currentQ) return;
-    setAnswer(currentQ.id, value);
-    advance();
+    const nextAnswers = { ...answers, [currentQ.id]: value };
+    finishOrAdvance(nextAnswers);
   };
 
   const progress = `${stepIdx + 1}/${totalSteps}`;
@@ -202,7 +247,7 @@ export const PaidTier47Survey = ({ contact, onContactChange, onComplete }: Props
             </div>
 
             <Button
-              onClick={advance}
+              onClick={advanceFromBizInfo}
               className="w-full h-16 bg-primary text-primary-foreground font-bold text-lg rounded-xl shadow-glow-gold hover:scale-[1.01] transition-transform"
             >
               Continue →
