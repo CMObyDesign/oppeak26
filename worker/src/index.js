@@ -2060,7 +2060,7 @@ ${couponRow}
     CFO by Design · cfobydesign.com
     · <a href="mailto:support@cfobydesign.com">Contact</a>
     · <a href="https://www.cfobydesign.com/privacy">Privacy</a>
-    · <a href="https://www.cfobydesign.com/tos">Terms</a>
+    · <a href="https://success.cfobydesign.com/tc-page">Terms</a>
   </footer>
   <script>
     // Iframe auto-resize bridge — mirrors app/src/lib/iframe-resize.ts on

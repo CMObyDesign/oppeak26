@@ -246,7 +246,7 @@ export const PurchaseGateScreen = ({ score, path, onBack }: PurchaseGateScreenPr
                 <Label htmlFor="terms" className="text-sm font-medium text-foreground cursor-pointer">
                   I agree to the{" "}
                   <a
-                    href="https://www.cfobydesign.com/tos"
+                    href="https://success.cfobydesign.com/tc-page"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="underline text-primary hover:text-primary/80"
