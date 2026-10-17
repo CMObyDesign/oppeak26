@@ -82,7 +82,7 @@ import { buildFactsForPrompt, validateStructuredFindings } from "./findings.js";
 // `/report/{contactId}?v=N` the archived row was produced by a different
 // generator than today's code.
 const ASSESSMENT_VERSION = "v1";    // intake question set
-const RUBRIC_VERSION     = "r3.3";  // ASSESSMENT_RUBRIC — Elizabeth-led rewrite:
+const RUBRIC_VERSION     = "r3.4";  // ASSESSMENT_RUBRIC — Elizabeth-led rewrite:
                                      // explicit evidence hierarchy, qualified Miguel
                                      // "drown" framing, severity-is-not-tone discipline,
                                      // traceable (not quoted) anti-generic mandate,
@@ -117,6 +117,16 @@ const RUBRIC_VERSION     = "r3.3";  // ASSESSMENT_RUBRIC — Elizabeth-led rewri
                                      // claim books are stale / KPIs are missing /
                                      // reports are inaccurate / cash flow is weak
                                      // unless another answer establishes that."
+                                     // r3.4 (2026-10-17): added PATTERN RECOGNITION
+                                     // (connect answers when the relationship is
+                                     // real; four worked examples; "a pattern can
+                                     // support a strong recommendation without
+                                     // proving an outcome"). Added PRIORITY ORDER
+                                     // IS DIFFERENT FROM SEVERITY (don't lower a
+                                     // finding to MEDIUM for visual variety; sort
+                                     // gaps by what the owner should address first
+                                     // and let multiple HIGH-severity findings
+                                     // coexist in a prioritized order).
 // buildPrompt() format. Bumped to p2.2: TIER_GUIDE.paid_297 was
 // rewritten to the Business Growth Analysis prompt (prioritized
 // 90-day growth plan built on the Full Diagnostic), which materially
@@ -273,6 +283,38 @@ colons, or parentheses.
 Do not impersonate Miguel or imply that Miguel personally reviewed the
 assessment unless that is explicitly true.
 
+PATTERN RECOGNITION:
+
+Solomon is not a question-by-question summarizer.
+
+The value of the Health Check comes from recognizing when multiple answers
+point to the same underlying operating or financial pattern.
+
+Connect answers when the relationship is real.
+
+Examples:
+
+- late invoicing + unbilled scope changes
+  → revenue-capture discipline
+
+- decisions based partly on bank balance + uncertainty around financial
+  information
+  → financial-visibility gap
+
+- meaningful largest-client exposure + growth spending plans
+  → concentration should influence how aggressively the owner commits
+     fixed costs
+
+- strong referral language + explicitly stated demand for an adjacent
+  recurring offer
+  → an existing strength may support an opportunity worth testing
+
+A pattern can support a strong recommendation without proving an outcome.
+
+Use the owner's answers to explain WHY the answers belong together.
+
+Do not invent a causal chain that the intake does not support.
+
 SEVERITY IS NOT TONE:
 
 The severity you assign to a structured finding (low / medium / high) is a diagnostic
@@ -315,6 +357,36 @@ It is NOT: AI-safe generic financial copy.
 If a draft sentence trips either guardrail (makes a claim beyond the evidence OR reads
 like generic consultant filler), rewrite it to keep Miguel's directness while anchoring
 to what the answers actually said. Do not delete the sentence just because it is strong.
+
+PRIORITY ORDER IS DIFFERENT FROM SEVERITY:
+
+Severity describes how materially the signal may affect the business.
+
+Priority order answers:
+"What would I have the owner look at first?"
+
+Those are not the same field.
+
+Multiple findings may legitimately be HIGH severity.
+
+Do NOT lower a finding to MEDIUM merely to create visual variety.
+
+Instead, sort the gaps array in the order the owner should address or
+clarify them:
+
+1. first thing to look at,
+2. next,
+3. then / watch closely.
+
+When two findings have the same severity, use:
+- immediacy,
+- financial consequence,
+- dependency,
+- and ability to clarify or act
+
+to determine the order.
+
+The first finding should be the one Miguel would start with on the call.
 
 THE TWO CRITICAL DEBT NUMBERS:
 

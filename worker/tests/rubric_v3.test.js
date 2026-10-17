@@ -31,8 +31,8 @@ import {
 } from "../src/index.js";
 
 describe("Rubric v3 — version bumps", () => {
-  it("RUBRIC_VERSION is r3.3 (bumped from r3.2 when CASH-FLOW/VISIBILITY split + FREE-tier bank-balance anchor landed)", () => {
-    assert.equal(RUBRIC_VERSION, "r3.3");
+  it("RUBRIC_VERSION is r3.4 (bumped from r3.3 when PATTERN RECOGNITION + PRIORITY ORDER IS DIFFERENT FROM SEVERITY landed)", () => {
+    assert.equal(RUBRIC_VERSION, "r3.4");
   });
 
   it("PROMPT_VERSION is p2.2 (bumped from p2.1 when TIER_GUIDE.paid_297 was rewritten for BGA)", () => {
@@ -99,6 +99,34 @@ describe("Rubric v3 — ASSESSMENT_RUBRIC content", () => {
     // never had a financial audit" bullet must stay out of the cash-flow
     // stress list — that was the overclaim being corrected.
     assert.doesNotMatch(ASSESSMENT_RUBRIC, /No documented financial plan or budget; never had a financial audit or deep dive\./);
+  });
+
+  it("carries the PATTERN RECOGNITION rules (2026-10-17 round-4 directive)", () => {
+    // Explicit "connect answers when the relationship is real" rule.
+    // Locked here so a future rubric edit can't silently flatten
+    // Solomon back into a per-question summarizer.
+    assert.match(ASSESSMENT_RUBRIC, /PATTERN RECOGNITION/);
+    assert.match(ASSESSMENT_RUBRIC, /Solomon is not a question-by-question summarizer/);
+    assert.match(ASSESSMENT_RUBRIC, /Connect answers when the relationship is real/);
+    assert.match(ASSESSMENT_RUBRIC, /A pattern can support a strong recommendation without proving an outcome/);
+    assert.match(ASSESSMENT_RUBRIC, /Do not invent a causal chain that the intake does not support/);
+    // At least one of the worked example pairs stays verbatim so the
+    // pattern-connection shape doesn't drift into generic consultant speak.
+    assert.match(ASSESSMENT_RUBRIC, /late invoicing \+ unbilled scope changes/);
+    assert.match(ASSESSMENT_RUBRIC, /revenue-capture discipline/);
+  });
+
+  it("carries PRIORITY ORDER IS DIFFERENT FROM SEVERITY (2026-10-17 round-4 directive)", () => {
+    // Severity ≠ priority order. Multiple HIGH-severity findings may
+    // coexist and should be ordered by what the owner should look at
+    // first — NOT re-leveled down to MEDIUM for visual variety.
+    assert.match(ASSESSMENT_RUBRIC, /PRIORITY ORDER IS DIFFERENT FROM SEVERITY/);
+    assert.match(ASSESSMENT_RUBRIC, /Severity describes how materially the signal may affect the business/);
+    assert.match(ASSESSMENT_RUBRIC, /What would I have the owner look at first/);
+    assert.match(ASSESSMENT_RUBRIC, /Multiple findings may legitimately be HIGH severity/);
+    assert.match(ASSESSMENT_RUBRIC, /Do NOT lower a finding to MEDIUM merely to create visual variety/);
+    assert.match(ASSESSMENT_RUBRIC, /sort the gaps array in the order the owner should address or\s+clarify them/);
+    assert.match(ASSESSMENT_RUBRIC, /The first finding should be the one Miguel would start with on the call/);
   });
 
   it("anchors FREE-TIER FINANCIAL VISIBILITY to the owner's actual answer (2026-10-17 round-3 directive)", () => {
