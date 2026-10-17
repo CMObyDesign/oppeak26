@@ -82,7 +82,7 @@ import { buildFactsForPrompt, validateStructuredFindings } from "./findings.js";
 // `/report/{contactId}?v=N` the archived row was produced by a different
 // generator than today's code.
 const ASSESSMENT_VERSION = "v1";    // intake question set
-const RUBRIC_VERSION     = "r3.4";  // ASSESSMENT_RUBRIC — Elizabeth-led rewrite:
+const RUBRIC_VERSION     = "r3.5";  // ASSESSMENT_RUBRIC — Elizabeth-led rewrite:
                                      // explicit evidence hierarchy, qualified Miguel
                                      // "drown" framing, severity-is-not-tone discipline,
                                      // traceable (not quoted) anti-generic mandate,
@@ -127,6 +127,23 @@ const RUBRIC_VERSION     = "r3.4";  // ASSESSMENT_RUBRIC — Elizabeth-led rewri
                                      // gaps by what the owner should address first
                                      // and let multiple HIGH-severity findings
                                      // coexist in a prioritized order).
+                                     // r3.5 (2026-10-17): approved TIER_GUIDE.free
+                                     // rewrite — PURPOSE / FINDINGS / STRENGTH /
+                                     // OPPORTUNITIES / FINANCIAL VISIBILITY /
+                                     // DEBT / ACTION / BOUNDARY / STYLE /
+                                     // COMPLETENESS CONTRACT. All 11 Q1-Q11 now
+                                     // required at the browser, server (bumped
+                                     // INTAKE_MIN_ANSWERS.free 3 → 11), and prompt
+                                     // layers. Also replaced "tie every opportunity
+                                     // to money" with the economic-mechanism rule
+                                     // (revenue capture / margin / cash timing /
+                                     // capacity / concentration / recurring revenue
+                                     // / cost / decision quality), and strengthened
+                                     // the one-free-action rule to tie the action
+                                     // to the first-ranked signal. HANDLING
+                                     // INCOMPLETE ANSWERS updated so [not provided]
+                                     // reads as historical/malformed, not expected
+                                     // on current submissions.
 // buildPrompt() format. Bumped to p2.2: TIER_GUIDE.paid_297 was
 // rewritten to the Business Growth Analysis prompt (prioritized
 // 90-day growth plan built on the Full Diagnostic), which materially
@@ -667,8 +684,12 @@ negative finding:
 
 HANDLING INCOMPLETE OR NON-RESPONSIVE ANSWERS — call this out honestly, don't fabricate around it:
 
-- The intake block lists EVERY question that was posed. Skipped answers appear as
-  \`Answer: [not provided]\` — treat those as unanswered, not as a text answer of "[not provided]".
+- Historical or malformed submissions may still contain \`Answer: [not provided]\`.
+  Current free-tier submissions are expected to contain valid answers for all
+  Q1-Q11 fields (browser + server validation enforce this before Solomon ever
+  sees the payload). When [not provided] appears, treat it as unanswered, not
+  as a text answer of "[not provided]" — same discipline as every other
+  incomplete field below. The intake block lists EVERY question that was posed.
 - Some questions are dropdowns whose valid answers are short ("Yes", "No", "Not sure",
   "Somewhere in between"). A short answer that MATCHES an offered option is COMPLETE —
   don't treat it as incomplete just because it is one word.
@@ -934,27 +955,159 @@ TONE (final):
   Human-first is not a slogan — it is a fact stated once and moved past.`;
 
 const TIER_GUIDE = {
-  free: `FREE tier: identify the 2–3 highest-confidence gaps and 2 highest-impact opportunities.
-Prefer FEWER findings with strong evidence over MORE findings with speculation.
+  free: `FREE BUSINESS HEALTH CHECK
 
-The free report answers: "What signals should I pay attention to?"
+PURPOSE
 
-Requirements:
-- Follow FREE-TIER FINDING DISCIPLINE.
-- Follow VOICE DISCIPLINE. The Business Health Check is founder-facing, high-trust
-  content. Keep Miguel's directness, specificity, and pattern-recognition. Tighten
-  only where a claim outruns the evidence; do NOT swap strong statements for generic
-  consultant language in the name of safety.
-- Never conflate debt categories or treat blanket "active debt" as distress.
-- Surface financial visibility when the evidence supports it.
-- Use deterministic funnel or financial math when supplied.
-- Tie opportunities to real money, capacity, risk, or growth potential.
-- Identify at least ONE genuine strength or business asset when the intake supports one.
-- Include ONE concrete action the owner can take now.
-- Do not attempt to provide a complete remediation plan.
-- Do not use digital presence / Google Business Profile / reviews / SEO as a primary free-tier gap or opportunity; those are evaluated in the paid diagnostic.
+Answer one question:
+"What signals should I pay attention to?"
 
-Customer-facing classification may ONLY be: growth, needs-attention, or rehab.`,
+This is a real diagnostic first look, not a generic lead-magnet summary.
+
+Identify the strongest patterns the intake actually supports and explain
+them with Miguel Hernandez's financial point of view: direct, specific,
+plainspoken, and focused on the next decision.
+
+FINDINGS
+
+- Emit AT MOST 2–3 gaps.
+- Prefer fewer high-confidence findings over filling all three slots.
+- Sort findings in the order Miguel would address or clarify them.
+- Severity and action order are different. Multiple findings may honestly
+  share the same severity.
+- Every finding must trace to explicit intake evidence, a deterministic
+  fact, a deterministic metric, or an approved rubric interpretation.
+- Use the owner's own language and numbers where it strengthens recognition.
+- Use business type, customer reach, industry, debt status, and financial
+  decision basis as CONTEXT even when those answers do not deserve their
+  own finding.
+- Do not force every intake answer into the report.
+
+STRENGTH
+
+Identify at least ONE genuine strength, asset, or working capability when
+the intake supports one.
+
+For the free Health Check, Q6/Q7-style evidence about what clients value
+and how they describe the business can be especially useful when it is
+specific.
+
+A strength is evidence, not flattery.
+
+OPPORTUNITIES
+
+Identify up to 2 meaningful opportunities backed by the intake.
+
+Solomon may connect multiple answers when they point to a coherent pattern.
+
+Tie each opportunity to an economic mechanism:
+revenue capture, margin, cash timing, capacity, concentration, recurring
+revenue, cost, or decision quality.
+
+Use an actual dollar amount or percentage only when the intake or
+deterministic metrics provide it.
+
+Never invent the financial result of a recommendation.
+
+FINANCIAL VISIBILITY
+
+Miguel's bank-balance question is a core signal.
+
+When the owner says decisions are made from bank balance, somewhere in
+between, or they are unsure, explain that financial visibility is
+incomplete using the owner's actual answer.
+
+Do not infer stale books, missing KPIs, poor cash flow, or inaccurate
+financials unless the intake separately establishes those facts.
+
+DEBT
+
+Never conflate business debt, tax debt, judgments, liens, delinquency, or
+managed credit.
+
+Managed debt in good standing is not distress.
+
+If debt exists but the free Health Check does not contain total debt
+balance and monthly debt service, say what cannot yet be determined.
+That is an information gap, not a negative verdict.
+
+ACTION
+
+Include ONE concrete action the owner can take now without purchasing
+anything.
+
+Tie it to the first-ranked signal.
+
+Do not attempt to provide a complete remediation plan.
+
+BOUNDARY
+
+The free Health Check identifies signals and patterns.
+
+It does not claim to have completed the financial diagnosis when the data
+needed to establish root cause or magnitude is missing.
+
+The $47 Full Diagnostic is the next step for connecting cash flow, debt,
+profitability, receivables, financial visibility, and growth capacity and
+determining what deserves action first.
+
+Do not offer the free lead a paid-tier strategist consultation as though it
+is included at the free level.
+
+STYLE
+
+- Sound like Miguel's financial point of view without pretending Miguel
+  personally reviewed the business.
+- Direct beats cautious consultant language.
+- Specific beats abstract.
+- One clear idea per paragraph.
+- No generic AI filler.
+- No em dashes.
+- No invented financial impact.
+- No unsupported crisis language.
+- No digital presence / GBP / reviews / SEO as a free-tier primary finding.
+- Do not weaken a supported conclusion just to sound safer.
+
+FREE HEALTH CHECK COMPLETENESS CONTRACT
+
+All 11 current free-tier questions (Q1-Q11) are required in the
+customer-facing Business Health Check.
+
+Q1-Q5 are structured/select questions:
+- A valid offered option is a complete answer.
+- Do not treat a short slug, "Yes", "No", "Not sure", or another valid
+  option as incomplete merely because it is one word.
+- Never require narrative elaboration for a structured-select answer.
+
+Q6-Q11 are narrative questions:
+- A meaningful response is required.
+- Blank responses are incomplete.
+- Obvious filler is incomplete:
+  "idk", "n/a", "-", "?", "test", "asdf", "xxxx", or equivalent.
+- A single generic word that does not actually answer the question is
+  incomplete.
+- Do not require polished prose or a long paragraph.
+
+Truthful uncertainty or non-applicability is a VALID response when it
+actually answers the question, for example:
+- "Not sure yet."
+- "We don't get many referrals yet."
+- "I don't see a clear opportunity right now."
+- "We don't have one dominant client."
+- "No clear answer yet."
+
+Do not penalize the owner for honestly saying they do not know.
+Do not invent information to replace uncertainty.
+
+For a current completed free-tier submission, Solomon should normally
+receive a valid answer for every Q1-Q11 field.
+
+If a required answer is still missing because of an old submission,
+API bypass, malformed request, or historical record, use the existing
+INCOMPLETE INTAKE rules rather than fabricating an answer.
+
+Customer-facing classification may ONLY be:
+growth, needs-attention, or rehab.`,
 
   paid_47: `$47 FULL DIAGNOSTIC: go beyond identifying signals and synthesize the complete picture.
 
@@ -2589,16 +2742,32 @@ async function recordGhlWriteback(env, { reportId, contactId, status, error }) {
 
 // Intake-completeness gate shared between the GHL survey webhook and any
 // future caller that needs to decide whether a tier's answer set is complete
-// enough to run Solomon on. Each tier has a known minimum answer count
-// (free: 3 curated, paid_47: ~16 fields, paid_297: ~20); we floor the
-// thresholds a bit below the real-world question count so an operator
-// omitting one or two optional questions doesn't trip the gate.
+// enough to run Solomon on. Three-layer validation architecture per customer
+// directive (2026-10-17):
+//
+//   BROWSER     — Q1-Q11 cannot advance without valid input (QuestionCard
+//                 validateNarrativeAnswer + the required flag on every
+//                 FreeAssessmentQuestion).
+//   SERVER      — this gate. Rejects malformed/incomplete current free
+//                 submissions by deferring the webhook until all expected
+//                 fields have landed (handles GHL webhook timing where some
+//                 custom-field writes land seconds after the form submits).
+//   SOLOMON     — the rubric knows how to interpret valid short selections,
+//                 meaningful narrative answers, honest uncertainty, and
+//                 historical incomplete records via HANDLING INCOMPLETE
+//                 OR NON-RESPONSIVE ANSWERS + FREE HEALTH CHECK COMPLETENESS
+//                 CONTRACT in TIER_GUIDE.free.
+//
+// Free tier floor is now 11 because every Q1-Q11 field is required at the
+// browser layer, so a legitimate current submission always carries all 11.
+// Paid floors stay below real-world question count so an operator omitting
+// one or two optional questions doesn't trip the gate.
 //
 // Returns a plain object the caller can inspect:
 //   { ok: boolean, answersSeen: number, minExpected: number, tier: string }
 // `ok: false` means the caller should defer (webhook returns 409) and let
 // the retry cycle re-fire once all fields have landed.
-const INTAKE_MIN_ANSWERS = Object.freeze({ free: 3, paid_47: 10, paid_297: 12 });
+const INTAKE_MIN_ANSWERS = Object.freeze({ free: 11, paid_47: 10, paid_297: 12 });
 function checkIntakeCompleteness(answers, tier) {
   const answersSeen = Array.isArray(answers) ? answers.length : 0;
   const minExpected = INTAKE_MIN_ANSWERS[tier] || 0;

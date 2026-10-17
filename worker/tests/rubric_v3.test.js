@@ -27,12 +27,13 @@ import {
   PROMPT_VERSION,
   ASSESSMENT_RUBRIC,
   TIER_GUIDE,
+  INTAKE_MIN_ANSWERS,
   buildPrompt,
 } from "../src/index.js";
 
 describe("Rubric v3 — version bumps", () => {
-  it("RUBRIC_VERSION is r3.4 (bumped from r3.3 when PATTERN RECOGNITION + PRIORITY ORDER IS DIFFERENT FROM SEVERITY landed)", () => {
-    assert.equal(RUBRIC_VERSION, "r3.4");
+  it("RUBRIC_VERSION is r3.5 (bumped from r3.4 when the approved TIER_GUIDE.free rewrite + FREE HEALTH CHECK COMPLETENESS CONTRACT landed)", () => {
+    assert.equal(RUBRIC_VERSION, "r3.5");
   });
 
   it("PROMPT_VERSION is p2.2 (bumped from p2.1 when TIER_GUIDE.paid_297 was rewritten for BGA)", () => {
@@ -194,9 +195,48 @@ describe("Rubric v3 — ASSESSMENT_RUBRIC content", () => {
 });
 
 describe("Rubric v3 — TIER_GUIDE content", () => {
-  it("free tier requires strength recognition and allowed classification", () => {
-    assert.match(TIER_GUIDE.free, /genuine strength or business asset/);
+  it("free tier carries the approved customer-directive block (2026-10-17 round-5 directive)", () => {
+    // Section headers from the approved rewrite — PURPOSE / FINDINGS /
+    // STRENGTH / OPPORTUNITIES / FINANCIAL VISIBILITY / DEBT / ACTION /
+    // BOUNDARY / STYLE / FREE HEALTH CHECK COMPLETENESS CONTRACT.
+    assert.match(TIER_GUIDE.free, /FREE BUSINESS HEALTH CHECK/);
+    assert.match(TIER_GUIDE.free, /^PURPOSE$/m);
+    assert.match(TIER_GUIDE.free, /^FINDINGS$/m);
+    assert.match(TIER_GUIDE.free, /^STRENGTH$/m);
+    assert.match(TIER_GUIDE.free, /^OPPORTUNITIES$/m);
+    assert.match(TIER_GUIDE.free, /^FINANCIAL VISIBILITY$/m);
+    assert.match(TIER_GUIDE.free, /^DEBT$/m);
+    assert.match(TIER_GUIDE.free, /^ACTION$/m);
+    assert.match(TIER_GUIDE.free, /^BOUNDARY$/m);
+    assert.match(TIER_GUIDE.free, /^STYLE$/m);
+    assert.match(TIER_GUIDE.free, /FREE HEALTH CHECK COMPLETENESS CONTRACT/);
+
+    // Core promises the block replaces older, overbroad language with:
+    // economic-mechanism rule, honest uncertainty allowance, severity vs
+    // action order split, no em dashes, allowed classification.
+    assert.match(TIER_GUIDE.free, /Tie each opportunity to an economic mechanism/);
+    assert.match(TIER_GUIDE.free, /revenue capture, margin, cash timing, capacity, concentration, recurring\s+revenue, cost, or decision quality/);
+    assert.match(TIER_GUIDE.free, /Severity and action order are different/);
+    assert.match(TIER_GUIDE.free, /A strength is evidence, not flattery/);
+    assert.match(TIER_GUIDE.free, /Managed debt in good standing is not distress/);
+    assert.match(TIER_GUIDE.free, /No em dashes/);
+    assert.match(TIER_GUIDE.free, /No digital presence \/ GBP \/ reviews \/ SEO/);
+    assert.match(TIER_GUIDE.free, /Truthful uncertainty or non-applicability is a VALID response/);
+    assert.match(TIER_GUIDE.free, /Do not penalize the owner for honestly saying they do not know/);
     assert.match(TIER_GUIDE.free, /growth, needs-attention, or rehab/);
+
+    // Hard regression bar: the overbroad "tie opportunities to real money"
+    // line from the previous block must stay out — replaced by the
+    // economic-mechanism rule above.
+    assert.doesNotMatch(TIER_GUIDE.free, /Tie opportunities to real money, capacity, risk, or growth potential/);
+  });
+
+  it("server-side intake-completeness gate requires all 11 Q1-Q11 on the free tier", () => {
+    // The browser enforces Q1-Q11 at the input layer; the server gate
+    // backs that up. Any legitimate current free submission has 11
+    // answers, so the floor matches that count. If this ever reads back
+    // as 3 again, the browser contract has quietly broken.
+    assert.equal(INTAKE_MIN_ANSWERS.free, 11);
   });
 
   it("paid_47 emphasizes synthesis, not enumeration", () => {

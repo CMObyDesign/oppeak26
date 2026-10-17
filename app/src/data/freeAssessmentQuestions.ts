@@ -124,7 +124,7 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         type: "textarea",
         title: "Unique Value Proposition",
         text: "What does your business consistently deliver that your clients say they cannot get anywhere else?",
-        required: false
+        required: true
       },
       {
         id: 7,
@@ -132,7 +132,7 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         type: "textarea",
         title: "Referral Language",
         text: "When a client refers you, what specific words or outcome do they use to describe what you did for them?",
-        required: false
+        required: true
       }
     ]
   },
@@ -146,7 +146,7 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         title: "Revenue Leaks",
         text: "Where does revenue most often leak in your business?",
         placeholder: "Give us one specific example. If you're not sure, tell us where you suspect it happens.",
-        required: false
+        required: true
       }
     ]
   },
@@ -159,7 +159,7 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         type: "textarea",
         title: "Hidden Profit Opportunity",
         text: "What would change in your business if you had 20% more profit on the same revenue?",
-        required: false
+        required: true
       },
       {
         id: 10,
@@ -168,7 +168,7 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         title: "Market Opportunity",
         text: "Where do you see demand in your market that you are not yet positioned to capture?",
         placeholder: "Be specific. If you don't see a clear opportunity right now, say that.",
-        required: false
+        required: true
       },
       {
         id: 11,
@@ -177,7 +177,7 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         title: "Single Point of Failure",
         text: "What would happen to your business if your single largest client, revenue source, or referral channel disappeared in the next 90 days?",
         placeholder: "If you don't depend heavily on any one source, tell us that.",
-        required: false
+        required: true
       }
     ]
   }

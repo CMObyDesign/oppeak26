@@ -40,10 +40,17 @@ describe("intake completeness gate", () => {
     assert.equal(result.answersSeen, 19);
   });
 
-  it("free tier at 3 answers is ok (free intake is intentionally small)", () => {
-    const answers = Array.from({ length: 3 }, (_, i) => ({ question: `Q${i}`, answer: `A${i}` }));
+  it("free tier at 11 answers is ok (all Q1-Q11 required per customer directive 2026-10-17)", () => {
+    const answers = Array.from({ length: 11 }, (_, i) => ({ question: `Q${i + 1}`, answer: `A${i + 1}` }));
     const result = checkIntakeCompleteness(answers, "free");
     assert.equal(result.ok, true);
+    assert.equal(result.answersSeen, 11);
+  });
+
+  it("free tier at 10 answers is NOT ok (floor bumped from 3 → 11 when the browser contract made every Q required)", () => {
+    const answers = Array.from({ length: 10 }, (_, i) => ({ question: `Q${i + 1}`, answer: `A${i + 1}` }));
+    const result = checkIntakeCompleteness(answers, "free");
+    assert.equal(result.ok, false);
   });
 
   it("free tier at 1 answer is NOT ok", () => {

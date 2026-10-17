@@ -12,12 +12,55 @@ interface QuestionCardProps {
   onSelect: (value: number | string) => void;
 }
 
+// Filler-rejection set for narrative questions (Q6-Q11 per the FREE HEALTH
+// CHECK COMPLETENESS CONTRACT). Normalized compare: trimmed + lowercased.
+// Truthful uncertainty like "not sure yet" is NOT in this set — those are
+// valid customer answers per the contract and must be passed to the worker
+// as stated.
+const FILLER_RESPONSES = new Set([
+  "idk", "n/a", "na", "n.a.", "n/a.", "none", "nothing",
+  "-", "--", "?", "??", ".", "..",
+  "test", "testing", "asdf", "qwer", "qwerty", "xxx", "xxxx",
+]);
+
+// Narrative-answer validator. Returns an error string when the response
+// should be rejected; empty string when the response is acceptable. The
+// rule set comes from the customer directive (2026-10-17): no blank, no
+// obvious filler, no single generic word that does not actually answer
+// the question. Allows truthful uncertainty by rejecting only on the
+// filler list above, not on sentence length.
+function validateNarrativeAnswer(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "Please share a short response, even if it's just a sentence.";
+  const normalized = trimmed.toLowerCase();
+  if (FILLER_RESPONSES.has(normalized)) {
+    return "Please give an actual answer. If you're not sure, say that honestly — \"Not sure yet\" or \"We don't have one\" are valid responses.";
+  }
+  // Single-word rejection, but only when the single word is a filler-adjacent
+  // non-answer. Legitimate one-word answers (a specific client name, a
+  // specific channel, a dollar figure) are fine; the ban is specifically on
+  // generic non-answers that happen to be one word.
+  const words = trimmed.split(/\s+/);
+  if (words.length === 1 && normalized.length < 4) {
+    return "A one-word answer isn't quite enough here. Give one specific example, or if there isn't one, say so.";
+  }
+  return "";
+}
+
 export const QuestionCard = ({ question, selectedOption, onSelect }: QuestionCardProps) => {
   const [openText, setOpenText] = useState("");
+  const [textError, setTextError] = useState<string>("");
 
   const handleTextSubmit = () => {
-    if (question.required && !openText.trim()) return;
-    onSelect(openText || "No additional context provided.");
+    if (question.type === "textarea" || question.type === "text") {
+      const err = validateNarrativeAnswer(openText);
+      if (err) {
+        setTextError(err);
+        return;
+      }
+    }
+    setTextError("");
+    onSelect(openText);
   };
 
   return (
