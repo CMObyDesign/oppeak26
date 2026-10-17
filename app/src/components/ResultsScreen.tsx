@@ -330,8 +330,13 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
       {/* CTAs — branched by tier + beta-vs-regular for the free tier */}
       {report.tier === "free" ? (
         <div className="text-center space-y-6 py-10 max-w-2xl mx-auto">
+          {/* Pre-confirmation wording — the HL automation POST was accepted
+              but we have no email-provider delivery webhook back here, so
+              we don't claim "sent" yet. Flipping to the past-tense version
+              requires a real confirmation signal (Codex #133 copy directive
+              2026-10-17). */}
           <div className="p-4 rounded-xl border border-white/5 bg-secondary/20 text-muted-foreground text-sm">
-            We've sent a copy to <span className="font-medium text-foreground">{leadData?.email || "your email"}</span> — check your inbox in the next minute.
+            We'll send a copy of your Business Health Check to <span className="font-medium text-foreground">{leadData?.email || "your email"}</span>.
           </div>
           {isBeta ? (
             /* Beta cohort: coupon input (SOLOMON50) that skips payment and
@@ -427,7 +432,7 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
       ) : (
         <div className="text-center space-y-6 py-10 max-w-2xl mx-auto">
           <div className="p-4 rounded-xl border border-white/5 bg-secondary/20 text-muted-foreground text-sm">
-            We've sent a copy to <span className="font-medium text-foreground">{leadData?.email || "your email"}</span> — your full report is also saved to your account.
+            We'll send a copy to <span className="font-medium text-foreground">{leadData?.email || "your email"}</span>. Your full report is also saved to your account.
           </div>
 
           <div className="text-center max-w-2xl mx-auto space-y-3 pb-4">
