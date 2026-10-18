@@ -52,6 +52,12 @@ import {
   handleCatalogPublish,
 } from "./bga_copilot/catalog_admin.js";
 import { CATALOG_ADMIN_PAGE } from "./bga_copilot/catalog_admin_page.js";
+import {
+  handleListOverrides,
+  handleListOverridesAll,
+  handleRecordOverride,
+  handleRevokeOverride,
+} from "./bga_copilot/strategist_overrides.js";
 import { handleExtractFinancialsFromDocument } from "./bga_copilot/document_extraction.js";
 import {
   fetchGHLCustomFieldsCatalog,
@@ -6683,6 +6689,22 @@ export default {
     }
     if (path === "/asksolomon/catalog/publish") {
       return handleCatalogPublish(request, env, { checkPassword: checkConsolePassword });
+    }
+
+    // Per-case strategist overrides (slice C of 5; customer directive
+    // 2026-10-17). Append-only log — never mutates the catalog, never
+    // affects approve-and-send. Rows feed slice D's learning loop.
+    if (path === "/asksolomon/case/overrides") {
+      return handleListOverrides(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/case/overrides/all") {
+      return handleListOverridesAll(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/case/override") {
+      return handleRecordOverride(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/case/override/revoke") {
+      return handleRevokeOverride(request, env, { checkPassword: checkConsolePassword });
     }
 
     // PR 14 — docs/BGA_COPILOT_SPEC.md §11 row 14 (optional).
