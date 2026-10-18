@@ -268,13 +268,30 @@ export const CATALOG_ADMIN_PAGE = `<!DOCTYPE html>
         <div id="suggestions-list"><span class="loader">Loading…</span></div>
       </div>
 
+      <!-- Slice E: catalog-ref audit. Scans the paid_297 cohort,
+           cross-checks every case's swot_bga_services_catalog_ref
+           against the stored version SHAs, and surfaces three
+           buckets: pinned_known (good), pinned_unknown (set but
+           doesn't match any stored version — pre-slice-A JSON
+           fallback or a soft-deleted version), unpinned (missing).
+           Backfill goes through the sanctioned version_history
+           wrapper so the change lands in swot_bga_version_history. -->
+      <div class="panel">
+        <h2>Catalog-ref audit</h2>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <button id="btn-audit-run">Run audit</button>
+          <span id="audit-status" style="font-size:12px;color:#6b7280;">Click "Run audit" to scan the paid_297 cohort.</span>
+        </div>
+        <div id="audit-report"></div>
+      </div>
+
       <div class="panel">
         <h2>Version history</h2>
         <div id="versions-list"><span class="loader">Loading…</span></div>
       </div>
 
       <div class="footer-note">
-        Service Catalog admin · slice D of 5 (audit lands in slice E).
+        Service Catalog admin · slice E of 5 (all slices live).
       </div>
     </div>
   </div>
@@ -673,6 +690,89 @@ export const CATALOG_ADMIN_PAGE = `<!DOCTYPE html>
     return "pill-needs";
   }
 
+  // Slice E — catalog-ref audit.
+  let auditState = { items: [], totals: null, versions: [] };
+
+  async function runAudit() {
+    const btn = $("#btn-audit-run");
+    const sts = $("#audit-status");
+    btn.disabled = true;
+    sts.textContent = "Scanning cohort…";
+    sts.style.color = "#6b7280";
+    try {
+      const r = await api("/asksolomon/catalog/audit", {});
+      auditState.items  = r.items  || [];
+      auditState.totals = r.totals || null;
+      // Reuse the versions already loaded by loadVersions() for the backfill picker.
+      sts.textContent = "Scanned " + r.totals.scanned + " paid_297 contacts · " +
+        r.totals.pinned_known + " pinned to known · " + r.totals.pinned_unknown +
+        " pinned to UNKNOWN SHA · " + r.totals.unpinned + " unpinned · " +
+        r.knownVersionCount + " catalog versions on record.";
+      sts.style.color = "#065f46";
+      renderAuditReport();
+    } catch (err) {
+      sts.textContent = err.message || "audit failed";
+      sts.style.color = "#991b1b";
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function renderAuditReport() {
+    const el = $("#audit-report");
+    if (!auditState.items.length) {
+      el.innerHTML = "<p style='color:#9ca3af;font-size:12px;'>No paid_297 contacts in the cohort.</p>";
+      return;
+    }
+    // Need the version list for the backfill picker. We pull it from
+    // the "Version history" panel's already-rendered table, so we
+    // don't duplicate the API call.
+    const parts = [];
+    parts.push("<table style='width:100%;border-collapse:collapse;font-size:12px;'><thead><tr>"
+      + "<th style='text-align:left;padding:6px 8px;color:#6b7280;text-transform:uppercase;font-size:10px;letter-spacing:1px;'>bucket</th>"
+      + "<th style='text-align:left;padding:6px 8px;color:#6b7280;text-transform:uppercase;font-size:10px;letter-spacing:1px;'>contact</th>"
+      + "<th style='text-align:left;padding:6px 8px;color:#6b7280;text-transform:uppercase;font-size:10px;letter-spacing:1px;'>company</th>"
+      + "<th style='text-align:left;padding:6px 8px;color:#6b7280;text-transform:uppercase;font-size:10px;letter-spacing:1px;'>ref</th>"
+      + "<th style='text-align:left;padding:6px 8px;color:#6b7280;text-transform:uppercase;font-size:10px;letter-spacing:1px;'>backfill to version</th>"
+      + "</tr></thead><tbody>");
+    for (const i of auditState.items) {
+      const pill = i.bucket === "pinned_known"   ? "pill-growth"
+                 : i.bucket === "pinned_unknown" ? "pill-rehab"
+                 : "pill-needs";
+      parts.push("<tr>"
+        + "<td style='padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;'><span class='pill " + pill + "'>" + escapeHtml(i.bucket) + "</span></td>"
+        + "<td style='padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;'><code>" + escapeHtml(i.contactId || "") + "</code><br><span style='color:#4b5563;'>" + escapeHtml(i.name || "") + "</span></td>"
+        + "<td style='padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;color:#4b5563;'>" + escapeHtml(i.company || "") + "</td>"
+        + "<td style='padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;'><code>" + escapeHtml(i.catalogRef || "(unset)") + "</code></td>"
+        + "<td style='padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;'>"
+          + (i.bucket === "pinned_known" ? "<span style='color:#9ca3af;font-size:11px;'>(already pinned)</span>"
+            : "<input type='text' placeholder='version id' data-backfill-vid='" + escapeHtml(i.contactId) + "' style='width:80px;'>"
+              + " <button data-backfill-contact='" + escapeHtml(i.contactId) + "' style='font-size:11px;padding:3px 8px;'>Backfill</button>")
+        + "</td>"
+        + "</tr>");
+    }
+    parts.push("</tbody></table>");
+    el.innerHTML = parts.join("");
+    el.querySelectorAll("button[data-backfill-contact]").forEach((b) => {
+      b.addEventListener("click", () => backfillOne(b.getAttribute("data-backfill-contact")));
+    });
+  }
+
+  async function backfillOne(contactId) {
+    const vidInput = document.querySelector("input[data-backfill-vid='" + contactId + "']");
+    const vid = vidInput ? Number(vidInput.value.trim()) : NaN;
+    const by  = $("#pub-by").value.trim();
+    if (!by)                          { showBanner("error", "Enter your identifier in the Publish form (used here too)."); return; }
+    if (!Number.isInteger(vid) || vid <= 0) { showBanner("error", "Enter a positive integer version id."); return; }
+    try {
+      const r = await api("/asksolomon/catalog/audit/backfill", { contactId, catalogVersionId: vid, by });
+      showBanner("success", "Backfilled " + contactId + " → v" + vid + " (" + r.services_sha + ").");
+      await runAudit();
+    } catch (err) {
+      showBanner("error", err.message);
+    }
+  }
+
   async function decideSuggestion(id, decision) {
     const by = $("#pub-by").value.trim();
     if (!by) { showBanner("error", "Enter your identifier in the Publish form (used here too)."); return; }
@@ -792,6 +892,7 @@ export const CATALOG_ADMIN_PAGE = `<!DOCTYPE html>
   $("#btn-publish").addEventListener("click", publish);
   $("#btn-scan-suggestions").addEventListener("click", scanSuggestions);
   $("#sg-status-filter").addEventListener("change", loadSuggestions);
+  $("#btn-audit-run").addEventListener("click", runAudit);
 
   // If a password is already in sessionStorage from another tab, skip the gate.
   if (pw()) {
