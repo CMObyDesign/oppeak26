@@ -58,6 +58,12 @@ import {
   handleRecordOverride,
   handleRevokeOverride,
 } from "./bga_copilot/strategist_overrides.js";
+import {
+  handleScanSuggestions,
+  handleListSuggestions,
+  handleGetSuggestion,
+  handleDecideSuggestion,
+} from "./bga_copilot/learning_loop.js";
 import { handleExtractFinancialsFromDocument } from "./bga_copilot/document_extraction.js";
 import {
   fetchGHLCustomFieldsCatalog,
@@ -6705,6 +6711,23 @@ export default {
     }
     if (path === "/asksolomon/case/override/revoke") {
       return handleRevokeOverride(request, env, { checkPassword: checkConsolePassword });
+    }
+
+    // Learning loop (slice D of 5; customer directive 2026-10-17).
+    // Aggregates slice-C overrides into pending rule suggestions.
+    // Human approval here is a recommendation; the catalog is still
+    // mutated only through the slice-B publish flow.
+    if (path === "/asksolomon/catalog/suggestions/scan") {
+      return handleScanSuggestions(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/catalog/suggestions") {
+      return handleListSuggestions(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/catalog/suggestion") {
+      return handleGetSuggestion(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/catalog/suggestion/decide") {
+      return handleDecideSuggestion(request, env, { checkPassword: checkConsolePassword });
     }
 
     // PR 14 — docs/BGA_COPILOT_SPEC.md §11 row 14 (optional).

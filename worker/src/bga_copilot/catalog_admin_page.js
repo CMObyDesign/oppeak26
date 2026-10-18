@@ -108,6 +108,13 @@ export const CATALOG_ADMIN_PAGE = `<!DOCTYPE html>
     display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 12px;
     background: #fef3c7; color: #92400e; font-weight: 600;
   }
+  .pill {
+    display: inline-block; padding: 2px 10px; border-radius: 10px; font-size: 11px;
+    font-weight: 600; letter-spacing: 0.5px;
+  }
+  .pill-growth { background: #d1fae5; color: #065f46; }
+  .pill-needs  { background: #fef3c7; color: #92400e; }
+  .pill-rehab  { background: #fee2e2; color: #991b1b; }
   .meta-row {
     display: flex; flex-wrap: wrap; gap: 18px; font-size: 12px; color: #4b5563;
     margin-bottom: 8px;
@@ -239,13 +246,35 @@ export const CATALOG_ADMIN_PAGE = `<!DOCTYPE html>
         </div>
       </div>
 
+      <!-- Slice D: pending rule suggestions. Aggregated from per-case
+           strategist overrides. "Approve" here is a RECOMMENDATION —
+           the catalog is still mutated only via the publish flow
+           above, so an approved suggestion stays visible until the
+           admin manually applies it in the editor and publishes a new
+           version. -->
+      <div class="panel">
+        <h2>Pending rule suggestions</h2>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <button id="btn-scan-suggestions">Scan overrides for new patterns</button>
+          <select id="sg-status-filter">
+            <option value="pending" selected>pending</option>
+            <option value="approved">approved</option>
+            <option value="applied">applied</option>
+            <option value="dismissed">dismissed</option>
+            <option value="all">all</option>
+          </select>
+          <span id="sg-scan-status" style="font-size:12px;color:#6b7280;"></span>
+        </div>
+        <div id="suggestions-list"><span class="loader">Loading…</span></div>
+      </div>
+
       <div class="panel">
         <h2>Version history</h2>
         <div id="versions-list"><span class="loader">Loading…</span></div>
       </div>
 
       <div class="footer-note">
-        Service Catalog admin · slice B of 5 (strategist overrides, learning loop, and audit land in slices C-E).
+        Service Catalog admin · slice D of 5 (audit lands in slice E).
       </div>
     </div>
   </div>
@@ -539,6 +568,126 @@ export const CATALOG_ADMIN_PAGE = `<!DOCTYPE html>
     }
   }
 
+  // Slice D — pending rule suggestions.
+  async function loadSuggestions() {
+    const el = $("#suggestions-list");
+    el.innerHTML = "<span class='loader'>Loading…</span>";
+    const status = $("#sg-status-filter").value || "pending";
+    try {
+      const r = await api("/asksolomon/catalog/suggestions", { status });
+      renderSuggestions(r.items || [], status);
+    } catch (err) {
+      if (err.status === 401) { showGate("Password rejected."); return; }
+      el.innerHTML = "<p class='error-banner'>Failed to load suggestions: " + escapeHtml(err.message) + "</p>";
+    }
+  }
+
+  async function scanSuggestions() {
+    const btn = $("#btn-scan-suggestions");
+    const sts = $("#sg-scan-status");
+    btn.disabled = true;
+    sts.textContent = "Scanning…";
+    sts.style.color = "#6b7280";
+    try {
+      const r = await api("/asksolomon/catalog/suggestions/scan", {});
+      sts.textContent = "scanned " + r.scanned + " overrides · " + r.candidates +
+        " candidate patterns · created " + r.created + " · updated " + r.updated +
+        " · reopened " + (r.reopened || 0) + " · skipped (below threshold) " + r.skipped;
+      sts.style.color = "#065f46";
+      await loadSuggestions();
+    } catch (err) {
+      sts.textContent = err.message || "scan failed";
+      sts.style.color = "#991b1b";
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function renderSuggestions(items, status) {
+    const el = $("#suggestions-list");
+    if (!items.length) {
+      el.innerHTML = "<p style='color:#6b7280;font-size:13px;'>No " + escapeHtml(status) + " suggestions. Click <b>Scan</b> above to re-aggregate from the override log.</p>";
+      return;
+    }
+    const parts = [];
+    for (const s of items) {
+      parts.push("<div class='entry-card open' style='margin-bottom:12px;'>");
+      parts.push("<div class='entry-head' style='cursor:default;'>");
+      parts.push("<div><span class='title'>" + escapeHtml(s.summary) + "</span></div>");
+      parts.push("<div style='display:flex;gap:6px;align-items:center;'>");
+      parts.push("<span class='pill " + statusPillClass(s.status) + "'>" + escapeHtml(s.status) + "</span>");
+      parts.push("<span class='id'>#" + escapeHtml(s.id) + "</span>");
+      parts.push("</div></div>");
+      parts.push("<div class='entry-body'>");
+      parts.push("<div class='meta-row'>");
+      parts.push("<div><b>service</b> <code>" + escapeHtml(s.serviceId) + "</code></div>");
+      parts.push("<div><b>action</b> <code>" + escapeHtml(s.action) + "</code></div>");
+      parts.push("<div><b>occurrences</b> " + escapeHtml(s.occurrenceCount) + "</div>");
+      parts.push("<div><b>first seen</b> " + escapeHtml(s.firstSeenAt || "") + "</div>");
+      if (s.decidedBy) parts.push("<div><b>decided by</b> " + escapeHtml(s.decidedBy) + " @ " + escapeHtml(s.decidedAt || "") + "</div>");
+      parts.push("</div>");
+      if (s.proposedPatch && Object.keys(s.proposedPatch).length) {
+        parts.push("<div style='margin:8px 0;'><label>Proposed patch (admin hint — not auto-applied)</label>"
+          + "<pre style='background:#f3f4f6;padding:8px;border-radius:4px;font-size:12px;overflow:auto;'>"
+          + escapeHtml(JSON.stringify(s.proposedPatch, null, 2)) + "</pre></div>");
+      }
+      if (s.evidence && s.evidence.length) {
+        parts.push("<div style='margin:8px 0;'><label>Evidence sample (" + s.evidence.length + " of " + s.occurrenceCount + ")</label>");
+        parts.push("<table style='width:100%;border-collapse:collapse;font-size:11px;'>");
+        parts.push("<thead><tr><th style='text-align:left;padding:4px;color:#6b7280;'>when</th><th style='text-align:left;padding:4px;color:#6b7280;'>case</th><th style='text-align:left;padding:4px;color:#6b7280;'>by</th><th style='text-align:left;padding:4px;color:#6b7280;'>v</th><th style='text-align:left;padding:4px;color:#6b7280;'>reason</th></tr></thead><tbody>");
+        for (const e of s.evidence) {
+          parts.push("<tr><td style='padding:4px;color:#6b7280;'>" + escapeHtml(e.created_at || "") + "</td>"
+            + "<td style='padding:4px;'><code>" + escapeHtml(e.contact_id || "") + "</code></td>"
+            + "<td style='padding:4px;'>" + escapeHtml(e.created_by || "") + "</td>"
+            + "<td style='padding:4px;'><code>" + escapeHtml(e.catalog_version_id || "") + "</code></td>"
+            + "<td style='padding:4px;'>" + escapeHtml(e.reason || "") + "</td></tr>");
+        }
+        parts.push("</tbody></table></div>");
+      }
+      if (s.decisionNote) {
+        parts.push("<div style='margin:8px 0;'><b>Decision note</b>: " + escapeHtml(s.decisionNote) + "</div>");
+      }
+      if (s.status === "pending" || s.status === "approved") {
+        parts.push("<div style='margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;'>");
+        parts.push("<input type='text' placeholder='decision note (required for dismiss)' data-sg-note='" + escapeHtml(s.id) + "' style='flex:1;min-width:280px;'>");
+        if (s.status === "pending") {
+          parts.push("<button class='primary' data-sg-approve='" + escapeHtml(s.id) + "'>Approve</button>");
+          parts.push("<button data-sg-dismiss='" + escapeHtml(s.id) + "'>Dismiss</button>");
+        }
+        parts.push("<button data-sg-applied='" + escapeHtml(s.id) + "'>Mark applied</button>");
+        parts.push("</div>");
+      }
+      parts.push("</div></div>");
+    }
+    el.innerHTML = parts.join("");
+    el.querySelectorAll("button[data-sg-approve]").forEach((b) => b.addEventListener("click", () => decideSuggestion(Number(b.getAttribute("data-sg-approve")), "approved")));
+    el.querySelectorAll("button[data-sg-dismiss]").forEach((b) => b.addEventListener("click", () => decideSuggestion(Number(b.getAttribute("data-sg-dismiss")), "dismissed")));
+    el.querySelectorAll("button[data-sg-applied]").forEach((b) => b.addEventListener("click", () => decideSuggestion(Number(b.getAttribute("data-sg-applied")), "applied")));
+  }
+
+  function statusPillClass(status) {
+    if (status === "pending")   return "pill-needs";
+    if (status === "approved")  return "pill-growth";
+    if (status === "applied")   return "pill-growth";
+    if (status === "dismissed") return "pill-rehab";
+    return "pill-needs";
+  }
+
+  async function decideSuggestion(id, decision) {
+    const by = $("#pub-by").value.trim();
+    if (!by) { showBanner("error", "Enter your identifier in the Publish form (used here too)."); return; }
+    const noteInput = document.querySelector("input[data-sg-note='" + id + "']");
+    const note = noteInput ? noteInput.value.trim() : "";
+    if (decision === "dismissed" && !note) { showBanner("error", "Dismiss requires a note."); return; }
+    try {
+      await api("/asksolomon/catalog/suggestion/decide", { id, decision, by, note });
+      showBanner("success", "Suggestion " + id + " → " + decision + ".");
+      await loadSuggestions();
+    } catch (err) {
+      showBanner("error", err.message);
+    }
+  }
+
   async function loadVersionIntoEditor(versionId) {
     try {
       const r = await api("/asksolomon/catalog/version", { versionId });
@@ -578,7 +727,7 @@ export const CATALOG_ADMIN_PAGE = `<!DOCTYPE html>
       showBanner("success", "Published version " + r.versionId + " · " +
                  r.counts.services + " services · " + r.counts.bundles + " bundles.");
       $("#pub-note").value = "";
-      await Promise.all([loadActive(), loadVersions()]);
+      await Promise.all([loadActive(), loadVersions(), loadSuggestions()]);
     } catch (err) {
       showBanner("error", err.message);
     } finally {
@@ -626,7 +775,7 @@ export const CATALOG_ADMIN_PAGE = `<!DOCTYPE html>
     if (!v) { showGate("Password required."); return; }
     savePw(v);
     hideGate();
-    await Promise.all([loadActive(), loadVersions()]);
+    await Promise.all([loadActive(), loadVersions(), loadSuggestions()]);
   }
 
   function onLogout() {
@@ -641,11 +790,13 @@ export const CATALOG_ADMIN_PAGE = `<!DOCTYPE html>
   $("#btn-add-service").addEventListener("click", addService);
   $("#btn-add-bundle").addEventListener("click", addBundle);
   $("#btn-publish").addEventListener("click", publish);
+  $("#btn-scan-suggestions").addEventListener("click", scanSuggestions);
+  $("#sg-status-filter").addEventListener("change", loadSuggestions);
 
   // If a password is already in sessionStorage from another tab, skip the gate.
   if (pw()) {
     hideGate();
-    Promise.all([loadActive(), loadVersions()]);
+    Promise.all([loadActive(), loadVersions(), loadSuggestions()]);
   }
 })();
 </script>
