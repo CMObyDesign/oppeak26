@@ -2031,13 +2031,24 @@ function buildOverridesHtml() {
       + '<th></th>'
       + '</tr></thead><tbody>');
     for (const o of overridesState.items) {
+      // Codex P2 on #140: render the action-specific payload fragment
+      // so strategists can tell a manual_add "Q4 CFO Bundle" apart
+      // from a bare manual_add row, and see the proposed deps on
+      // edit_dependencies. Reason + payload sit in the same cell so
+      // the table doesn't widen.
+      let payloadFrag = "";
+      if (o.action === "manual_add" && o.payload && typeof o.payload.name === "string") {
+        payloadFrag = ' <span style="color:#4b5563;">· name: <b>' + esc(o.payload.name) + '</b></span>';
+      } else if (o.action === "edit_dependencies" && o.payload && Array.isArray(o.payload.deps)) {
+        payloadFrag = ' <span style="color:#4b5563;">· deps: [' + o.payload.deps.map(d => '<code>' + esc(d) + '</code>').join(", ") + ']</span>';
+      }
       parts.push('<tr>'
         + '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;color:#6b7280;">' + esc(o.createdAt || "") + '</td>'
         + '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;">' + esc(o.createdBy || "") + '</td>'
         + '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;"><code>' + esc(o.catalogVersionId || "") + '</code></td>'
         + '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;"><code>' + esc(o.serviceId || "") + '</code></td>'
         + '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;"><span class="tag">' + esc(o.action || "") + '</span></td>'
-        + '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;max-width:380px;">' + esc(o.reason || "") + '</td>'
+        + '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;max-width:380px;">' + esc(o.reason || "") + payloadFrag + '</td>'
         + '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;text-align:right;"><button data-ovr-revoke="' + esc(o.id) + '" style="font-size:11px;padding:3px 8px;">Revoke</button></td>'
         + '</tr>');
     }

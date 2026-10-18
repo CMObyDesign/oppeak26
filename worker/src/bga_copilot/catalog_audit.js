@@ -46,50 +46,109 @@ const PAID_297_TAG = "swot_paid_297";
 const CATALOG_REF_FIELD_KEY = "swot_bga_services_catalog_ref";
 
 /**
- * Fetches every paid_297 contact (same v2021-07-28 shape case_search
- * uses). Returns `{contacts, error}` — contacts is null on failure so
- * the caller can report 503 cleanly.
+ * Fetches every paid_297 contact across all pages. Returns
+ * `{contacts, error, truncated}`. Codex P2 on #142: the previous
+ * implementation stopped at the GHL 100-row cap and reported it as
+ * the complete cohort, so cases past the first page were silently
+ * excluded from the audit (and from backfill).
+ *
+ * GHL /contacts/search paginates via `searchAfter` (opaque cursor
+ * returned on each page). We walk forward until a response has no
+ * `searchAfter` to resume with, OR we hit COHORT_PAGE_LIMIT pages as
+ * a Worker-CPU safety net. If we hit that cap we return
+ * `truncated: true` so the handler can surface it — operators see
+ * that older contacts weren't scanned.
  */
+const COHORT_PAGE_LIMIT  = 25;   // 25 × 100 = 2500 contacts
+const COHORT_PAGE_SIZE   = 100;  // GHL hard cap
+
 async function _fetchPaid297Cohort(env) {
-  if (!env.GHL_API_KEY)  return { contacts: null, error: "GHL_API_KEY not configured" };
+  if (!env.GHL_API_KEY)     return { contacts: null, error: "GHL_API_KEY not configured" };
   if (!env.GHL_LOCATION_ID) return { contacts: null, error: "GHL_LOCATION_ID not configured" };
-  try {
-    const res = await fetch(`${GHL_API_BASE}/contacts/search`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${env.GHL_API_KEY}`,
-        "Content-Type": "application/json",
-        Version: "2021-07-28",
-      },
-      body: JSON.stringify({
-        locationId: env.GHL_LOCATION_ID,
-        pageLimit: 100,
-        filters: [{ field: "tags", operator: "contains", value: PAID_297_TAG }],
-        sort: [{ field: "dateUpdated", direction: "desc" }],
-      }),
-    });
+  const all = [];
+  let searchAfter = null;
+  for (let page = 0; page < COHORT_PAGE_LIMIT; page++) {
+    const body = {
+      locationId: env.GHL_LOCATION_ID,
+      pageLimit:  COHORT_PAGE_SIZE,
+      filters:    [{ field: "tags", operator: "contains", value: PAID_297_TAG }],
+      sort:       [{ field: "dateUpdated", direction: "desc" }],
+    };
+    if (searchAfter) body.searchAfter = searchAfter;
+    let res, data;
+    try {
+      res = await fetch(`${GHL_API_BASE}/contacts/search`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.GHL_API_KEY}`,
+          "Content-Type": "application/json",
+          Version: "2021-07-28",
+        },
+        body: JSON.stringify(body),
+      });
+    } catch (err) {
+      return { contacts: null, error: `GHL search error: ${err?.message || err}` };
+    }
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       return { contacts: null, error: `GHL search ${res.status}: ${text.slice(0, 200)}` };
     }
-    const data = await res.json().catch(() => ({}));
-    return { contacts: Array.isArray(data?.contacts) ? data.contacts : [], error: null };
-  } catch (err) {
-    return { contacts: null, error: `GHL search error: ${err?.message || err}` };
+    try { data = await res.json(); } catch { data = {}; }
+    const batch = Array.isArray(data?.contacts) ? data.contacts : [];
+    all.push(...batch);
+    // GHL returns the searchAfter cursor as either the last contact's
+    // `searchAfter` array (v2) or on `meta.searchAfter`. Accept both,
+    // and stop when the current page didn't fill or no cursor came
+    // back.
+    const next = (batch.length && batch[batch.length - 1]?.searchAfter)
+              || data?.meta?.searchAfter
+              || null;
+    if (!next || batch.length < COHORT_PAGE_SIZE) {
+      return { contacts: all, error: null, truncated: false };
+    }
+    searchAfter = Array.isArray(next) ? next : [next];
   }
+  return { contacts: all, error: null, truncated: true };
 }
 
 /**
- * Reads every stored version's services_sha so the audit classifier
- * can tell "known" from "unknown" refs. Returns a Set<string> for O(1)
- * membership checks.
+ * Reads SHAs of versions that have actually been published, so the
+ * audit classifier can tell "known" from "unknown" refs. Codex P2 on
+ * #142: an orphaned bga_catalog_versions row — one whose service
+ * INSERT batch failed and left no bga_services rows attached (slices
+ * A + B both intentionally leave such versions in place as harmless
+ * unused ids) — must NOT be treated as a valid pin target. We filter
+ * to versions that have at least one service row via a semi-join.
+ * Returns a Set<string> for O(1) membership checks.
  */
 async function _knownShas(db) {
   if (!db) return new Set();
   const rows = (await db
-    .prepare("SELECT services_sha FROM bga_catalog_versions")
+    .prepare(
+      `SELECT services_sha FROM bga_catalog_versions
+       WHERE id IN (SELECT DISTINCT version_id FROM bga_services)`
+    )
     .all()).results || [];
   return new Set(rows.map((r) => r.services_sha).filter(Boolean));
+}
+
+/**
+ * Confirms a specific version id is a legitimate pin target for
+ * backfill: it must exist AND have at least one bga_services row
+ * attached. Prevents the admin UI from pinning a case to an
+ * orphaned version id (same Codex P2 as _knownShas).
+ */
+async function _completedVersionRow(db, versionId) {
+  return await db
+    .prepare(
+      `SELECT v.id, v.services_sha
+       FROM bga_catalog_versions v
+       WHERE v.id = ?
+         AND EXISTS (SELECT 1 FROM bga_services s WHERE s.version_id = v.id)
+       LIMIT 1`
+    )
+    .bind(versionId)
+    .first();
 }
 
 // POST /asksolomon/catalog/audit — read-only cohort scan.
@@ -111,7 +170,7 @@ export async function handleAuditCatalogRefs(request, env, { checkPassword }) {
     return json({ success: false, error: `GHL fields catalog unavailable: ${e?.message || e}` }, 503);
   }
 
-  const { contacts, error } = await _fetchPaid297Cohort(env);
+  const { contacts, error, truncated } = await _fetchPaid297Cohort(env);
   if (contacts == null) return json({ success: false, error }, 503);
 
   let known;
@@ -146,6 +205,7 @@ export async function handleAuditCatalogRefs(request, env, { checkPassword }) {
     success: true,
     scannedAt: new Date().toISOString(),
     knownVersionCount: known.size,
+    truncated: Boolean(truncated),  // true when the cohort exceeded COHORT_PAGE_LIMIT × 100
     totals: {
       ...buckets,
       scanned: contacts.length,
@@ -184,20 +244,34 @@ export async function handleBackfillCatalogRef(request, env, { checkPassword }) 
   const db = env && env.SOLOMON_DB;
   if (!db) return json({ success: false, error: "D1 unavailable" }, 503);
 
-  // Resolve the target version's services_sha so we write the same
-  // canonical hash the loader stores. Rejecting unknown version ids
-  // here protects against typos silently blanking a case's ref.
+  // Codex P2 on #142: enforce the cohort scope. The audit feature
+  // is defined over paid_297 cases; without this check a scripted
+  // or mis-typed contactId could write BGA catalog metadata +
+  // version history onto an unrelated lead.
+  const fetched = await fetchGhlContact(contactId, env);
+  if (!fetched.contact) {
+    return json({ success: false, error: fetched.error || "contact fetch failed" }, 503);
+  }
+  const tags = Array.isArray(fetched.contact.tags) ? fetched.contact.tags : [];
+  if (!tags.includes(PAID_297_TAG)) {
+    return json({
+      success: false,
+      error: `contact ${contactId} is not tagged ${PAID_297_TAG} — backfill is scoped to the paid cohort`,
+    }, 400);
+  }
+
+  // Codex P2 on #142: resolve + verify the target version is a
+  // real published snapshot (has at least one bga_services row).
+  // Rejects orphaned bga_catalog_versions rows left behind by a
+  // failed seed/publish batch.
   let versionRow;
   try {
-    versionRow = await db
-      .prepare("SELECT id, services_sha FROM bga_catalog_versions WHERE id = ? LIMIT 1")
-      .bind(catalogVersionId)
-      .first();
+    versionRow = await _completedVersionRow(db, catalogVersionId);
   } catch (err) {
     return json({ success: false, error: `D1 read failed: ${err && err.message}` }, 503);
   }
   if (!versionRow) {
-    return json({ success: false, error: `catalog version ${catalogVersionId} not found` }, 404);
+    return json({ success: false, error: `catalog version ${catalogVersionId} not found or has no service rows (orphaned)` }, 404);
   }
   const sha = versionRow.services_sha;
   if (!sha) {

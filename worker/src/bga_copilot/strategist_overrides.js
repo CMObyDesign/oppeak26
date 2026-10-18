@@ -27,10 +27,17 @@
 //      ignores this table entirely.
 
 import { json } from "./case_handlers.js";
-import {
-  primeServicesCatalog,
-  _effectiveCatalog,
-} from "./services_catalog.js";
+
+// NOTE on catalog validation (Codex P1 on #140, addressed here):
+// handleRecordOverride used to prime the catalog cache and then read
+// `_effectiveCatalog()`, but that cache can be up to 60 s behind the
+// active-pointer snapshot. Between the pointer read and the services
+// read, a publish could promote a new version — the handler would
+// then validate against the OLD services but pin the override to the
+// NEW catalog_version_id, letting through overrides for removed
+// service ids. We now resolve service existence via a direct D1 query
+// against the SAME version id we're about to pin to, so the pin and
+// the check come from one consistent snapshot.
 
 const ACTIONS = new Set([
   "include",
@@ -84,23 +91,42 @@ function _mapRow(row) {
   };
 }
 
-async function _listForContact(env, contactId, { includeRevoked = false } = {}) {
+const LIST_PAGE_SIZE = 500;
+
+/**
+ * Returns {items, nextCursor}. Cursor is the `id` of the last row in
+ * the page; a follow-up request should pass `after: <id>` to resume.
+ * Codex P2 on #140: /overrides/all is documented as the full audit
+ * trail, so once a case accumulates more than LIST_PAGE_SIZE rows the
+ * caller MUST be able to paginate. The active-only /overrides route
+ * is capped intentionally — if a single case has 500 non-revoked
+ * overrides, the operator has bigger problems than pagination.
+ */
+async function _listForContact(env, contactId, { includeRevoked = false, after = null } = {}) {
   const db = env.SOLOMON_DB;
-  const where = includeRevoked
+  const binds = [contactId];
+  let where = includeRevoked
     ? "WHERE contact_id = ?"
     : "WHERE contact_id = ? AND revoked_at IS NULL";
+  if (Number.isInteger(after) && after > 0) {
+    // id-descending cursor: next page starts at rows with id < after.
+    where += " AND id < ?";
+    binds.push(after);
+  }
   const rows = await db
     .prepare(
       `SELECT id, contact_id, catalog_version_id, service_id, action, reason,
               payload_json, created_by, created_at, revoked_at, revoked_by
        FROM bga_strategist_overrides
        ${where}
-       ORDER BY created_at DESC, id DESC
-       LIMIT 500`
+       ORDER BY id DESC
+       LIMIT ?`
     )
-    .bind(contactId)
+    .bind(...binds, LIST_PAGE_SIZE)
     .all();
-  return (rows.results || []).map(_mapRow);
+  const items = (rows.results || []).map(_mapRow);
+  const nextCursor = items.length === LIST_PAGE_SIZE ? items[items.length - 1].id : null;
+  return { items, nextCursor };
 }
 
 // POST /asksolomon/case/overrides — list active overrides for one case.
@@ -118,10 +144,12 @@ export async function handleListOverrides(request, env, { checkPassword }) {
   const db = env && env.SOLOMON_DB;
   if (!db) return json({ success: false, error: "D1 unavailable" }, 503);
 
+  const afterRaw = Number(body.after);
+  const after = Number.isInteger(afterRaw) && afterRaw > 0 ? afterRaw : null;
   try {
-    const overrides = await _listForContact(env, contactId);
+    const { items, nextCursor } = await _listForContact(env, contactId, { after });
     const activeVersionId = await _activeCatalogVersionId(env);
-    return json({ success: true, overrides, activeCatalogVersionId: activeVersionId || null });
+    return json({ success: true, overrides: items, nextCursor, activeCatalogVersionId: activeVersionId || null });
   } catch (err) {
     return json({ success: false, error: `D1 read failed: ${err && err.message}` }, 503);
   }
@@ -129,7 +157,9 @@ export async function handleListOverrides(request, env, { checkPassword }) {
 
 // POST /asksolomon/case/overrides/all — full history (incl. revoked)
 // for a case. Separate route so operators who want the audit trail
-// can get it, but the default view is clean.
+// can get it, but the default view is clean. Paginated with
+// `nextCursor` (id-descending): pass `{after: <nextCursor>}` on the
+// follow-up request to resume. Codex P2 on #140.
 export async function handleListOverridesAll(request, env, { checkPassword }) {
   if (!checkPassword(request, env)) {
     return json({ success: false, error: "Unauthorized" }, 401);
@@ -140,14 +170,16 @@ export async function handleListOverridesAll(request, env, { checkPassword }) {
 
   const contactId = typeof body.contactId === "string" ? body.contactId.trim() : "";
   if (!contactId) return json({ success: false, error: "contactId required" }, 400);
+  const afterRaw = Number(body.after);
+  const after = Number.isInteger(afterRaw) && afterRaw > 0 ? afterRaw : null;
 
   const db = env && env.SOLOMON_DB;
   if (!db) return json({ success: false, error: "D1 unavailable" }, 503);
 
   try {
-    const overrides = await _listForContact(env, contactId, { includeRevoked: true });
+    const { items, nextCursor } = await _listForContact(env, contactId, { includeRevoked: true, after });
     const activeVersionId = await _activeCatalogVersionId(env);
-    return json({ success: true, overrides, activeCatalogVersionId: activeVersionId || null });
+    return json({ success: true, overrides: items, nextCursor, activeCatalogVersionId: activeVersionId || null });
   } catch (err) {
     return json({ success: false, error: `D1 read failed: ${err && err.message}` }, 503);
   }
@@ -198,10 +230,13 @@ export async function handleRecordOverride(request, env, { checkPassword }) {
   const db = env && env.SOLOMON_DB;
   if (!db) return json({ success: false, error: "D1 unavailable" }, 503);
 
-  // Pin the override to the catalog version active NOW. Prime first
-  // so _effectiveCatalog() reflects D1 (not the bundled fallback), and
-  // so the catalog-id check below runs against the real active rows.
-  try { await primeServicesCatalog(env); } catch { /* best-effort; fall through */ }
+  // Codex P1 on #140: pin + validate from one consistent snapshot.
+  // We read the active pointer, use that id to validate the service
+  // exists in bga_services under that same id, and then INSERT with
+  // that same id. If a publish lands between the pointer read and
+  // the insert, we're still pinned to a version whose services we
+  // actually verified — never to a newer version that might have
+  // removed the service we accepted.
   const catalogVersionId = await _activeCatalogVersionId(env);
   if (!catalogVersionId) {
     return json({
@@ -210,15 +245,25 @@ export async function handleRecordOverride(request, env, { checkPassword }) {
     }, 409);
   }
 
-  // Non-manual actions must target a service_id that exists in the
-  // active catalog version. manual_add is exempt by design.
   if (ACTIONS_FOR_CATALOG_IDS.has(action)) {
-    const catalog = _effectiveCatalog() || [];
-    const inCatalog = catalog.some((s) => s && s.service_id === serviceId);
-    if (!inCatalog) {
+    let hit;
+    try {
+      hit = await db
+        .prepare(
+          `SELECT 1 AS present
+           FROM bga_services
+           WHERE version_id = ? AND service_id = ? AND is_active = 1
+           LIMIT 1`
+        )
+        .bind(catalogVersionId, serviceId)
+        .first();
+    } catch (err) {
+      return json({ success: false, error: `catalog check failed: ${err && err.message}` }, 503);
+    }
+    if (!hit) {
       return json({
         success: false,
-        error: `service_id "${serviceId}" is not in the active catalog version (${catalogVersionId}). Use action "manual_add" to record an ad-hoc service.`,
+        error: `service_id "${serviceId}" is not in catalog version ${catalogVersionId}. Use action "manual_add" to record an ad-hoc service.`,
       }, 400);
     }
   }

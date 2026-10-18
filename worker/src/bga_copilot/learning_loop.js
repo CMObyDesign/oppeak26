@@ -106,61 +106,104 @@ function _proposedPatchFor(action, groupRows) {
 }
 
 /**
- * Reads all non-revoked overrides, groups by (service_id, action)
- * for contributing actions, and upserts bga_pending_rule_suggestions.
- * Returns a report: { scanned, candidates, created, updated, skipped }.
+ * Reads non-revoked overrides, groups by (service_id, action) for
+ * contributing actions, and upserts bga_pending_rule_suggestions.
+ * Returns a report: { scanned, candidates, created, updated,
+ * reopened, skipped, reconciled }.
  *
- * Deliberately simple: one pass, no cursor pagination. The override
- * table is bounded (slice C limits list queries to 500 recent rows
- * per case; the full table is small until we have thousands of cases)
- * so this fits well under Worker CPU limits for V1.
+ * Three correctness fixes beyond the original (Codex P2 on #141):
+ *
+ * 1. COUNT in SQL first. The old implementation pulled every
+ *    contributing row with LIMIT 5000 and grouped in JS. Past 5000
+ *    rows that undercounted large groups and lost older
+ *    (service_id, action) pairs entirely. We now do a GROUP BY in
+ *    SQL to get accurate counts across the whole table, then fetch
+ *    an EVIDENCE_SAMPLE_LIMIT-sized sample per qualifying group.
+ *
+ * 2. Reconcile existing rows whose contributors dropped. If strategist
+ *    revokes shrink a group below OCCURRENCE_THRESHOLD — or clear it
+ *    entirely — the old implementation just skipped it, leaving the
+ *    existing suggestion row with its old (now stale) count and
+ *    evidence. We now explicitly update such rows to the current
+ *    non-revoked count (zero when all revoked) and refresh evidence.
+ *
+ * 3. Stable dismissal baseline. The reopen check used to compare the
+ *    current count against `prior.occurrence_count`, but that column
+ *    was advanced on every rescan of a dismissed row, so the delta
+ *    was always 1. We now snapshot the count into dismissed_at_count
+ *    at decide time (migration 0007) and compare against THAT.
  */
 export async function _scanOverrides(env) {
   const db = env && env.SOLOMON_DB;
   if (!db) throw new Error("D1 unavailable");
 
-  // Pull non-revoked contributing overrides, newest first.
-  const overrides = (await db
+  // 1a. Count every non-revoked contributing override per
+  //     (service_id, action). GROUP BY runs in SQL — no row limit,
+  //     so counts are accurate at any table size.
+  const countRows = (await db
     .prepare(
-      `SELECT id, contact_id, catalog_version_id, service_id, action,
-              reason, payload_json, created_by, created_at
+      `SELECT service_id, action, COUNT(*) AS cnt
        FROM bga_strategist_overrides
        WHERE revoked_at IS NULL
          AND action IN ('defer','not_a_fit','manual_add','edit_dependencies')
-       ORDER BY created_at DESC, id DESC
-       LIMIT 5000`
+       GROUP BY service_id, action`
     )
     .all()).results || [];
 
-  // Group by (service_id, action).
-  const groups = new Map(); // key → { serviceId, action, rows[] }
-  for (const row of overrides) {
-    const key = _patternKey(row.service_id, row.action);
-    if (!groups.has(key)) groups.set(key, { serviceId: row.service_id, action: row.action, rows: [] });
-    groups.get(key).rows.push(row);
+  // Build an index of (pattern_key → true count) so we can both
+  // decide what qualifies and (later) reconcile existing rows
+  // whose contributors have dropped away.
+  const counts = new Map(); // key → { serviceId, action, count }
+  let belowThreshold = 0;
+  for (const r of countRows) {
+    const cnt = Number(r.cnt) || 0;
+    counts.set(_patternKey(r.service_id, r.action), {
+      serviceId: r.service_id,
+      action:    r.action,
+      count:     cnt,
+    });
+    if (cnt < OCCURRENCE_THRESHOLD) belowThreshold++;
   }
 
-  // Load existing suggestion rows keyed by pattern_key so we can
-  // decide upsert vs insert vs reopen without a hot loop of SELECTs.
+  // 1b. Fetch an evidence sample for groups that qualify. One
+  //     statement per qualifying group — cheap compared to pulling
+  //     every row, and bounded by (service_id, action) × EVIDENCE_SAMPLE_LIMIT.
+  const groups = new Map(); // key → { serviceId, action, count, rows[] }
+  for (const [key, meta] of counts) {
+    if (meta.count < OCCURRENCE_THRESHOLD) continue;
+    const sampleRows = (await db
+      .prepare(
+        `SELECT id, contact_id, catalog_version_id, service_id, action,
+                reason, payload_json, created_by, created_at
+         FROM bga_strategist_overrides
+         WHERE revoked_at IS NULL
+           AND service_id = ? AND action = ?
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`
+      )
+      .bind(meta.serviceId, meta.action, EVIDENCE_SAMPLE_LIMIT)
+      .all()).results || [];
+    groups.set(key, { ...meta, rows: sampleRows });
+  }
+
+  // Load existing suggestion rows so we can decide upsert vs
+  // reopen vs reconcile without a hot loop of SELECTs.
   const existing = new Map();
   const existingRows = (await db
     .prepare(
-      `SELECT id, pattern_key, status, occurrence_count, decided_by, decided_at, decision_note
+      `SELECT id, pattern_key, service_id, action, status, occurrence_count,
+              dismissed_at_count, decided_by, decided_at, decision_note
        FROM bga_pending_rule_suggestions`
     )
     .all()).results || [];
   for (const r of existingRows) existing.set(r.pattern_key, r);
 
-  let created = 0, updated = 0, skipped = 0, reopened = 0;
+  let created = 0, updated = 0, skipped = belowThreshold, reopened = 0, reconciled = 0;
   const nowIso = new Date().toISOString();
 
+  // ─ Main pass: qualifying groups.
   for (const [key, g] of groups) {
-    if (g.rows.length < OCCURRENCE_THRESHOLD) { skipped++; continue; }
-
-    // Keep up to EVIDENCE_SAMPLE_LIMIT most-recent rows as the
-    // inline evidence sample. The rest are discoverable via the
-    // override log but out of this row to keep its size bounded.
-    const sampled = g.rows.slice(0, EVIDENCE_SAMPLE_LIMIT).map((r) => ({
+    const sampled = g.rows.map((r) => ({
       override_id:         r.id,
       contact_id:          r.contact_id,
       catalog_version_id:  r.catalog_version_id,
@@ -168,8 +211,8 @@ export async function _scanOverrides(env) {
       created_by:          r.created_by,
       created_at:          r.created_at,
     }));
-    const reasonSnippets = g.rows.map((r) => (r.reason || "").trim()).filter(Boolean);
-    const summary       = _summaryFor(g.action, g.serviceId, g.rows.length, reasonSnippets);
+    const reasonSnippets = sampled.map((r) => (r.reason || "").trim()).filter(Boolean);
+    const summary       = _summaryFor(g.action, g.serviceId, g.count, reasonSnippets);
     const proposedPatch = _proposedPatchFor(g.action, g.rows);
     const evidenceJson  = JSON.stringify(sampled);
     const proposedJson  = JSON.stringify(proposedPatch);
@@ -184,16 +227,20 @@ export async function _scanOverrides(env) {
               first_seen_at, last_scanned_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`
         )
-        .bind(key, g.serviceId, g.action, summary, evidenceJson, proposedJson, g.rows.length, nowIso, nowIso)
+        .bind(key, g.serviceId, g.action, summary, evidenceJson, proposedJson, g.count, nowIso, nowIso)
         .run();
       created++;
     } else {
       // Reopen a dismissed suggestion when new overrides push count
-      // past the configured delta — the admin's "no" expires once
-      // the pattern materially grows.
+      // past the configured delta — measured against the STABLE
+      // dismissal baseline, not the ever-advancing occurrence_count.
+      // Fallback to occurrence_count if dismissed_at_count is NULL
+      // (row dismissed before migration 0007), so pre-migration
+      // dismissals still get the sticky-until-N-more behavior.
+      const baseline = prior.dismissed_at_count ?? prior.occurrence_count ?? 0;
       const shouldReopen =
         prior.status === "dismissed" &&
-        (g.rows.length - (prior.occurrence_count || 0)) >= DISMISS_REOPEN_DELTA;
+        (g.count - baseline) >= DISMISS_REOPEN_DELTA;
       if (shouldReopen) {
         await db
           .prepare(
@@ -201,16 +248,14 @@ export async function _scanOverrides(env) {
              SET summary = ?, evidence_json = ?, proposed_patch_json = ?,
                  occurrence_count = ?, status = 'pending',
                  decided_by = NULL, decided_at = NULL, decision_note = NULL,
+                 dismissed_at_count = NULL,
                  last_scanned_at = ?
              WHERE id = ?`
           )
-          .bind(summary, evidenceJson, proposedJson, g.rows.length, nowIso, prior.id)
+          .bind(summary, evidenceJson, proposedJson, g.count, nowIso, prior.id)
           .run();
         reopened++;
       } else {
-        // Refresh the pattern body (summary, evidence, count,
-        // last_scanned_at) but LEAVE status / decided_* alone — a
-        // dismissed / approved / applied call is sticky.
         await db
           .prepare(
             `UPDATE bga_pending_rule_suggestions
@@ -218,19 +263,74 @@ export async function _scanOverrides(env) {
                  occurrence_count = ?, last_scanned_at = ?
              WHERE id = ?`
           )
-          .bind(summary, evidenceJson, proposedJson, g.rows.length, nowIso, prior.id)
+          .bind(summary, evidenceJson, proposedJson, g.count, nowIso, prior.id)
           .run();
         updated++;
       }
     }
   }
 
+  // ─ Reconcile pass: existing rows whose pattern no longer
+  //   qualifies. Two sub-cases, both end with the row's count and
+  //   evidence reflecting the ACTUAL non-revoked state:
+  //     a) still present in `counts` but below threshold → set
+  //        count to the real (small) number; leave status alone.
+  //     b) absent from `counts` entirely (all contributors
+  //        revoked) → set count to 0, clear evidence.
+  for (const [key, prior] of existing) {
+    if (groups.has(key)) continue; // handled in the main pass
+    const metaBelow = counts.get(key);
+    const realCount = metaBelow ? metaBelow.count : 0;
+    // If the row's stored occurrence_count already matches reality
+    // we can skip the write — avoids a no-op D1 round trip.
+    if ((prior.occurrence_count || 0) === realCount) {
+      if (realCount === 0) {
+        // Still worth refreshing `last_scanned_at` so operators can
+        // tell this row has been seen in the current scan.
+        await db
+          .prepare(
+            `UPDATE bga_pending_rule_suggestions
+             SET last_scanned_at = ?
+             WHERE id = ?`
+          )
+          .bind(nowIso, prior.id)
+          .run();
+      }
+      // Row already matches reality — no reconcile needed. Not
+      // counted into `skipped` (which reports below-threshold
+      // candidates, not up-to-date reconciliations).
+      continue;
+    }
+    await db
+      .prepare(
+        `UPDATE bga_pending_rule_suggestions
+         SET occurrence_count = ?, evidence_json = '[]',
+             summary = ?, last_scanned_at = ?
+         WHERE id = ?`
+      )
+      .bind(
+        realCount,
+        realCount === 0
+          ? `All contributing overrides for \`${prior.service_id}\` (${prior.action}) have been revoked. No current signal.`
+          : `${realCount} active overrides for \`${prior.service_id}\` (${prior.action}) — below the threshold of ${OCCURRENCE_THRESHOLD}.`,
+        nowIso,
+        prior.id
+      )
+      .run();
+    reconciled++;
+  }
+
+  // Final count of contributing rows (sum of per-group counts) for
+  // the report. Not every row got fetched into memory — we only
+  // pulled sample windows — so we aggregate from the SQL counts.
+  const scanned = countRows.reduce((n, r) => n + (Number(r.cnt) || 0), 0);
   return {
-    scanned: overrides.length,
-    candidates: groups.size,
+    scanned,
+    candidates: counts.size,
     created,
     updated,
     reopened,
+    reconciled,
     skipped,
   };
 }
@@ -282,6 +382,7 @@ export async function handleListSuggestions(request, env, { checkPassword }) {
       evidence:           _parseJson(r.evidence_json, []),
       proposedPatch:      _parseJson(r.proposed_patch_json, {}),
       occurrenceCount:    r.occurrence_count,
+      dismissedAtCount:   r.dismissed_at_count ?? null,
       status:             r.status,
       decidedBy:          r.decided_by || null,
       decidedAt:          r.decided_at || null,
@@ -327,6 +428,7 @@ export async function handleGetSuggestion(request, env, { checkPassword }) {
         evidence:        _parseJson(r.evidence_json, []),
         proposedPatch:   _parseJson(r.proposed_patch_json, {}),
         occurrenceCount: r.occurrence_count,
+        dismissedAtCount: r.dismissed_at_count ?? null,
         status:          r.status,
         decidedBy:       r.decided_by || null,
         decidedAt:       r.decided_at || null,
@@ -378,14 +480,31 @@ export async function handleDecideSuggestion(request, env, { checkPassword }) {
     if (!row) return json({ success: false, error: `suggestion ${id} not found` }, 404);
 
     const nowIso = new Date().toISOString();
-    await db
-      .prepare(
-        `UPDATE bga_pending_rule_suggestions
-         SET status = ?, decided_by = ?, decided_at = ?, decision_note = ?
-         WHERE id = ?`
-      )
-      .bind(decision, decidedBy, nowIso, note || null, id)
-      .run();
+    // Codex P2 on #141: snapshot the dismissal baseline. The
+    // reopen rule in _scanOverrides compares current overrides
+    // against this frozen count. Any non-dismiss decision clears
+    // the snapshot so a later dismissal resets it correctly.
+    if (decision === "dismissed") {
+      await db
+        .prepare(
+          `UPDATE bga_pending_rule_suggestions
+           SET status = ?, decided_by = ?, decided_at = ?, decision_note = ?,
+               dismissed_at_count = occurrence_count
+           WHERE id = ?`
+        )
+        .bind(decision, decidedBy, nowIso, note || null, id)
+        .run();
+    } else {
+      await db
+        .prepare(
+          `UPDATE bga_pending_rule_suggestions
+           SET status = ?, decided_by = ?, decided_at = ?, decision_note = ?,
+               dismissed_at_count = NULL
+           WHERE id = ?`
+        )
+        .bind(decision, decidedBy, nowIso, note || null, id)
+        .run();
+    }
     return json({ success: true, id, status: decision, decidedBy, decidedAt: nowIso });
   } catch (err) {
     return json({ success: false, error: `decision write failed: ${err && err.message}` }, 503);
