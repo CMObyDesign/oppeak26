@@ -40,18 +40,42 @@ function makeFakeDb({ overrides = [], suggestions = [] } = {}) {
     nextSuggestionId: 1,
   };
   function prepare(sql) {
-    // SELECT contributing overrides, newest first.
-    if (/FROM bga_strategist_overrides[\s\S]+revoked_at IS NULL[\s\S]+action IN/i.test(sql)) {
+    // Codex P2 on #141: aggregator now does a GROUP BY first.
+    if (/SELECT service_id, action, COUNT\(\*\) AS cnt[\s\S]+GROUP BY service_id, action/i.test(sql)) {
       return {
         all: async () => {
-          const list = state.overrides
-            .filter((o) => !o.revoked_at && ["defer","not_a_fit","manual_add","edit_dependencies"].includes(o.action))
-            .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
-          return { results: list };
+          const counts = new Map();
+          for (const o of state.overrides) {
+            if (o.revoked_at) continue;
+            if (!["defer","not_a_fit","manual_add","edit_dependencies"].includes(o.action)) continue;
+            const k = `${o.service_id}|${o.action}`;
+            if (!counts.has(k)) counts.set(k, { service_id: o.service_id, action: o.action, cnt: 0 });
+            counts.get(k).cnt++;
+          }
+          return { results: Array.from(counts.values()) };
         },
       };
     }
-    // SELECT * suggestions snapshot (used by aggregator).
+    // Per-group evidence sample (one query per qualifying group).
+    if (/FROM bga_strategist_overrides[\s\S]+WHERE revoked_at IS NULL[\s\S]+service_id = \? AND action = \?[\s\S]+ORDER BY created_at DESC/i.test(sql)) {
+      return {
+        bind: (sid, action, limit) => ({
+          all: async () => {
+            const rows = state.overrides
+              .filter((o) => !o.revoked_at && o.service_id === sid && o.action === action)
+              .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))
+              .slice(0, limit);
+            return { results: rows };
+          },
+        }),
+      };
+    }
+    // SELECT * suggestions snapshot (used by aggregator). Now also
+    // reads dismissed_at_count + service_id + action columns.
+    if (/^\s*SELECT id, pattern_key, service_id, action, status, occurrence_count/i.test(sql)) {
+      return { all: async () => ({ results: state.suggestions.slice() }) };
+    }
+    // Legacy snapshot query from older tests — keep for backwards compat.
     if (/^\s*SELECT id, pattern_key, status, occurrence_count/i.test(sql)) {
       return { all: async () => ({ results: state.suggestions.slice() }) };
     }
@@ -72,7 +96,7 @@ function makeFakeDb({ overrides = [], suggestions = [] } = {}) {
         }),
       };
     }
-    // UPDATE (reopen).
+    // UPDATE (reopen) — now also clears dismissed_at_count.
     if (/UPDATE bga_pending_rule_suggestions[\s\S]+status = 'pending'[\s\S]+WHERE id = \?/i.test(sql)) {
       return {
         bind: (summary, evidence_json, proposed_patch_json, occurrence_count, last_scanned_at, id) => ({
@@ -87,8 +111,40 @@ function makeFakeDb({ overrides = [], suggestions = [] } = {}) {
               row.decided_by = null;
               row.decided_at = null;
               row.decision_note = null;
+              row.dismissed_at_count = null;
               row.last_scanned_at = last_scanned_at;
             }
+            return { meta: {} };
+          },
+        }),
+      };
+    }
+    // UPDATE (reconcile below-threshold or all-revoked). This UPDATE
+    // writes summary + occurrence_count + last_scanned_at but not
+    // proposed_patch_json. Match it BEFORE the generic refresh.
+    if (/UPDATE bga_pending_rule_suggestions[\s\S]+SET occurrence_count = \?, evidence_json = '\[\]'[\s\S]+WHERE id = \?/i.test(sql)) {
+      return {
+        bind: (realCount, summary, last_scanned_at, id) => ({
+          run: async () => {
+            const row = state.suggestions.find((r) => r.id === id);
+            if (row) {
+              row.occurrence_count = realCount;
+              row.evidence_json = "[]";
+              row.summary = summary;
+              row.last_scanned_at = last_scanned_at;
+            }
+            return { meta: {} };
+          },
+        }),
+      };
+    }
+    // UPDATE (last_scanned_at only — for already-zero rows).
+    if (/UPDATE bga_pending_rule_suggestions[\s\S]+SET last_scanned_at = \?[\s\S]+WHERE id = \?/i.test(sql)) {
+      return {
+        bind: (ts, id) => ({
+          run: async () => {
+            const row = state.suggestions.find((r) => r.id === id);
+            if (row) row.last_scanned_at = ts;
             return { meta: {} };
           },
         }),
@@ -112,8 +168,8 @@ function makeFakeDb({ overrides = [], suggestions = [] } = {}) {
         }),
       };
     }
-    // UPDATE (decide).
-    if (/UPDATE bga_pending_rule_suggestions[\s\S]+SET status = \?,/i.test(sql)) {
+    // UPDATE (decide → dismissed): also writes dismissed_at_count.
+    if (/UPDATE bga_pending_rule_suggestions[\s\S]+dismissed_at_count = occurrence_count/i.test(sql)) {
       return {
         bind: (status, decided_by, decided_at, decision_note, id) => ({
           run: async () => {
@@ -123,6 +179,25 @@ function makeFakeDb({ overrides = [], suggestions = [] } = {}) {
               row.decided_by = decided_by;
               row.decided_at = decided_at;
               row.decision_note = decision_note;
+              row.dismissed_at_count = row.occurrence_count;
+            }
+            return { meta: {} };
+          },
+        }),
+      };
+    }
+    // UPDATE (decide → non-dismissed): clears dismissed_at_count.
+    if (/UPDATE bga_pending_rule_suggestions[\s\S]+dismissed_at_count = NULL/i.test(sql)) {
+      return {
+        bind: (status, decided_by, decided_at, decision_note, id) => ({
+          run: async () => {
+            const row = state.suggestions.find((r) => r.id === id);
+            if (row) {
+              row.status = status;
+              row.decided_by = decided_by;
+              row.decided_at = decided_at;
+              row.decision_note = decision_note;
+              row.dismissed_at_count = null;
             }
             return { meta: {} };
           },
@@ -360,7 +435,88 @@ describe("learning_loop handlers (slice D)", () => {
     }
   });
 
-  it("12. /suggestion/decide writes status + decided_by + decided_at", async () => {
+  it("12. Codex P2 on #141: dismissal baseline persists across intermediate scans", async () => {
+    // Repro of the Codex bug: dismissed at count=2, overrides grow
+    // to 3, 4, 5 — the row MUST reopen when (count - baseline=2) >=
+    // DISMISS_REOPEN_DELTA=3, i.e. at count=5. The pre-fix code
+    // reset the baseline on each refresh, so delta was always 1.
+    const db = makeFakeDb({ overrides: [
+      ovr(1, "svc_vf", "not_a_fit", { reason: "r1" }),
+      ovr(2, "svc_vf", "not_a_fit", { reason: "r2" }),
+    ] });
+    const env = { SOLOMON_DB: db };
+    await handleScanSuggestions(postReq({}), env, OK);
+    const id = db._state.suggestions[0].id;
+    await handleDecideSuggestion(postReq({ id, decision: "dismissed", by: "x", note: "noise" }), env, OK);
+    assert.equal(db._state.suggestions[0].status, "dismissed");
+    assert.equal(db._state.suggestions[0].dismissed_at_count, 2);
+
+    // Add 1 more (count 3) → scan refreshes but should NOT reopen.
+    db._state.overrides.push(ovr(3, "svc_vf", "not_a_fit", { reason: "r3" }));
+    let r = await readJson(await handleScanSuggestions(postReq({}), env, OK));
+    assert.equal(r.reopened, 0);
+    assert.equal(db._state.suggestions[0].status, "dismissed");
+    assert.equal(db._state.suggestions[0].dismissed_at_count, 2, "baseline unchanged on refresh");
+
+    // Add 1 more (count 4) → still shouldn't reopen (delta=2).
+    db._state.overrides.push(ovr(4, "svc_vf", "not_a_fit", { reason: "r4" }));
+    r = await readJson(await handleScanSuggestions(postReq({}), env, OK));
+    assert.equal(r.reopened, 0);
+    assert.equal(db._state.suggestions[0].status, "dismissed");
+
+    // Add 1 more (count 5) → now delta=3, must reopen.
+    db._state.overrides.push(ovr(5, "svc_vf", "not_a_fit", { reason: "r5" }));
+    r = await readJson(await handleScanSuggestions(postReq({}), env, OK));
+    assert.equal(r.reopened, 1);
+    assert.equal(db._state.suggestions[0].status, "pending");
+    assert.equal(db._state.suggestions[0].dismissed_at_count, null, "baseline cleared on reopen");
+  });
+
+  it("13. Codex P2 on #141: reconcile below-threshold rows when contributors are revoked", async () => {
+    const db = makeFakeDb({ overrides: [
+      ovr(1, "svc_vf", "not_a_fit", { reason: "r1" }),
+      ovr(2, "svc_vf", "not_a_fit", { reason: "r2" }),
+    ] });
+    const env = { SOLOMON_DB: db };
+    await handleScanSuggestions(postReq({}), env, OK);
+    const id = db._state.suggestions[0].id;
+    assert.equal(db._state.suggestions[0].occurrence_count, 2);
+
+    // Revoke one contributor → group drops to 1 (below threshold).
+    db._state.overrides[1].revoked_at = "2026-10-18T01:00:00Z";
+    db._state.overrides[1].revoked_by = "liz@x";
+    const r = await readJson(await handleScanSuggestions(postReq({}), env, OK));
+    assert.equal(r.reconciled, 1);
+    // Row stays, but count + evidence refreshed to reflect reality.
+    assert.equal(db._state.suggestions[0].occurrence_count, 1);
+    assert.equal(db._state.suggestions[0].evidence_json, "[]");
+    assert.match(db._state.suggestions[0].summary, /below the threshold/i);
+
+    // Revoke the other contributor → group vanishes from GROUP BY entirely.
+    db._state.overrides[0].revoked_at = "2026-10-18T01:01:00Z";
+    const r2 = await readJson(await handleScanSuggestions(postReq({}), env, OK));
+    assert.equal(r2.reconciled, 1);
+    assert.equal(db._state.suggestions[0].occurrence_count, 0);
+    assert.match(db._state.suggestions[0].summary, /revoked/i);
+  });
+
+  it("14. Codex P2 on #141: counts come from SQL GROUP BY (no 5000-row LIMIT undercount)", async () => {
+    // Build a cohort big enough that the old LIMIT 5000 would have
+    // dropped older rows. The GROUP BY aggregator reports the FULL
+    // count because the SQL counts without a row-fetch limit.
+    const overrides = [];
+    for (let i = 1; i <= 6000; i++) {
+      overrides.push(ovr(i, "svc_vf", "not_a_fit", { reason: `r${i}` }));
+    }
+    const env = { SOLOMON_DB: makeFakeDb({ overrides }) };
+    const r = await readJson(await handleScanSuggestions(postReq({}), env, OK));
+    assert.equal(r.candidates, 1);
+    assert.equal(r.created, 1);
+    const list = await readJson(await handleListSuggestions(postReq({}), env, OK));
+    assert.equal(list.items[0].occurrenceCount, 6000, "full count reported, no 5000-row ceiling");
+  });
+
+  it("15. /suggestion/decide writes status + decided_by + decided_at", async () => {
     const db = makeFakeDb({
       overrides: [
         ovr(1, "svc_vf", "manual_add", { payload_json: '{"name":"Q4 CFO Bundle"}' }),

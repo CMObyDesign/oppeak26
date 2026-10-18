@@ -29,19 +29,33 @@ const PAID_297_TAG = "swot_paid_297";
 const FIELD_ID = "fld_catalog_ref_id";
 const HISTORY_FIELD_ID = "fld_history_id";
 
-// Minimal fake D1 — supports the two queries the audit handlers use.
-function makeFakeDb({ versions = [] } = {}) {
-  const state = { versions: [...versions], writes: 0 };
+// Minimal fake D1 — supports the queries the audit handlers use.
+// By default every version has a bga_services row attached (so
+// _completedVersionRow sees it). Pass `orphanedVersionIds: [N]` to
+// exclude those from the semi-join (Codex P2 on #142).
+function makeFakeDb({ versions = [], orphanedVersionIds = [] } = {}) {
+  const state  = { versions: [...versions], orphaned: new Set(orphanedVersionIds), writes: 0 };
   function prepare(sql) {
-    if (/FROM bga_catalog_versions WHERE id = \?/i.test(sql)) {
+    // Completed-version lookup for backfill (semi-join on bga_services).
+    if (/FROM bga_catalog_versions v[\s\S]+EXISTS[\s\S]+FROM bga_services s/i.test(sql)) {
       return {
         bind: (id) => ({
-          first: async () => state.versions.find((v) => v.id === id) || null,
+          first: async () => {
+            if (state.orphaned.has(id)) return null;
+            return state.versions.find((v) => v.id === id) || null;
+          },
         }),
       };
     }
-    if (/SELECT services_sha FROM bga_catalog_versions$/i.test(sql.trim())) {
-      return { all: async () => ({ results: state.versions.map((v) => ({ services_sha: v.services_sha })) }) };
+    // Known-SHA audit query (also filters orphaned rows).
+    if (/SELECT services_sha FROM bga_catalog_versions[\s\S]+WHERE id IN \(SELECT DISTINCT version_id FROM bga_services\)/i.test(sql)) {
+      return {
+        all: async () => ({
+          results: state.versions
+            .filter((v) => !state.orphaned.has(v.id))
+            .map((v) => ({ services_sha: v.services_sha })),
+        }),
+      };
     }
     throw new Error(`fake D1 unexpected SQL: ${sql.slice(0, 100)}`);
   }
@@ -88,13 +102,17 @@ async function readJson(resp) {
 //   GET  /locations/.../customFields → fields catalog
 //   PUT  /contacts/{id}         → upsert on backfill
 let fetchCalls = [];
-function installGhlStub({ cohort = [], putOk = true } = {}) {
+function installGhlStub({ cohort = [], putOk = true, contactTags = [PAID_297_TAG] } = {}) {
   const original = globalThis.fetch;
   fetchCalls = [];
   globalThis.fetch = async (url, init = {}) => {
     fetchCalls.push({ url: String(url), init });
     const u = String(url);
     if (u.endsWith("/contacts/search")) {
+      // Codex P2 on #142: handler now paginates via searchAfter.
+      // We return the cohort in one page; `batch.length < pageSize`
+      // ends the loop. Also surface `searchAfter: null` so the stub
+      // can be reused for multi-page tests later.
       return new Response(JSON.stringify({ contacts: cohort }), {
         status: 200, headers: { "Content-Type": "application/json" },
       });
@@ -107,11 +125,11 @@ function installGhlStub({ cohort = [], putOk = true } = {}) {
         ],
       }), { status: 200, headers: { "Content-Type": "application/json" } });
     }
-    // Single-contact GET during the sanctioned-wrapper history read.
+    // Single-contact GET — now returns tags so the paid-cohort check runs.
     if (/\/contacts\/[^/]+$/.test(u) && (init.method || "GET") === "GET") {
       const id = u.split("/").pop();
       return new Response(JSON.stringify({
-        contact: { id, customFields: [] },
+        contact: { id, tags: contactTags, customFields: [] },
       }), { status: 200, headers: { "Content-Type": "application/json" } });
     }
     // Single-contact PUT = write path.
@@ -204,6 +222,7 @@ describe("catalog_audit handlers (slice E)", () => {
   });
 
   it("6. /audit/backfill 404s on an unknown catalog version id", async () => {
+    restore = installGhlStub({ cohort: [], contactTags: [PAID_297_TAG] });
     const env = { ...ENV_BASE, SOLOMON_DB: makeFakeDb({ versions: [{ id: 1, services_sha: "abc" }] }) };
     const r = await handleBackfillCatalogRef(postReq({
       contactId: "c1", catalogVersionId: 99, by: "x",
@@ -214,7 +233,7 @@ describe("catalog_audit handlers (slice E)", () => {
   });
 
   it("7. /audit/backfill happy path writes the field and reports success", async () => {
-    restore = installGhlStub({ cohort: [], putOk: true });
+    restore = installGhlStub({ cohort: [], putOk: true, contactTags: [PAID_297_TAG] });
     const env = { ...ENV_BASE, SOLOMON_DB: makeFakeDb({ versions: [{ id: 5, services_sha: "deadbeef1234" }] }) };
     const r = await handleBackfillCatalogRef(postReq({
       contactId: "c1", catalogVersionId: 5, by: "liz@x", note: "post-slice-A audit sweep",
@@ -228,5 +247,52 @@ describe("catalog_audit handlers (slice E)", () => {
     // The wrapper issues a PUT on /contacts/c1.
     const put = fetchCalls.find((f) => /\/contacts\/c1$/.test(f.url) && (f.init.method || "").toUpperCase() === "PUT");
     assert.ok(put, "expected a PUT /contacts/c1 to be issued");
+  });
+
+  it("8. Codex P2 on #142: /audit/backfill rejects a contact not tagged swot_paid_297", async () => {
+    restore = installGhlStub({ cohort: [], contactTags: ["some_other_tag"] });
+    const env = { ...ENV_BASE, SOLOMON_DB: makeFakeDb({ versions: [{ id: 5, services_sha: "x" }] }) };
+    const r = await handleBackfillCatalogRef(postReq({
+      contactId: "c_outside_cohort", catalogVersionId: 5, by: "x",
+    }), env, OK);
+    assert.equal(r.status, 400);
+    const b = await readJson(r);
+    assert.match(b.error, /not tagged swot_paid_297/);
+  });
+
+  it("9. Codex P2 on #142: orphaned catalog versions aren't counted as known", async () => {
+    const cohort = [
+      contactFixture({ id: "c1", catalogRef: "live_sha_ok" }),
+      contactFixture({ id: "c2", catalogRef: "orphan_sha" }),
+    ];
+    restore = installGhlStub({ cohort });
+    const env = { ...ENV_BASE, SOLOMON_DB: makeFakeDb({
+      versions: [
+        { id: 1, services_sha: "live_sha_ok" },
+        { id: 2, services_sha: "orphan_sha" },  // orphaned — no bga_services row
+      ],
+      orphanedVersionIds: [2],
+    }) };
+    const b = await readJson(await handleAuditCatalogRefs(postReq({}), env, OK));
+    assert.equal(b.success, true);
+    assert.equal(b.knownVersionCount, 1, "orphaned version excluded from the known set");
+    const byId = new Map(b.items.map((i) => [i.contactId, i]));
+    assert.equal(byId.get("c1").bucket, "pinned_known");
+    assert.equal(byId.get("c2").bucket, "pinned_unknown",
+      "a case pinned to an orphaned version id must bucket as pinned_unknown, not pinned_known");
+  });
+
+  it("10. Codex P2 on #142: /audit/backfill rejects an orphaned catalog version id", async () => {
+    restore = installGhlStub({ cohort: [], contactTags: [PAID_297_TAG] });
+    const env = { ...ENV_BASE, SOLOMON_DB: makeFakeDb({
+      versions: [{ id: 7, services_sha: "orphan" }],
+      orphanedVersionIds: [7],
+    }) };
+    const r = await handleBackfillCatalogRef(postReq({
+      contactId: "c1", catalogVersionId: 7, by: "x",
+    }), env, OK);
+    assert.equal(r.status, 404);
+    const b = await readJson(r);
+    assert.match(b.error, /not found or has no service rows/);
   });
 });

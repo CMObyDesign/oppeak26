@@ -19,7 +19,7 @@
 //      revoke returns {alreadyRevoked: true} without overwriting.
 //  11. /overrides filters out revoked rows; /overrides/all shows them.
 
-import { describe, it, beforeEach } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
@@ -28,10 +28,9 @@ import {
   handleRecordOverride,
   handleRevokeOverride,
 } from "../src/bga_copilot/strategist_overrides.js";
-import {
-  _setCatalogForTests,
-  invalidateServicesCatalogCache,
-} from "../src/bga_copilot/services_catalog.js";
+// Slice C fix (Codex P1 on #140): handler now does a direct D1
+// catalog check instead of reading services_catalog cache. Fake D1
+// below answers the new SELECT 1 FROM bga_services query.
 
 // -----------------------------------------------------------------------
 // Fake D1 — supports the SQL the strategist_overrides handlers use.
@@ -43,36 +42,55 @@ import {
 function makeFakeDb({
   activeVersionId = 1,
   overrides = [],
+  services = null,
   nextInsertId = 100,
 } = {}) {
+  // Default service set — covers the catalog-id presence check used
+  // by handleRecordOverride under the new direct-D1 validation.
+  const defaultServices = [
+    { version_id: 1, service_id: "svc_vf" },
+    { version_id: 1, service_id: "svc_growth" },
+    { version_id: 7, service_id: "svc_vf" },
+    { version_id: 7, service_id: "svc_growth" },
+  ];
   const state = {
     activeVersionId,
     overrides: [...overrides],
+    services:  Array.isArray(services) ? [...services] : defaultServices,
     nextInsertId,
   };
   function prepare(sql) {
     if (/FROM bga_catalog_active/i.test(sql)) {
       return { first: async () => ({ active_version_id: state.activeVersionId }) };
     }
-    if (/SELECT[\s\S]+FROM bga_strategist_overrides[\s\S]+WHERE contact_id = \? AND revoked_at IS NULL/i.test(sql)) {
+    // Direct catalog-id existence check (Codex P1 on #140).
+    if (/SELECT 1 AS present[\s\S]+FROM bga_services[\s\S]+WHERE version_id = \? AND service_id = \?/i.test(sql)) {
       return {
-        bind: (cid) => ({
-          all: async () => ({
-            results: state.overrides
-              .filter((o) => o.contact_id === cid && !o.revoked_at)
-              .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || "")),
-          }),
+        bind: (vid, sid) => ({
+          first: async () => {
+            const hit = state.services.find((s) => s.version_id === vid && s.service_id === sid);
+            return hit ? { present: 1 } : null;
+          },
         }),
       };
     }
-    if (/SELECT[\s\S]+FROM bga_strategist_overrides[\s\S]+WHERE contact_id = \?/i.test(sql)) {
+    // Paginated list (Codex P2 on #140). The handler builds the WHERE
+    // clause dynamically, so match on the ORDER BY id DESC + LIMIT ?.
+    if (/FROM bga_strategist_overrides[\s\S]+ORDER BY id DESC[\s\S]+LIMIT \?/i.test(sql)) {
+      const includeRevoked = !/revoked_at IS NULL/.test(sql);
+      const hasCursor      = /AND id < \?/.test(sql);
       return {
-        bind: (cid) => ({
-          all: async () => ({
-            results: state.overrides
-              .filter((o) => o.contact_id === cid)
-              .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || "")),
-          }),
+        bind: (...binds) => ({
+          all: async () => {
+            const contactId = binds[0];
+            const after     = hasCursor ? binds[1] : null;
+            const limit     = binds[binds.length - 1];
+            let rows = state.overrides.filter((o) => o.contact_id === contactId);
+            if (!includeRevoked) rows = rows.filter((o) => !o.revoked_at);
+            if (after != null)   rows = rows.filter((o) => o.id < after);
+            rows.sort((a, b) => b.id - a.id);
+            return { results: rows.slice(0, limit) };
+          },
         }),
       };
     }
@@ -134,17 +152,8 @@ async function readJson(resp) {
   try { return JSON.parse(t); } catch { return { __raw: t }; }
 }
 
-// Fixture catalog — a controlled service set for the catalog-id check.
-const FIXTURE_CATALOG = [
-  { service_id: "svc_vf", name: "Verified Financials" },
-  { service_id: "svc_growth", name: "Growth Plan" },
-];
 
 describe("strategist_overrides handlers (slice C)", () => {
-  beforeEach(() => {
-    invalidateServicesCatalogCache();
-    _setCatalogForTests(FIXTURE_CATALOG);
-  });
 
   it("1. all four handlers 401 without the password header", async () => {
     const env = { SOLOMON_DB: makeFakeDb() };
@@ -207,7 +216,7 @@ describe("strategist_overrides handlers (slice C)", () => {
     }), env, OK);
     assert.equal(r.status, 400);
     const body = await readJson(r);
-    assert.match(body.error, /not in the active catalog version/);
+    assert.match(body.error, /not in catalog version/);
   });
 
   it("7. /override happy path records a row pinned to the active catalog_version_id", async () => {
@@ -281,6 +290,58 @@ describe("strategist_overrides handlers (slice C)", () => {
     assert.equal(b2.success, true);
     assert.equal(b2.alreadyRevoked, true);
     assert.equal(b2.revokedBy, "liz@x", "the ORIGINAL revoker's identity is preserved");
+  });
+
+  it("Codex P1 on #140: /override validates service_id via D1 (not the catalog cache)", async () => {
+    // Verifies the handler queries bga_services directly against the
+    // version id it's about to pin to. The fake D1 above has svc_vf
+    // at version_id=1 and version_id=7. If the active pointer says 7,
+    // a service that exists only at v=1 should be rejected.
+    const db = makeFakeDb({
+      activeVersionId: 42,  // active pointer says 42
+      services: [
+        { version_id: 1, service_id: "svc_vf" },      // old version
+        { version_id: 42, service_id: "svc_growth" }, // new version
+      ],
+    });
+    const env = { SOLOMON_DB: db };
+    // svc_vf exists in version 1 but NOT version 42. Must be rejected.
+    const r = await handleRecordOverride(postReq({
+      contactId: "c1", serviceId: "svc_vf", action: "include", by: "me",
+    }), env, OK);
+    assert.equal(r.status, 400);
+    const b = await readJson(r);
+    assert.match(b.error, /not in catalog version 42/);
+    // svc_growth exists in version 42 → accepted.
+    const r2 = await handleRecordOverride(postReq({
+      contactId: "c1", serviceId: "svc_growth", action: "include", by: "me",
+    }), env, OK);
+    assert.equal(r2.status, 200);
+    const b2 = await readJson(r2);
+    assert.equal(b2.catalogVersionId, 42);
+  });
+
+  it("Codex P2 on #140: /overrides returns a nextCursor when there are more rows", async () => {
+    // The fake D1's list query respects LIMIT. Add LIST_PAGE_SIZE+1
+    // non-revoked rows for one contact; the first page's response
+    // should carry a non-null nextCursor equal to the last row's id.
+    const rows = [];
+    for (let i = 1; i <= 501; i++) {
+      rows.push({
+        id: i, contact_id: "c_many", catalog_version_id: 1, service_id: "svc_vf", action: "include",
+        reason: null, payload_json: "{}", created_by: "liz",
+        created_at: `2026-10-18T01:${String(i).padStart(2, "0")}:00Z`,
+        revoked_at: null, revoked_by: null,
+      });
+    }
+    const env = { SOLOMON_DB: makeFakeDb({ overrides: rows }) };
+    const r1 = await readJson(await handleListOverrides(postReq({ contactId: "c_many" }), env, OK));
+    assert.equal(r1.overrides.length, 500);
+    assert.ok(r1.nextCursor, "nextCursor must be present on first full page");
+    // Resume → one remaining row, no further cursor.
+    const r2 = await readJson(await handleListOverrides(postReq({ contactId: "c_many", after: r1.nextCursor }), env, OK));
+    assert.equal(r2.overrides.length, 1);
+    assert.equal(r2.nextCursor, null);
   });
 
   it("11. /overrides filters out revoked rows; /overrides/all shows them", async () => {
