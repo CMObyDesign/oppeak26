@@ -296,10 +296,10 @@ export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
             Only renders in the quiz view, not during the lead-capture form or
             while editing (the gate form is already an editable surface). */}
         {hasCapturedLead && !showLeadCapture && email && (
-          <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
+          <div className="flex flex-col items-center gap-1">
             {editingEmail ? (
               <form
-                className="flex items-stretch gap-2 w-full max-w-md"
+                className="flex flex-col items-stretch gap-2 w-full max-w-md"
                 onSubmit={(e) => {
                   e.preventDefault();
                   const trimmed = emailDraft.trim();
@@ -307,32 +307,59 @@ export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
                     setErrEmail("Please enter a valid email address, like name@company.com.");
                     return;
                   }
+                  // Codex P1 on #135: if the user corrected a typo in the
+                  // email after the gate POST already resolved a contactId
+                  // for the old (typo'd) address, we MUST drop that
+                  // contactId. The worker's resolveGHLContactId prefers an
+                  // explicit contactId over an email, so a stale one would
+                  // route the final report + delivery trigger to the typo'd
+                  // contact — the exact failure this edit affordance exists
+                  // to prevent. Clear the id and let the final submit
+                  // re-resolve against the corrected address.
+                  if (trimmed.toLowerCase() !== email.toLowerCase()) {
+                    setContactId(undefined);
+                  }
                   setEmail(trimmed);
                   setEditingEmail(false);
                   setErrEmail("");
                 }}
               >
-                <Input
-                  type="email"
-                  value={emailDraft}
-                  onChange={(e) => setEmailDraft(e.target.value)}
-                  placeholder="name@company.com"
-                  className="h-9 flex-1 bg-background text-sm"
-                  autoFocus
-                />
-                <Button type="submit" size="sm" className="h-9 px-3">Save</Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="h-9 px-3"
-                  onClick={() => { setEditingEmail(false); setErrEmail(""); }}
-                >
-                  Cancel
-                </Button>
+                <div className="flex items-stretch gap-2">
+                  <Input
+                    type="email"
+                    value={emailDraft}
+                    onChange={(e) => { setEmailDraft(e.target.value); if (errEmail) setErrEmail(""); }}
+                    placeholder="name@company.com"
+                    className="h-9 flex-1 bg-background text-sm"
+                    aria-invalid={!!errEmail}
+                    aria-describedby={errEmail ? "err-email-edit" : undefined}
+                    autoFocus
+                  />
+                  <Button type="submit" size="sm" className="h-9 px-3">Save</Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-9 px-3"
+                    onClick={() => { setEditingEmail(false); setErrEmail(""); }}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+                {/* Codex P2 on #135: show the EMAIL_RE validation
+                    error inside the form while editing, not only after
+                    the editor closes — the browser's permissive
+                    type="email" lets through `name@company` which the
+                    stricter EMAIL_RE rejects, and without this
+                    renderer the Save button looked unresponsive. */}
+                {errEmail && (
+                  <p id="err-email-edit" className="text-xs text-destructive" role="alert" aria-live="polite">
+                    {errEmail}
+                  </p>
+                )}
               </form>
             ) : (
-              <>
+              <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground">
                 <span>Report email: <span className="text-foreground font-medium">{email}</span></span>
                 <span aria-hidden>·</span>
                 <button
@@ -342,10 +369,15 @@ export const AssessmentScreen = ({ onComplete }: AssessmentScreenProps) => {
                 >
                   Edit
                 </button>
-              </>
+              </div>
             )}
           </div>
         )}
+        {/* After the editor closes, surface any lingering error
+            (e.g. if the user cancels and we want to leave state tidy).
+            In practice setErrEmail("") is called on close so this
+            branch rarely fires, but it keeps the error path visible
+            if a future change forgets. */}
         {hasCapturedLead && !showLeadCapture && errEmail && !editingEmail && (
           <p className="text-xs text-destructive text-center">{errEmail}</p>
         )}

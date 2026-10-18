@@ -261,7 +261,32 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
           <Activity className="h-5 w-5 text-primary" />
           <h3 className="font-display text-2xl font-bold uppercase tracking-widest">Financial Health Breakdown</h3>
         </div>
-        <SwotQuadrant categoryScores={{}} score={report.path === "growth" ? 18 : report.path === "needs-attention" ? 10 : 5} />
+        {/* Codex P2 on #135: derive snapshot slots from the actual
+            report instead of letting all customers see the same
+            generic fallback copy. The report has no explicit
+            "strength" field, so that slot stays on its fallback until
+            Solomon's output grows one. */}
+        <SwotQuadrant
+          items={{
+            strength: report.context
+              ? { body: report.context }
+              : undefined,
+            needsAttention: (() => {
+              const top = report.gaps.find((g) => g.priority === "CRITICAL")
+                       || report.gaps.find((g) => g.priority === "HIGH")
+                       || report.gaps[0];
+              return top ? { heading: top.title, body: top.impact } : undefined;
+            })(),
+            opportunity: report.opportunities[0]
+              ? { heading: report.opportunities[0].title, body: report.opportunities[0].desc }
+              : undefined,
+            watch: (() => {
+              const w = report.gaps.find((g) => g.priority === "MEDIUM")
+                     || report.gaps[1];
+              return w ? { heading: w.title, body: w.impact } : undefined;
+            })(),
+          }}
+        />
       </div>
 
       {/* Gaps Section — generic alarm language removed; the per-card

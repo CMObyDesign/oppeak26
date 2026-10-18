@@ -12,11 +12,21 @@ import { Card } from "@/components/ui/card";
 // `items` map with the four slot narratives; a sensible fallback is used
 // when the report hasn't produced one.
 
-interface SnapshotItems {
-  strength?: string;
-  needsAttention?: string;
-  opportunity?: string;
-  watch?: string;
+// Codex P2 on #135: the four slots now carry report-specific
+// headings + bodies drawn from the live report, not fixed
+// placeholders. ResultsScreen derives one SnapshotSlot per key
+// (undefined for keys the report doesn't support — e.g. no
+// strength field — in which case the slot's generic fallback copy
+// renders).
+export interface SnapshotSlot {
+  heading?: string;
+  body?: string;
+}
+export interface SnapshotItems {
+  strength?:       SnapshotSlot;
+  needsAttention?: SnapshotSlot;
+  opportunity?:    SnapshotSlot;
+  watch?:          SnapshotSlot;
 }
 
 interface Props {
@@ -30,7 +40,7 @@ interface Props {
 const SLOTS = [
   {
     label: "STRENGTH",
-    heading: "Clear client value",
+    heading: "What's already working",
     key: "strength" as const,
     tone: "text-primary border-primary/20 bg-primary/5",
     chip: "bg-primary/10 text-primary",
@@ -38,7 +48,7 @@ const SLOTS = [
   },
   {
     label: "NEEDS ATTENTION",
-    heading: "Revenue capture",
+    heading: "What deserves a closer look",
     key: "needsAttention" as const,
     tone: "text-accent border-accent/20 bg-accent/5",
     chip: "bg-accent/10 text-accent",
@@ -46,7 +56,7 @@ const SLOTS = [
   },
   {
     label: "OPPORTUNITY",
-    heading: "Recurring revenue",
+    heading: "Where to push next",
     key: "opportunity" as const,
     tone: "text-foreground border-white/10 bg-secondary/20",
     chip: "bg-foreground/5 text-foreground",
@@ -54,7 +64,7 @@ const SLOTS = [
   },
   {
     label: "WATCH",
-    heading: "Client concentration",
+    heading: "What to monitor",
     key: "watch" as const,
     tone: "text-destructive border-destructive/20 bg-destructive/5",
     chip: "bg-destructive/10 text-destructive",
@@ -70,7 +80,9 @@ export const SwotQuadrant = ({ items }: Props) => {
       </h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {SLOTS.map((slot) => {
-          const body = items?.[slot.key] || slot.fallback;
+          const slotItem = items?.[slot.key];
+          const heading  = (slotItem && slotItem.heading) || slot.heading;
+          const body     = (slotItem && slotItem.body)    || slot.fallback;
           return (
             <Card
               key={slot.key}
@@ -82,7 +94,7 @@ export const SwotQuadrant = ({ items }: Props) => {
                 {slot.label}
               </span>
               <p className="font-display text-lg md:text-xl font-bold leading-tight">
-                {slot.heading}
+                {heading}
               </p>
               <p className="text-sm text-muted-foreground leading-relaxed">
                 {body}
