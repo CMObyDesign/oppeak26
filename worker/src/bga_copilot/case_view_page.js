@@ -326,6 +326,7 @@ export const CASE_VIEW_PAGE = `<!DOCTYPE html>
          follows the href, which reloads the current route and loses the
          loaded case state. A <span> has no href to activate. -->
     <span class="active" aria-current="page">BGA Copilot</span>
+    <a href="/asksolomon/catalog">Catalog</a>
     <a href="/asksolomon">Solomon Lab</a>
   </nav>
   <div class="topbar-right">

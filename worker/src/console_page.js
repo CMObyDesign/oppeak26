@@ -293,6 +293,7 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
   </div>
   <nav class="app-nav">
     <a href="/asksolomon/case">BGA Copilot</a>
+    <a href="/asksolomon/catalog">Catalog</a>
     <!-- Active tab is a <span>, not an <a> — Codex P2 on #124: an <a href>
          with pointer-events:none is still keyboard-focusable and Enter
          follows the href, which reloads the current route and loses the
