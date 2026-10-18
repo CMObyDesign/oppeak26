@@ -487,6 +487,16 @@ export const CASE_VIEW_PAGE = `<!DOCTYPE html>
       <div id="roadmap-pane"></div>
     </div>
 
+    <!-- Slice C: per-case strategist overrides. Append-only log of
+         strategist decisions that diverge from the catalog matcher
+         for THIS case. Overrides never mutate the catalog and never
+         affect approve-and-send; they're the raw signal slice D's
+         learning loop aggregates into pending rule suggestions. -->
+    <div class="panel">
+      <h2>Strategist overrides</h2>
+      <div id="overrides-pane"></div>
+    </div>
+
     <div class="panel">
       <h2>Prep Me For The Call</h2>
       <div id="prep-brief-pane"></div>
@@ -1334,6 +1344,7 @@ function renderCase(bundle, auditData) {
   renderVerifiedFinancials(bundle);
   renderCaseState(bundle);
   renderRoadmap(bundle);
+  renderOverrides();
   renderPrepBrief(bundle);
   renderCallNotes();
   renderApproveAndSend();
@@ -1924,6 +1935,188 @@ function showGeneratePrepBriefError(msg) {
 //
 // Case-switch race guard: every network call captures
 // requestedContactId = currentContactId and bails on mismatch.
+
+// ─────────────────────────────────────────────────────────────────────
+// Strategist overrides (slice C). Append-only per-case log of
+// decisions that diverge from the catalog matcher. Overrides never
+// mutate the catalog and never affect approve-and-send; the UI
+// surfaces them here so the strategist can see what they've marked
+// on this case and the aggregator (slice D) can mine the signal.
+// ─────────────────────────────────────────────────────────────────────
+
+let overridesState = { items: [], activeCatalogVersionId: null };
+
+async function renderOverrides() {
+  const pane = document.getElementById("overrides-pane");
+  if (!pane) return;
+  if (!currentContactId) {
+    pane.innerHTML = '<div style="color:#9ca3af;font-size:12px;">Load a case first.</div>';
+    return;
+  }
+  pane.innerHTML = '<div class="loader">Loading overrides…</div>';
+
+  const requestedContactId = currentContactId;
+  try {
+    const { status, data } = await callApi("/asksolomon/case/overrides", { contactId: requestedContactId });
+    if (status === 401) { logout(); return; }
+    if (requestedContactId !== currentContactId) return;
+    if (!data.success) {
+      pane.innerHTML = '<div class="error-banner">Load failed: ' + esc(data.error || "unknown") + '</div>';
+      return;
+    }
+    overridesState = {
+      items: Array.isArray(data.overrides) ? data.overrides : [],
+      activeCatalogVersionId: data.activeCatalogVersionId || null,
+    };
+    pane.innerHTML = buildOverridesHtml();
+    wireOverridesForm();
+  } catch (err) {
+    if (requestedContactId !== currentContactId) return;
+    pane.innerHTML = '<div class="error-banner">Request failed: ' + esc(err && err.message ? err.message : String(err)) + '</div>';
+  }
+}
+
+function buildOverridesHtml() {
+  const parts = [];
+  const vId = overridesState.activeCatalogVersionId;
+  parts.push('<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">');
+  parts.push('<div style="font-size:12px;color:#6b7280;">');
+  parts.push(vId
+    ? ('Active catalog version: <b>v' + esc(vId) + '</b>. Overrides below are pinned to this id.')
+    : '<b style="color:#92400e;">No active catalog version.</b> Publish one via <a href="/asksolomon/catalog">/asksolomon/catalog</a> first.');
+  parts.push('</div>');
+  parts.push('</div>');
+
+  // Form
+  parts.push('<div style="border:1px solid #e5e7eb;border-radius:6px;padding:12px;background:#f9fafb;margin-bottom:12px;">');
+  parts.push('<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;">');
+  parts.push('<div><label>Action</label>');
+  parts.push('<select id="ovr-action">'
+    + '<option value="include">include — mark the service as a yes for this case</option>'
+    + '<option value="defer">defer — push to a later engagement (reason required)</option>'
+    + '<option value="not_a_fit">not_a_fit — reject for this case (reason required)</option>'
+    + '<option value="manual_add">manual_add — add a service that is not in the catalog</option>'
+    + '<option value="edit_reason">edit_reason — attach / replace the reason on an existing recommendation (reason required)</option>'
+    + '<option value="edit_dependencies">edit_dependencies — adjust the per-case dependency list</option>'
+    + '</select></div>');
+  parts.push('<div><label>Service id</label><input id="ovr-service-id" type="text" placeholder="svc_vf (catalog id) or new_id (manual_add)"></div>');
+  parts.push('<div class="full" style="grid-column:1 / -1;"><label>Reason</label><textarea id="ovr-reason" rows="2" placeholder="One sentence on why. Required for defer / not_a_fit / edit_reason."></textarea></div>');
+  parts.push('<div class="full" style="grid-column:1 / -1;" id="ovr-payload-wrap">');
+  parts.push('<label>Payload (JSON) — leave empty unless the action needs it</label>');
+  // Placeholder uses &quot; entities for inner double-quotes so the
+  // HTML attribute (double-quoted) stays well-formed, and the whole
+  // string survives the outer backtick-template layer unchanged.
+  parts.push('<textarea id="ovr-payload" rows="3" placeholder="manual_add → {&quot;name&quot;:&quot;Short service name&quot;}   ·   edit_dependencies → {&quot;deps&quot;:[&quot;svc_vf&quot;,&quot;svc_growth&quot;]}"></textarea>');
+  parts.push('</div>');
+  parts.push('<div class="full" style="grid-column:1 / -1;"><label>You (strategist identifier)</label><input id="ovr-by" type="text" placeholder="your email or handle"></div>');
+  parts.push('</div>');
+  parts.push('<div style="margin-top:10px;display:flex;gap:8px;align-items:center;">');
+  parts.push('<button id="ovr-record-btn" class="primary">Record override</button>');
+  parts.push('<span id="ovr-form-status" style="font-size:12px;color:#6b7280;"></span>');
+  parts.push('</div>');
+  parts.push('</div>');
+
+  // List
+  if (!overridesState.items.length) {
+    parts.push('<div style="color:#9ca3af;font-size:12px;">No overrides on this case yet.</div>');
+  } else {
+    parts.push('<table style="width:100%;border-collapse:collapse;font-size:12px;">');
+    parts.push('<thead><tr>'
+      + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280;text-transform:uppercase;font-size:10px;letter-spacing:1px;">When</th>'
+      + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280;text-transform:uppercase;font-size:10px;letter-spacing:1px;">By</th>'
+      + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280;text-transform:uppercase;font-size:10px;letter-spacing:1px;">v</th>'
+      + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280;text-transform:uppercase;font-size:10px;letter-spacing:1px;">Service</th>'
+      + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280;text-transform:uppercase;font-size:10px;letter-spacing:1px;">Action</th>'
+      + '<th style="text-align:left;padding:6px 8px;border-bottom:1px solid #e5e7eb;color:#6b7280;text-transform:uppercase;font-size:10px;letter-spacing:1px;">Reason</th>'
+      + '<th></th>'
+      + '</tr></thead><tbody>');
+    for (const o of overridesState.items) {
+      parts.push('<tr>'
+        + '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;color:#6b7280;">' + esc(o.createdAt || "") + '</td>'
+        + '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;">' + esc(o.createdBy || "") + '</td>'
+        + '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;"><code>' + esc(o.catalogVersionId || "") + '</code></td>'
+        + '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;"><code>' + esc(o.serviceId || "") + '</code></td>'
+        + '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;"><span class="tag">' + esc(o.action || "") + '</span></td>'
+        + '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;max-width:380px;">' + esc(o.reason || "") + '</td>'
+        + '<td style="padding:6px 8px;border-bottom:1px solid #f3f4f6;vertical-align:top;text-align:right;"><button data-ovr-revoke="' + esc(o.id) + '" style="font-size:11px;padding:3px 8px;">Revoke</button></td>'
+        + '</tr>');
+    }
+    parts.push('</tbody></table>');
+  }
+  return parts.join("");
+}
+
+function wireOverridesForm() {
+  const btn = document.getElementById("ovr-record-btn");
+  if (btn) btn.addEventListener("click", submitOverride);
+  const pane = document.getElementById("overrides-pane");
+  if (!pane) return;
+  pane.querySelectorAll("button[data-ovr-revoke]").forEach((b) => {
+    b.addEventListener("click", () => revokeOverride(Number(b.getAttribute("data-ovr-revoke"))));
+  });
+}
+
+async function submitOverride() {
+  const status = document.getElementById("ovr-form-status");
+  const btn    = document.getElementById("ovr-record-btn");
+  if (!currentContactId) return;
+  const action    = document.getElementById("ovr-action").value;
+  const serviceId = document.getElementById("ovr-service-id").value.trim();
+  const reason    = document.getElementById("ovr-reason").value.trim();
+  const by        = document.getElementById("ovr-by").value.trim();
+  const payloadTxt = document.getElementById("ovr-payload").value.trim();
+
+  if (!serviceId) { status.textContent = "service id required"; status.style.color = "#991b1b"; return; }
+  if (!by)        { status.textContent = "strategist identifier required"; status.style.color = "#991b1b"; return; }
+  let payload = {};
+  if (payloadTxt) {
+    try { payload = JSON.parse(payloadTxt); }
+    catch (e) { status.textContent = "payload JSON invalid: " + e.message; status.style.color = "#991b1b"; return; }
+  }
+  const requestedContactId = currentContactId;
+  btn.disabled = true;
+  status.textContent = "Recording…";
+  status.style.color = "#6b7280";
+  try {
+    const { status: httpStatus, data } = await callApi("/asksolomon/case/override", {
+      contactId: requestedContactId,
+      serviceId, action, reason, payload, by,
+    });
+    if (httpStatus === 401) { logout(); return; }
+    if (requestedContactId !== currentContactId) return;
+    if (!data.success) {
+      status.textContent = data.error || "record failed";
+      status.style.color = "#991b1b";
+      return;
+    }
+    status.textContent = "Recorded (id " + data.id + ")";
+    status.style.color = "#065f46";
+    document.getElementById("ovr-reason").value = "";
+    document.getElementById("ovr-payload").value = "";
+    await renderOverrides();
+  } catch (err) {
+    status.textContent = err && err.message ? err.message : String(err);
+    status.style.color = "#991b1b";
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function revokeOverride(overrideId) {
+  if (!overrideId) return;
+  const by = (document.getElementById("ovr-by") || {}).value || "";
+  if (!by.trim()) { alert("Enter your strategist identifier in the form above before revoking."); return; }
+  const requestedContactId = currentContactId;
+  try {
+    const { status, data } = await callApi("/asksolomon/case/override/revoke", { overrideId, by: by.trim() });
+    if (status === 401) { logout(); return; }
+    if (requestedContactId !== currentContactId) return;
+    if (!data.success) { alert("Revoke failed: " + (data.error || "unknown")); return; }
+    await renderOverrides();
+  } catch (err) {
+    alert("Request failed: " + (err && err.message ? err.message : String(err)));
+  }
+}
 
 let approveReportState = null;  // { blockers, warnings, acknowledged_warnings, run_at }
 let approveReviewed = false;
