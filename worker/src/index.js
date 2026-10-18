@@ -64,6 +64,10 @@ import {
   handleGetSuggestion,
   handleDecideSuggestion,
 } from "./bga_copilot/learning_loop.js";
+import {
+  handleAuditCatalogRefs,
+  handleBackfillCatalogRef,
+} from "./bga_copilot/catalog_audit.js";
 import { handleExtractFinancialsFromDocument } from "./bga_copilot/document_extraction.js";
 import {
   fetchGHLCustomFieldsCatalog,
@@ -6728,6 +6732,17 @@ export default {
     }
     if (path === "/asksolomon/catalog/suggestion/decide") {
       return handleDecideSuggestion(request, env, { checkPassword: checkConsolePassword });
+    }
+
+    // Catalog-ref audit (slice E of 5 — final slice; customer
+    // directive 2026-10-17). Read-only cohort scan + per-contact
+    // backfill. Backfill writes through the sanctioned
+    // version_history wrapper so the change is auditable.
+    if (path === "/asksolomon/catalog/audit") {
+      return handleAuditCatalogRefs(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/catalog/audit/backfill") {
+      return handleBackfillCatalogRef(request, env, { checkPassword: checkConsolePassword });
     }
 
     // PR 14 — docs/BGA_COPILOT_SPEC.md §11 row 14 (optional).
