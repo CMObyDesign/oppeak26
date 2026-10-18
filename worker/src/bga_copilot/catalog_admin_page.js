@@ -691,7 +691,7 @@ export const CATALOG_ADMIN_PAGE = `<!DOCTYPE html>
   }
 
   // Slice E — catalog-ref audit.
-  let auditState = { items: [], totals: null, versions: [] };
+  let auditState = { items: [], totals: null, versions: [], truncated: false };
 
   async function runAudit() {
     const btn = $("#btn-audit-run");
@@ -703,12 +703,24 @@ export const CATALOG_ADMIN_PAGE = `<!DOCTYPE html>
       const r = await api("/asksolomon/catalog/audit", {});
       auditState.items  = r.items  || [];
       auditState.totals = r.totals || null;
-      // Reuse the versions already loaded by loadVersions() for the backfill picker.
-      sts.textContent = "Scanned " + r.totals.scanned + " paid_297 contacts · " +
+      auditState.truncated = Boolean(r.truncated);
+      // Codex P2 follow-up on #143: surface the truncated flag so an
+      // oversized cohort can't masquerade as a complete audit. The
+      // handler caps at COHORT_PAGE_LIMIT × 100 = 2500 contacts and
+      // sets truncated:true when it hit the cap. The green "scanned N"
+      // line is only accurate when ALL pages were covered.
+      const summary = "Scanned " + r.totals.scanned + " paid_297 contacts · " +
         r.totals.pinned_known + " pinned to known · " + r.totals.pinned_unknown +
         " pinned to UNKNOWN SHA · " + r.totals.unpinned + " unpinned · " +
         r.knownVersionCount + " catalog versions on record.";
-      sts.style.color = "#065f46";
+      if (r.truncated) {
+        sts.innerHTML = "<b style='color:#92400e;'>⚠ Partial audit — cohort exceeded the 2500-contact page cap.</b><br>" +
+          "<span style='color:#92400e;'>" + escapeHtml(summary) + "</span><br>" +
+          "<span style='color:#92400e;'>Older contacts beyond the first 2500 were NOT scanned and cannot be backfilled from this view until the audit is paginated further.</span>";
+      } else {
+        sts.textContent = summary;
+        sts.style.color = "#065f46";
+      }
       renderAuditReport();
     } catch (err) {
       sts.textContent = err.message || "audit failed";
