@@ -36,6 +36,7 @@ import {
 } from "./match_services.js";
 import {
   getServicesCatalogVersion,
+  primeServicesCatalog,
 } from "./services_catalog.js";
 
 const DRAFT_FIELD_KEY = "swot_growth_plan_draft";
@@ -274,6 +275,11 @@ export async function handleChallengeRoadmap(request, env, { checkPassword }) {
   if (!checkPassword(request, env)) {
     return json({ success: false, error: "Unauthorized" }, 401);
   }
+  // Codex P1 on #138: prime the D1 catalog so matchServices (which
+  // reads _effectiveCatalog() synchronously) sees the current D1
+  // services, and so getServicesCatalogVersion() below returns the
+  // active D1 SHA rather than the bundled JSON fallback.
+  await primeServicesCatalog(env);
   let body;
   try { body = await request.json(); }
   catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
@@ -318,7 +324,7 @@ export async function handleChallengeRoadmap(request, env, { checkPassword }) {
   const matches = matchServices({
     activeSignals: signals, activeDisqualifiers: disqualifiers,
   });
-  const catalogVersion = await getServicesCatalogVersion();
+  const catalogVersion = await getServicesCatalogVersion(env);
 
   const systemText = buildChallengeSystemPrompt();
   const userText = buildChallengeUserPrompt(bundle, { draft, matches, catalogVersion });

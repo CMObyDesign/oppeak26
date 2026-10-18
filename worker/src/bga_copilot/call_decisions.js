@@ -28,6 +28,7 @@ import {
 } from "../ghl_catalog.js";
 import {
   _effectiveCatalog,
+  primeServicesCatalog,
 } from "./services_catalog.js";
 import {
   HISTORY_FIELD_KEY,
@@ -250,6 +251,11 @@ export async function handleConfirmCallDecisions(request, env, { checkPassword }
   if (!checkPassword(request, env)) {
     return json({ success: false, error: "Unauthorized" }, 401);
   }
+  // Prime the D1 catalog so the sync `_effectiveCatalog()` reads below
+  // (service_id validation + catalog-id lookup) see the current catalog
+  // version. First call seeds D1 from the bundled JSON on empty DB.
+  await primeServicesCatalog(env);
+
   let body;
   try { body = await request.json(); }
   catch { return json({ success: false, error: "Invalid JSON body" }, 400); }

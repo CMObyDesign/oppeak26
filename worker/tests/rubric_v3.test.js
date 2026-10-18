@@ -36,8 +36,8 @@ describe("Rubric v3 — version bumps", () => {
     assert.equal(RUBRIC_VERSION, "r3.6");
   });
 
-  it("PROMPT_VERSION is p2.2 (bumped from p2.1 when TIER_GUIDE.paid_297 was rewritten for BGA)", () => {
-    assert.equal(PROMPT_VERSION, "p2.2");
+  it("PROMPT_VERSION is p2.3 (bumped from p2.2 when the JSON ESCAPING output rule was added to buildPrompt)", () => {
+    assert.equal(PROMPT_VERSION, "p2.3");
   });
 });
 

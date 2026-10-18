@@ -31,6 +31,7 @@ import {
 import {
   _effectiveCatalog,
   getServicesCatalogVersion,
+  primeServicesCatalog,
 } from "./services_catalog.js";
 import {
   deriveCaseSignals,
@@ -200,6 +201,12 @@ export async function handleMatchServices(request, env, { checkPassword }) {
   if (!checkPassword(request, env)) {
     return json({ success: false, error: "Unauthorized" }, 401);
   }
+  // Prime the D1-backed services catalog for this request so matchServices
+  // (sync, called below) sees the current catalog version instead of the
+  // bundled JSON fallback. First-time call also triggers the seed migration
+  // from the bundled JSON. Idempotent + cheap (per-isolate 60s cache).
+  await primeServicesCatalog(env);
+
   let body;
   try { body = await request.json(); }
   catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
@@ -244,7 +251,7 @@ export async function handleMatchServices(request, env, { checkPassword }) {
   const matches = matchServices({
     activeSignals: signals, activeDisqualifiers: disqualifiers,
   });
-  const catalogVersion = await getServicesCatalogVersion();
+  const catalogVersion = await getServicesCatalogVersion(env);
 
   if (mode === "readonly") {
     return json({

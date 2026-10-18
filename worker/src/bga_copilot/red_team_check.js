@@ -63,7 +63,7 @@ import {
 } from "../ghl_catalog.js";
 import { parseDraftSections, DRAFT_BANNER } from "./roadmap.js";
 import { parseVerifiedFinancials } from "./metrics.js";
-import { getServicesCatalogVersion, _effectiveCatalog } from "./services_catalog.js";
+import { getServicesCatalogVersion, _effectiveCatalog, primeServicesCatalog } from "./services_catalog.js";
 import { assembleCaseBundle } from "./case_load.js";
 import { sha256Hex } from "./vf_hash.js";
 import {
@@ -556,6 +556,11 @@ export async function handleRedTeamCheck(request, env, { checkPassword }) {
   if (!checkPassword(request, env)) {
     return json({ success: false, error: "Unauthorized" }, 401);
   }
+  // Codex P1 on #138: prime the D1 catalog so the disqualifier-rule
+  // check (which reads _effectiveCatalog() synchronously below) sees
+  // the current D1 services, and so the SHA recorded on the case
+  // reflects the active D1 version rather than the bundled fallback.
+  await primeServicesCatalog(env);
   let body;
   try { body = await request.json(); }
   catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
@@ -611,7 +616,7 @@ export async function handleRedTeamCheck(request, env, { checkPassword }) {
   };
   const { blockers, warnings } = runRedTeamRules(ctx);
 
-  const catalogRef = await getServicesCatalogVersion();
+  const catalogRef = await getServicesCatalogVersion(env);
   const inputs_checked = await computeInputHashes({
     draft,
     decisions: decisionsRaw,

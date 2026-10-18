@@ -46,6 +46,7 @@ import {
 } from "../ghl_catalog.js";
 import {
   getServicesCatalogVersion,
+  primeServicesCatalog,
 } from "./services_catalog.js";
 
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
@@ -401,6 +402,10 @@ export async function handleGenerateRoadmapDraft(request, env, { checkPassword }
   if (!checkPassword(request, env)) {
     return json({ success: false, error: "Unauthorized" }, 401);
   }
+  // Codex P1 on #138: prime the D1 catalog so the version SHA we
+  // record below reflects the active D1 version, not the bundled
+  // JSON fallback (which would be returned on a cold isolate).
+  await primeServicesCatalog(env);
   let body;
   try { body = await request.json(); }
   catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
@@ -428,7 +433,7 @@ export async function handleGenerateRoadmapDraft(request, env, { checkPassword }
   // the authoritative `swot_bga_services_catalog_ref` for the case —
   // written atomically alongside the draft below so the audit record
   // is never out of sync with the content it describes.
-  const catalogVersion = await getServicesCatalogVersion();
+  const catalogVersion = await getServicesCatalogVersion(env);
 
   const systemText = buildRoadmapSystemPrompt();
   const userText = buildRoadmapUserPrompt(bundle, { catalogVersion });
