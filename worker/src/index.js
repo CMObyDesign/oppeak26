@@ -45,6 +45,13 @@ import {
   handleAcknowledgeWarning,
 } from "./bga_copilot/red_team_check.js";
 import { handleApproveAndSend } from "./bga_copilot/approve_and_send.js";
+import {
+  handleCatalogActive,
+  handleCatalogVersions,
+  handleCatalogVersion,
+  handleCatalogPublish,
+} from "./bga_copilot/catalog_admin.js";
+import { CATALOG_ADMIN_PAGE } from "./bga_copilot/catalog_admin_page.js";
 import { handleExtractFinancialsFromDocument } from "./bga_copilot/document_extraction.js";
 import {
   fetchGHLCustomFieldsCatalog,
@@ -6284,6 +6291,13 @@ export default {
       if (path === "/asksolomon/case") {
         return new Response(CASE_VIEW_PAGE, { status: 200, headers: htmlHeaders() });
       }
+      // GET /asksolomon/catalog — Service Catalog + Bundles admin
+      // page (slice B of 5). Page-level password gate lives in the
+      // HTML; API-level gate protects /asksolomon/catalog/{active,
+      // versions, version, publish} below.
+      if (path === "/asksolomon/catalog") {
+        return new Response(CATALOG_ADMIN_PAGE, { status: 200, headers: htmlHeaders() });
+      }
       // GET /audit?url=<domain> — marketing audit endpoint.
       // Also served at /marketing (branded path for asksolomon.cfobydesign.com/marketing).
       // ?mode=internal switches to the team-facing rubric (full detail, quick wins,
@@ -6653,6 +6667,22 @@ export default {
     // enforced on this handler, in that order.
     if (path === "/asksolomon/case/approve-and-send") {
       return handleApproveAndSend(request, env, { checkPassword: checkConsolePassword });
+    }
+
+    // Service Catalog + Bundles admin (slice B of 5; customer
+    // directive 2026-10-17). All four endpoints are password-gated.
+    // The HTML page at GET /asksolomon/catalog consumes these.
+    if (path === "/asksolomon/catalog/active") {
+      return handleCatalogActive(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/catalog/versions") {
+      return handleCatalogVersions(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/catalog/version") {
+      return handleCatalogVersion(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/catalog/publish") {
+      return handleCatalogPublish(request, env, { checkPassword: checkConsolePassword });
     }
 
     // PR 14 — docs/BGA_COPILOT_SPEC.md §11 row 14 (optional).

@@ -360,9 +360,19 @@ async function _computeShortSha(payload) {
   }
 }
 
-/** Test-only cache reset. Call after _setCatalogForTests() if you need
- *  the next getServicesCatalog() to re-fetch, or when the test harness
- *  swaps the D1 mock between cases. */
-export function _resetCacheForTests() {
+/** Clears the per-isolate loader cache. Admin publish (slice B) calls
+ *  this after a successful activation so the next matcher / red-team /
+ *  roadmap request on the same isolate reads the newly-active version
+ *  immediately instead of waiting out the 60s TTL. Also used by the
+ *  test harness between fixtures. Safe to call at any time; the next
+ *  `_loadActiveVersion(env)` just re-fetches. */
+export function invalidateServicesCatalogCache() {
   _cache = { versionId: null, services: null, versionSha: null, loadedAt: 0 };
+}
+
+/** Test-only alias — kept for backward compatibility with existing
+ *  test harnesses. New code should prefer the production-named
+ *  `invalidateServicesCatalogCache()`. */
+export function _resetCacheForTests() {
+  invalidateServicesCatalogCache();
 }
