@@ -155,19 +155,20 @@ body::before {
   margin: 0;
 }
 
-/* -- Iframe container: full bleed, seamless to the canvas ---- */
-.cfo-embed {
-  position: relative;
-  z-index: 1;
-  max-width: 960px;
-  margin: 1rem auto 2.5rem;
-  padding: 0 1rem;
-}
-
-.cfo-embed iframe {
+/* -- Iframe styling ------------------------------------------
+   The HL "Custom Code" paste pattern drops our header snippet
+   ABOVE HL's existing iframe block — we can't wrap the iframe
+   in a container. So target HL's iframes directly under the
+   tier body class, and keep the `.cfo-embed` wrapper rule as
+   an optional opt-in when the funnel builder lets us wrap it. */
+body.tier-free iframe,
+body.tier-paid-47 iframe,
+body.tier-paid-297 iframe {
   display: block;
   width: 100%;
+  max-width: 960px;
   min-height: 720px;
+  margin: 1rem auto 2.5rem;
   border: 0;
   background: transparent;
   border-radius: 1rem;
@@ -176,26 +177,15 @@ body::before {
     0 24px 60px -20px rgba(0, 0, 0, 0.55);
 }
 
-/* -- Footer: trust / contact line --------------------------- */
-.cfo-funnel-footer {
+/* Optional wrapper: use only if you can wrap HL's iframe in
+   <div class="cfo-embed">…</div>. Styles above already apply
+   to the iframe itself without it. */
+.cfo-embed {
   position: relative;
-  z-index: 2;
+  z-index: 1;
   max-width: 960px;
-  margin: 0 auto;
-  padding: 1rem 1.5rem 2rem;
-  text-align: center;
-  color: hsl(215 20% 80%);
-  font-size: 0.8rem;
-  line-height: 1.5;
-}
-
-.cfo-funnel-footer a {
-  color: hsl(166 86% 52%);
-  text-decoration: none;
-}
-
-.cfo-funnel-footer a:hover {
-  text-decoration: underline;
+  margin: 1rem auto 2.5rem;
+  padding: 0 1rem;
 }
 
 /* -- Tier-specific accent (visually distinguish stages) ------ */
@@ -229,7 +219,13 @@ body.tier-paid-297 .cfo-stage-title::after {
   .cfo-progress { padding: 0.6rem 1rem; }
   .cfo-dot { width: 8px; height: 8px; }
   .cfo-embed { margin: 0.75rem auto 1.5rem; padding: 0 0.5rem; }
-  .cfo-embed iframe { min-height: 640px; border-radius: 0.75rem; }
+  body.tier-free iframe,
+  body.tier-paid-47 iframe,
+  body.tier-paid-297 iframe {
+    min-height: 640px;
+    border-radius: 0.75rem;
+    margin: 0.75rem auto 1.5rem;
+  }
 }
 
 /* -- Reduce motion / accessibility --------------------------- */
