@@ -5,7 +5,16 @@
      funnel-wrapper.css (paste into the page's Custom CSS slot).
 
      The <script> at the bottom of each snippet sets a body
-     class so the tier-accent rule in the CSS lights up.
+     class so the tier-accent rule in the CSS lights up — and
+     so the iframe-styling rule in the CSS matches HL's native
+     iframe directly (no wrapper required).
+
+     DO NOT paste a footer. The global `app/public/footer.js`
+     injector (loaded on every HL funnel page via the funnel
+     header tracking code) already appends `.cfobd-footer` on
+     DOM ready. Pasting another footer with a different class
+     would create a visible duplicate since the injector's
+     dedup check uses that class.
      ============================================================ -->
 
 <!-- ============================================================
@@ -96,12 +105,3 @@
 </header>
 
 <script>document.body.classList.add('tier-paid-297');</script>
-
-
-<!-- ============================================================
-     Shared FOOTER (optional) — paste below the iframe on any page
-     ============================================================ -->
-<footer class="cfo-funnel-footer">
-  Private &amp; secure · Your answers are never shared.
-  Questions? <a href="mailto:hello@cfobydesign.com">hello@cfobydesign.com</a>
-</footer>
