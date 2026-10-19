@@ -1,0 +1,238 @@
+/* ============================================================
+   CFO BY DESIGN — HL FUNNEL WRAPPER CSS
+   Paste this into the "Custom CSS" slot of each funnel page
+   (free intake, Full Diagnostic, Business Growth Analysis).
+
+   Matches the embedded React app's design system:
+   - --background: hsl(224 44% 7%)   deep navy
+   - --primary:    hsl(45 95% 60%)   gold
+   - --accent:     hsl(166 86% 52%)  teal
+   - body font: DM Sans
+   - display:   Playfair Display
+
+   Pair with the HTML snippet in funnel-wrapper.html — drop that
+   above the iframe block on each page and set the body class
+   (tier-free / tier-paid-47 / tier-paid-297).
+   ============================================================ */
+
+/* -- Google Fonts: matches app's font stack ------------------ */
+@import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700;800&family=DM+Sans:wght@400;500;600;700&display=swap');
+
+/* -- Reset the HL page shell so our dark canvas owns it ------ */
+html, body {
+  margin: 0 !important;
+  padding: 0 !important;
+  background: hsl(224 44% 7%) !important;
+  color: hsl(226 100% 97%) !important;
+  font-family: 'DM Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-height: 100vh;
+}
+
+/* HL often injects wrapper divs with white backgrounds — kill them */
+body > *,
+.c-section,
+.c-row,
+.c-wrapper,
+.hl_page-creator--main,
+.ghl-funnel-container {
+  background: transparent !important;
+}
+
+/* Ambient gold glow + noise texture to match the React app */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background-image:
+    radial-gradient(circle at 50% -20%, rgba(245, 196, 61, 0.08) 0%, transparent 50%),
+    url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.4'/%3E%3C/svg%3E");
+}
+
+/* -- Header: brand + tier chrome ---------------------------- */
+.cfo-funnel-header {
+  position: relative;
+  z-index: 2;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1.75rem 1.5rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  text-align: center;
+}
+
+.cfo-brand {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-weight: 700;
+  font-size: 1.125rem;
+  letter-spacing: 0.02em;
+  color: hsl(226 100% 97%);
+}
+
+.cfo-brand .cfo-brand-mark {
+  color: hsl(45 95% 60%);
+  text-shadow: 0 0 20px rgba(245, 196, 61, 0.4);
+}
+
+/* -- Progress chrome: dots + tier label ---------------------- */
+.cfo-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 1.25rem;
+  background: hsla(226, 43%, 11%, 0.4);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 999px;
+}
+
+.cfo-dots {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.cfo-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: hsla(226, 28%, 28%, 1);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  transition: all 180ms ease;
+}
+
+.cfo-dot.is-active {
+  background: hsl(45 95% 60%);
+  box-shadow: 0 0 12px rgba(245, 196, 61, 0.55);
+  border-color: hsl(45 95% 60%);
+}
+
+.cfo-dot.is-current {
+  background: hsl(45 95% 60%);
+  box-shadow: 0 0 18px rgba(245, 196, 61, 0.75);
+  border-color: hsl(45 95% 60%);
+  transform: scale(1.15);
+}
+
+.cfo-tier-label {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: hsl(215 20% 80%);
+}
+
+.cfo-tier-label strong {
+  color: hsl(226 100% 97%);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+/* -- Stage title (above the iframe) -------------------------- */
+.cfo-stage-title {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: clamp(1.5rem, 3.2vw, 2.25rem);
+  font-weight: 700;
+  line-height: 1.15;
+  color: hsl(226 100% 97%);
+  margin: 0.5rem 0 0.25rem;
+}
+
+.cfo-stage-sub {
+  font-family: 'DM Sans', system-ui, sans-serif;
+  font-size: 1rem;
+  color: hsl(215 20% 80%);
+  line-height: 1.55;
+  max-width: 44ch;
+  margin: 0;
+}
+
+/* -- Iframe container: full bleed, seamless to the canvas ---- */
+.cfo-embed {
+  position: relative;
+  z-index: 1;
+  max-width: 960px;
+  margin: 1rem auto 2.5rem;
+  padding: 0 1rem;
+}
+
+.cfo-embed iframe {
+  display: block;
+  width: 100%;
+  min-height: 720px;
+  border: 0;
+  background: transparent;
+  border-radius: 1rem;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.04),
+    0 24px 60px -20px rgba(0, 0, 0, 0.55);
+}
+
+/* -- Footer: trust / contact line --------------------------- */
+.cfo-funnel-footer {
+  position: relative;
+  z-index: 2;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1rem 1.5rem 2rem;
+  text-align: center;
+  color: hsl(215 20% 80%);
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.cfo-funnel-footer a {
+  color: hsl(166 86% 52%);
+  text-decoration: none;
+}
+
+.cfo-funnel-footer a:hover {
+  text-decoration: underline;
+}
+
+/* -- Tier-specific accent (visually distinguish stages) ------ */
+body.tier-free .cfo-stage-title { color: hsl(226 100% 97%); }
+
+body.tier-paid-47 .cfo-stage-title { color: hsl(226 100% 97%); }
+body.tier-paid-47 .cfo-stage-title::after {
+  content: "";
+  display: block;
+  width: 48px;
+  height: 2px;
+  background: hsl(45 95% 60%);
+  margin: 0.75rem auto 0;
+  box-shadow: 0 0 12px rgba(245, 196, 61, 0.5);
+}
+
+body.tier-paid-297 .cfo-stage-title { color: hsl(226 100% 97%); }
+body.tier-paid-297 .cfo-stage-title::after {
+  content: "";
+  display: block;
+  width: 64px;
+  height: 2px;
+  background: linear-gradient(90deg, hsl(45 95% 60%), hsl(166 86% 52%));
+  margin: 0.75rem auto 0;
+  box-shadow: 0 0 14px rgba(245, 196, 61, 0.45);
+}
+
+/* -- Mobile ------------------------------------------------- */
+@media (max-width: 640px) {
+  .cfo-funnel-header { padding: 1.25rem 1rem 0.5rem; gap: 0.75rem; }
+  .cfo-progress { padding: 0.6rem 1rem; }
+  .cfo-dot { width: 8px; height: 8px; }
+  .cfo-embed { margin: 0.75rem auto 1.5rem; padding: 0 0.5rem; }
+  .cfo-embed iframe { min-height: 640px; border-radius: 0.75rem; }
+}
+
+/* -- Reduce motion / accessibility --------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .cfo-dot { transition: none; }
+}
