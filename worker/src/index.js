@@ -3554,20 +3554,32 @@ async function handleReportStatus(contactId, env) {
   // the beta user completes the paid survey; without this content check we
   // would swap to swot_full_report immediately and show the analyzing screen
   // indefinitely instead of surfacing the free report they already have.
+  // Dispatch order (2026-10-19 fix): paid-tier INTENT (tag) beats the
+  // free-content fallback. Before this reorder, a paid_47 customer who
+  // finished the extended intake but whose Full Diagnostic Claude run
+  // had not yet fired (or had failed, leaving swot|deliveryfailed on
+  // the contact) would land in the "has swot_free_report" branch and
+  // see their OLD free report — including its "$47 Full Diagnostic"
+  // upsell block at the bottom. A customer who just paid $47 being
+  // offered the thing they already bought is the exact failure the
+  // 2026-10-18 beta tester surfaced. We now resolve paid intent
+  // first; if the paid content is not ready yet, serve the paid
+  // "analyzing" state honestly instead of silently falling through
+  // to the stale free content.
   const preferPaid47 = tags.includes("swot_paid_47") || tags.includes("swot_solomon50_applied");
   let reportFieldKey, tier;
   if (tags.includes("swot_paid_297") && hasField("business_playbook")) {
     reportFieldKey = "business_playbook"; tier = "paid_297";
+  } else if (tags.includes("swot_paid_297")) {
+    reportFieldKey = "business_playbook"; tier = "paid_297"; // paid intent, still analyzing
   } else if (preferPaid47 && hasField("swot_full_report")) {
     reportFieldKey = "swot_full_report"; tier = "paid_47";
+  } else if (preferPaid47) {
+    reportFieldKey = "swot_full_report"; tier = "paid_47";  // paid intent, still analyzing
   } else if (hasField("swot_free_report")) {
     reportFieldKey = "swot_free_report"; tier = "free";
-  } else if (tags.includes("swot_paid_297")) {
-    reportFieldKey = "business_playbook"; tier = "paid_297"; // still analyzing
-  } else if (preferPaid47) {
-    reportFieldKey = "swot_full_report"; tier = "paid_47";   // still analyzing
   } else {
-    reportFieldKey = "swot_free_report"; tier = "free";      // still analyzing
+    reportFieldKey = "swot_free_report"; tier = "free";     // free intent, still analyzing
   }
   const reportFieldId = CONFIG.REPORT_FIELD_IDS[reportFieldKey];
   const found = cfs.find((f) => (reportFieldId && f.id === reportFieldId) ||
@@ -3856,26 +3868,35 @@ async function handleReport(contactId, env, requestUrl) {
     return (f?.value || f?.field_value || "").toString().trim();
   };
 
+  // Dispatch order (2026-10-19 fix): paid-tier INTENT (tag) beats the
+  // free-content fallback. Mirrors the ready-check cascade above.
+  // Pre-fix, a paid_47 customer whose Full Diagnostic Claude run had
+  // not fired yet (or had failed, leaving swot|deliveryfailed on the
+  // contact) would fall into the "has swot_free_report" branch and
+  // see their OLD free report — including its "$47 Full Diagnostic"
+  // upsell block at the bottom (ResultsScreen gates the upsell on
+  // `report.tier === "free"`, which was correct for the content it was
+  // handed, but the content was the wrong tier for the customer).
   let reportFieldKey, tierLabel, tier, reportContent;
   const preferPaid47 = tags.includes("swot_paid_47") || tags.includes("swot_solomon50_applied");
   if (tags.includes("swot_paid_297") && contentOf("business_playbook")) {
     reportFieldKey = "business_playbook"; tierLabel = "Business Growth Analysis"; tier = "paid_297";
     reportContent = contentOf("business_playbook");
+  } else if (tags.includes("swot_paid_297")) {
+    reportFieldKey = "business_playbook"; tierLabel = "Business Growth Analysis"; tier = "paid_297";
+    reportContent = "";  // paid intent, still analyzing — do NOT fall through to free
   } else if (preferPaid47 && contentOf("swot_full_report")) {
     reportFieldKey = "swot_full_report"; tierLabel = "Full Diagnostic"; tier = "paid_47";
     reportContent = contentOf("swot_full_report");
+  } else if (preferPaid47) {
+    reportFieldKey = "swot_full_report"; tierLabel = "Full Diagnostic"; tier = "paid_47";
+    reportContent = "";  // paid intent, still analyzing — do NOT fall through to free
   } else if (contentOf("swot_free_report")) {
     reportFieldKey = "swot_free_report"; tierLabel = "SWOT Diagnostic"; tier = "free";
     reportContent = contentOf("swot_free_report");
-  } else if (tags.includes("swot_paid_297")) {
-    reportFieldKey = "business_playbook"; tierLabel = "Business Growth Analysis"; tier = "paid_297";
-    reportContent = "";
-  } else if (preferPaid47) {
-    reportFieldKey = "swot_full_report"; tierLabel = "Full Diagnostic"; tier = "paid_47";
-    reportContent = "";
   } else {
     reportFieldKey = "swot_free_report"; tierLabel = "SWOT Diagnostic"; tier = "free";
-    reportContent = "";
+    reportContent = "";  // free intent, still analyzing
   }
   const reportField = findFieldFor(reportFieldKey);
   void reportField; // preserved for parity with prior code shape; unused below
@@ -7079,6 +7100,13 @@ export {
   buildPrompt,
   parseAgentJson,
   repairAgentJson,
+  // Report dispatch (2026-10-19): exported so the regression test can
+  // drive the tier cascade against a stubbed GHL fetch without going
+  // through the full HTTP handler. The dispatch rule — paid-tier
+  // intent beats free-content fallback — is a repeat failure class
+  // (SOLOMON50 beta code, now paid_47 Full Diagnostic), and the test
+  // locks it against another silent regression.
+  handleReportStatus,
   normalizeAnswers,
   checkIntakeCompleteness,
   updateGHLContact,
