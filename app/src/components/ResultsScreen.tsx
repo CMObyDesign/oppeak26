@@ -199,21 +199,29 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
         </div>
       </div>
 
-      {/* The Gap Section */}
-      <div className="max-w-3xl mx-auto space-y-8">
-        <div className="p-8 rounded-2xl border border-primary/20 bg-primary/5 space-y-6">
-          <div className="flex items-center gap-3">
-            <Activity className="h-6 w-6 text-primary" />
-            <h3 className="font-display text-2xl font-bold uppercase tracking-wider">The Gap</h3>
+      {/* The Gap Section — pitch for the Full Diagnostic. Scoped to
+          the FREE tier (2026-10-19 fix). Before this gate it rendered
+          on every tier, so paid_47 and paid_297 customers saw a sales
+          pitch for a product they already bought right above their
+          own findings. The copy explicitly says "The Full Diagnostic
+          goes deeper…" which is only true for a reader who hasn't
+          bought it yet. */}
+      {report.tier === "free" && (
+        <div className="max-w-3xl mx-auto space-y-8">
+          <div className="p-8 rounded-2xl border border-primary/20 bg-primary/5 space-y-6">
+            <div className="flex items-center gap-3">
+              <Activity className="h-6 w-6 text-primary" />
+              <h3 className="font-display text-2xl font-bold uppercase tracking-wider">The Gap</h3>
+            </div>
+            <p className="text-lg text-muted-foreground leading-relaxed">
+              Your Business Health Check identified the signals. The Full Diagnostic goes deeper into the numbers behind them, including cash flow, debt, profitability, receivables, financial visibility, and growth capacity.
+            </p>
+            <p className="text-base text-foreground font-medium italic leading-relaxed">
+              The goal is not more information. It is knowing what deserves attention first and why.
+            </p>
           </div>
-          <p className="text-lg text-muted-foreground leading-relaxed">
-            Your Business Health Check identified the signals. The Full Diagnostic goes deeper into the numbers behind them, including cash flow, debt, profitability, receivables, financial visibility, and growth capacity.
-          </p>
-          <p className="text-base text-foreground font-medium italic leading-relaxed">
-            The goal is not more information. It is knowing what deserves attention first and why.
-          </p>
         </div>
-      </div>
+      )}
 
       {/* The Story Section — locked founder-voice copy from Miguel (2026-10-17).
           This section is founder/high-trust content; it stays in first-person
