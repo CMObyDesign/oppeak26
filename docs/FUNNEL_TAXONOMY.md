@@ -113,19 +113,47 @@ the `swot_paid_297` tag being applied to the contact, since
 ## Lane 3 — STANDALONE BGA
 
 Direct $297 BGA acquisition path, separate from Solomon and the Action
-Taker funnel.
+Taker funnel. Standalone entry point — reached via external traffic
+(ads, email campaigns, direct URL shares), **not** linked from the
+worker's `/report/{contactId}` CTA or any other Solomon flow in the
+repo. The free-report `$47 Full Diagnostic` CTA on `/report/{contactId}`
+goes directly to `PAYMENT_LINK_47` (`worker/src/index.js:2509`,
+pinned by `renderer_cta.test.js`), so `/bga-upgrade` sits outside
+the Solomon funnel.
 
 | Step | Destination | Wrangler var |
 |------|-------------|--------------|
-| 1 | `success.cfobydesign.com/bga-upgrade` (HL-hosted funnel; `app/public/deep-dive-sales/index.html` is the repo-tracked fallback / copy reference) | `DEEP_DIVE_SALES_URL` |
+| 1 | `success.cfobydesign.com/bga-upgrade` (HL-hosted funnel; `app/public/deep-dive-sales/index.html` is the repo-tracked fallback / copy reference) — standalone entry, not linked from any Solomon flow in the repo | — |
 | 2 | `PAYMENT_LINK_297` | — |
 | 3 | → `/audit-confirmed` → joins Lane 4 | — |
 
 **`success.cfobydesign.com/bga-upgrade` is NOT the same thing as
-`/deeper-analysis`.** The former is the standalone $297 sales page
-(HL-hosted); the latter is the Action Taker $150 funnel. Both
-eventually sell access to the same BGA fulfillment, but they are not
-interchangeable paths.
+`/deeper-analysis` or `/bga-150-offer`.** `/bga-upgrade` is the
+standalone $297 page (HL-hosted, external entry); `/deeper-analysis`
+is the Action Taker $150 funnel entry; `/bga-150-offer` is the
+discounted $150 OTO shown to paid_47 customers from the Full Diagnostic
+report (see "Paid_47 report BGA upsell" below). All three sell access
+to the same BGA fulfillment but are not interchangeable paths.
+
+### Paid_47 report BGA upsell → $150 OTO (2026-10-27)
+
+A separate upsell sits on the paid_47 Full Diagnostic report page.
+Customers who have already paid $47 and received their Full Diagnostic
+can click the "Explore the Business Growth Analysis →" button at the
+bottom of `/report/{contactId}` to see a discounted $150 BGA offer.
+
+| Step | Destination | Wrangler var |
+|------|-------------|--------------|
+| 1 | paid_47 `/report/{contactId}` (worker-served) | — |
+| 2 | "Explore the Business Growth Analysis →" button → `success.cfobydesign.com/bga-150-offer` (HL-hosted OTO) | `DEEP_DIVE_SALES_URL` |
+| 3 | Buy ($150) → `PAYMENT_LINK_297`-equivalent for the OTO (configured in LC Payments) → `/audit-confirmed` → joins Lane 4 | — |
+| 4 | Decline → back to `/report/{contactId}` | — |
+
+Prior to 2026-10-27, `DEEP_DIVE_SALES_URL` pointed at the standalone
+Lane 3 page (`/bga-upgrade`). The repoint to `/bga-150-offer` moves the
+paid_47 upsell CTA onto the discounted OTO without affecting Lane 3,
+which is now reached only via the free-report `$47 Full Diagnostic`
+first-offer CTA.
 
 ---
 
@@ -241,10 +269,17 @@ BGA_INTAKE_SURVEY_URL   dashboard-only (keep_vars = true preserves it across dep
 BGA_INTAKE_ORIGIN       optional override; defaults to https://success.cfobydesign.com
 ```
 
-### Standalone BGA sales page
+### Paid_47 report BGA upsell (not Lane 3)
 ```
-DEEP_DIVE_SALES_URL     https://success.cfobydesign.com/bga-upgrade
+DEEP_DIVE_SALES_URL     https://success.cfobydesign.com/bga-150-offer
 ```
+Href on the paid_47 `/report/{contactId}` page's "Explore the Business
+Growth Analysis →" button. Points at the HL-hosted $150 OTO, NOT the
+standalone Lane 3 `/bga-upgrade` page.
+
+The standalone Lane 3 page lives at `success.cfobydesign.com/bga-upgrade`
+(HL-hosted; reached from the free-report `$47 Full Diagnostic` CTA) and
+is not referenced by any worker env var.
 
 ### Marketing Audit
 ```
