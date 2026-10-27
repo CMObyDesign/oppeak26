@@ -731,20 +731,6 @@
   section.close p { color: var(--muted); font-size: 18px; max-width: 640px; }
   section.close .cta-row { margin-top: 36px; }
 
-  /* Footer */
-  footer {
-    padding: 40px 22px;
-    text-align: center;
-    background: var(--bg);
-    border-top: 1px solid var(--line);
-    font-size: 13px;
-    color: var(--muted-2);
-    line-height: 1.7;
-  }
-  footer a { color: var(--muted); text-decoration: none; }
-  footer a:hover { color: var(--gold); }
-  footer .copyright { margin-top: 14px; font-size: 11px; }
-
   @media (prefers-reduced-motion: reduce) {
     html { scroll-behavior: auto; }
     *, *::before, *::after { transition: none !important; }
@@ -1264,24 +1250,9 @@
   </div>
 </section>
 
-<!-- ============ FOOTER ============ -->
-<footer>
-  <div>
-    <a href="https://cfobydesign.com/privacy">Privacy</a>
-    &nbsp;&middot;&nbsp;
-    <a href="https://success.cfobydesign.com/tc-page">Terms</a>
-    &nbsp;&middot;&nbsp;
-    <a href="mailto:support@cfobydesign.com">Support</a>
-  </div>
-  <div class="copyright">
-    &copy; <span id="yr">2026</span> CFO by Design. All rights reserved.
-  </div>
-</footer>
 </div>
 
 <script>
-  document.getElementById('yr').textContent = new Date().getFullYear();
-
   // VSL placeholder click — no-op until the real video is dropped in.
   // Wire this up when the shoot is delivered: replace the .vsl-placeholder
   // markup with an <iframe> or <video autoplay muted playsinline>.
