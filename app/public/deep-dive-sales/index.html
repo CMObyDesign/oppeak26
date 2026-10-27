@@ -101,39 +101,10 @@
     opacity: 0.7;
   }
 
-  /* ============ NAV ============ */
-  nav.top {
-    padding: 22px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    max-width: 1080px;
-    margin: 0 auto;
-  }
-  nav.top .brand {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-family: var(--serif);
-    font-weight: 700;
-    font-size: 20px;
-    color: var(--fg);
-    text-decoration: none;
-  }
-  nav.top .brand .mark { color: var(--gold); text-shadow: 0 0 20px var(--gold-glow); }
-  nav.top .assurance {
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.18em;
-    color: var(--muted-2);
-    text-transform: uppercase;
-  }
-  @media (max-width: 560px) { nav.top .assurance { display: none; } }
-
   /* ============ HERO ============ */
   section.hero {
     position: relative;
-    padding: 48px 0 72px;
+    padding: 72px 0 72px;
     background:
       radial-gradient(ellipse 70% 55% at 50% -10%, rgba(245,196,61,0.12) 0%, transparent 70%),
       radial-gradient(ellipse 50% 40% at 100% 40%, rgba(32,230,190,0.05) 0%, transparent 70%);
@@ -782,14 +753,6 @@
 </head>
 <body>
 <div class="page">
-
-<!-- ============ NAV ============ -->
-<nav class="top">
-  <a class="brand" href="https://cfobydesign.com">
-    <span><span class="mark">CFO</span> by Design</span>
-  </a>
-  <span class="assurance">STRATEGY MATTERS &middot; YOUR BUSINESS MATTERS</span>
-</nav>
 
 <!-- ============ 1. HERO ============ -->
 <section class="hero">
