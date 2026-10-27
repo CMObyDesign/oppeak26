@@ -67,13 +67,39 @@ body::before {
 }
 
 .cfo-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
   font-family: 'Playfair Display', Georgia, serif;
   font-weight: 700;
   font-size: 1.125rem;
   letter-spacing: 0.02em;
   color: hsl(226 100% 97%);
+  line-height: 0;
 }
 
+.cfo-brand a {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+  line-height: 0;
+}
+
+/* Logo image inside .cfo-brand — explicit sizing so the pasted
+   <img> never renders at its native resolution. The brightness
+   filter matches the footer's treatment on the dark navy header. */
+.cfo-brand img {
+  display: block;
+  height: 44px;
+  width: auto;
+  max-width: 180px;
+  object-fit: contain;
+  filter: brightness(1.5);
+}
+
+/* Legacy text-wordmark style — kept so any funnel page still using
+   <span class="cfo-brand-mark">CFO</span> renders correctly until it
+   is swapped to the linked <img>. Safe to delete once no page uses it. */
 .cfo-brand .cfo-brand-mark {
   color: hsl(45 95% 60%);
   text-shadow: 0 0 20px rgba(245, 196, 61, 0.4);
@@ -216,6 +242,7 @@ body.tier-paid-297 .cfo-stage-title::after {
 /* -- Mobile ------------------------------------------------- */
 @media (max-width: 640px) {
   .cfo-funnel-header { padding: 1.25rem 1rem 0.5rem; gap: 0.75rem; }
+  .cfo-brand img { height: 36px; max-width: 150px; }
   .cfo-progress { padding: 0.6rem 1rem; }
   .cfo-dot { width: 8px; height: 8px; }
   .cfo-embed { margin: 0.75rem auto 1.5rem; padding: 0 0.5rem; }
