@@ -102,18 +102,75 @@
 
   /* ============ HERO ============ */
   section.hero {
-    padding: 72px 0 80px;
+    position: relative;
+    overflow: hidden;
+    padding: clamp(56px, 9vw, 128px) 0 clamp(64px, 9vw, 128px);
     background: var(--cream);
+    border-bottom: 1px solid var(--line);
   }
-  section.hero h1 { margin-bottom: 22px; }
+  .hero-deco {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(circle at 96% 0%, rgba(214,221,211,0.95) 0, rgba(214,221,211,0.55) 20vw, transparent 36vw),
+      radial-gradient(circle at 4% 100%, rgba(224,168,56,0.20) 0, rgba(224,168,56,0.08) 18vw, transparent 32vw);
+  }
+  .hero-deco::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: radial-gradient(rgba(89,102,84,0.22) 1.2px, transparent 1.3px);
+    background-size: 22px 22px;
+    -webkit-mask-image: linear-gradient(180deg, #000 0%, transparent 70%);
+            mask-image: linear-gradient(180deg, #000 0%, transparent 70%);
+    opacity: 0.6;
+  }
+  .hero-inner {
+    position: relative;
+    max-width: 1240px;
+    margin: 0 auto;
+    padding: 0 clamp(20px, 4vw, 48px);
+  }
+  section.hero .eyebrow {
+    padding: 8px 16px 8px 14px;
+    background: #fff;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    box-shadow: 0 6px 18px -12px rgba(29,29,27,0.3);
+    margin-bottom: clamp(18px, 2.4vw, 28px);
+  }
+  @media (max-width: 480px) {
+    section.hero .eyebrow { font-size: 10.5px; letter-spacing: 0.1em; }
+  }
+  section.hero h1 {
+    font-size: clamp(46px, 7.6vw, 116px);
+    line-height: 0.93;
+    letter-spacing: -0.02em;
+    font-weight: 800;
+    max-width: 17ch;
+    margin: 0;
+  }
+  section.hero h1 .accent {
+    color: var(--sage);
+    box-shadow: inset 0 -0.2em 0 rgba(224,168,56,0.55);
+  }
+  .hero-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: clamp(32px, 4vw, 60px);
+    margin-top: clamp(28px, 4vw, 52px);
+  }
+  @media (min-width: 1000px) {
+    .hero-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.12fr); align-items: start; }
+  }
   section.hero p.lead {
-    font-size: 18px;
-    line-height: 1.7;
+    font-size: clamp(17px, 1.4vw, 21px);
+    line-height: 1.65;
     color: var(--muted);
-    max-width: 660px;
-    margin: 0 0 26px;
+    max-width: 640px;
+    margin: 0 0 24px;
   }
-  @media (min-width: 720px) { section.hero p.lead { font-size: 19px; } }
   .bridge {
     display: inline-block;
     margin: 0 0 28px;
@@ -125,6 +182,48 @@
     background: var(--sage-tint);
     border: 1px solid var(--sage-line);
     border-radius: 999px;
+  }
+  section.hero a.cta {
+    font-size: clamp(15px, 1.25vw, 18px);
+    padding: clamp(17px, 1.6vw, 22px) clamp(24px, 2.4vw, 36px);
+  }
+  .hero-facts {
+    list-style: none;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 22px;
+    padding: 0;
+    margin: 28px 0 0;
+  }
+  .hero-facts li {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--ink);
+  }
+  .hero-facts li::before {
+    content: "✓";
+    width: 20px; height: 20px;
+    display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    background: var(--gold);
+    color: var(--ink);
+    font-size: 11px;
+    font-weight: 800;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    section.hero .eyebrow, section.hero h1, .hero-copy, section.hero .vsl-wrap {
+      animation: hero-rise .7s cubic-bezier(.2,.7,.2,1) both;
+    }
+    section.hero h1 { animation-delay: .06s; }
+    .hero-copy { animation-delay: .14s; }
+    section.hero .vsl-wrap { animation-delay: .22s; }
+  }
+  @keyframes hero-rise {
+    from { opacity: 0; transform: translateY(14px); }
+    to   { opacity: 1; transform: none; }
   }
 
   a.cta, button.cta {
@@ -169,7 +268,8 @@
   .cta-row .note a { color: var(--sage); font-style: normal; font-weight: 600; }
 
   /* ============ VSL ============ */
-  .vsl-wrap { margin: 52px 0 0; max-width: 780px; }
+  .vsl-wrap { margin: 0; max-width: 780px; }
+  section.hero .vsl-wrap { max-width: none; }
   .vsl {
     position: relative;
     padding-bottom: 56.25%;
@@ -724,31 +824,43 @@
 
 <!-- ============ 1. HERO ============ -->
 <section class="hero">
-  <div class="wrap">
+  <div class="hero-deco" aria-hidden="true"></div>
+  <div class="hero-inner">
     <div class="eyebrow">The Business Growth Analysis &middot; $297</div>
     <h1>Know your break-even, your real cost of delivery, and your next three moves &mdash; <span class="accent">in writing.</span></h1>
-    <p class="lead">Most fractional CFO firms give you one person. We put our whole team on your file: a pre-call, our accounting and marketing reads, Miguel on strategy and funding, and a 50-minute session where we work through the priorities together. Within 24 hours of the call you have a written 90-day plan — three moves, in order, with dates — finalized to what you actually decided. Act on it Monday.</p>
-    <p class="bridge">Coming from your $47 assessment? This is what tells you what it costs and what to do first.</p>
 
-    <div class="cta-row">
-      <a class="cta" href="https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0">
-        <span>Get my Business Growth Analysis</span>
-        <span class="price">· $297</span>
-        <span class="arrow">→</span>
-      </a>
-      <span class="note">One time. Nothing recurring.</span>
-    </div>
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <p class="lead">Most fractional CFO firms give you one person. We put our whole team on your file: a pre-call, our accounting and marketing reads, Miguel on strategy and funding, and a 50-minute session where we work through the priorities together. Within 24 hours of the call you have a written 90-day plan — three moves, in order, with dates — finalized to what you actually decided. Act on it Monday.</p>
+        <p class="bridge">Coming from your $47 assessment? This is what tells you what it costs and what to do first.</p>
 
-    <div class="vsl-wrap">
-      <div class="vsl" id="vsl">
-        <!-- Replace this placeholder with the VSL <iframe> or <video> once the shoot is in. Keep the 16:9 aspect ratio; autoplay muted with visible play button. -->
-        <div class="vsl-placeholder" role="button" tabindex="0" aria-label="Play video: Miguel on the Business Growth Analysis">
-          <div class="play" aria-hidden="true">▶</div>
-          <div class="cap">2:45 · Miguel Hernandez, Founder &amp; CEO</div>
-          <div class="who">Why a team beats one CFO, and what you leave the call with.</div>
+        <div class="cta-row">
+          <a class="cta" href="https://my.cfobydesign.com/payment-link/6a0db7ceee2395af2c17f5d0">
+            <span>Get my Business Growth Analysis</span>
+            <span class="price">· $297</span>
+            <span class="arrow">→</span>
+          </a>
+          <span class="note">One time. Nothing recurring.</span>
         </div>
+
+        <ul class="hero-facts">
+          <li>Seven people on your file</li>
+          <li>50-minute strategy session</li>
+          <li>Written 90-day plan in 24 hours</li>
+        </ul>
       </div>
-      <p class="vsl-caption">Video &middot; watch or skip &mdash; the page tells the same story below.</p>
+
+      <div class="vsl-wrap">
+        <div class="vsl" id="vsl">
+          <!-- Replace this placeholder with the VSL <iframe> or <video> once the shoot is in. Keep the 16:9 aspect ratio; autoplay muted with visible play button. -->
+          <div class="vsl-placeholder" role="button" tabindex="0" aria-label="Play video: Miguel on the Business Growth Analysis">
+            <div class="play" aria-hidden="true">▶</div>
+            <div class="cap">2:45 · Miguel Hernandez, Founder &amp; CEO</div>
+            <div class="who">Why a team beats one CFO, and what you leave the call with.</div>
+          </div>
+        </div>
+        <p class="vsl-caption">Video &middot; watch or skip &mdash; the page tells the same story below.</p>
+      </div>
     </div>
   </div>
 </section>
