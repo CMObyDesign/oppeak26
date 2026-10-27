@@ -53,9 +53,14 @@ UPGRADE_47_URL = "https://success.cfobydesign.com/mid-analysis"
 #
 # 2026-10-14: Repointed from deepdive.cfobydesign.com (Pages-hosted,
 # app/public/deep-dive-sales/index.html) to the HL-hosted BGA upgrade
-# funnel page at success.cfobydesign.com/bga-upgrade. The repo copy of
-# the Pages page stays as a fallback and reference for the HL copy.
-DEEP_DIVE_SALES_URL = "https://success.cfobydesign.com/bga-upgrade"
+# funnel page. The repo copy of the Pages page stays as a fallback and
+# reference for the HL copy.
+#
+# 2026-10-27: Repointed to the HL-hosted $150 OTO offer page
+# (/bga-150-offer). The paid_47 report's "Explore the Business Growth
+# Analysis →" button now routes paid_47 customers to the $150 discounted
+# BGA offer rather than the $297 regular-price sales page.
+DEEP_DIVE_SALES_URL = "https://success.cfobydesign.com/bga-150-offer"
 
 # Secrets (ANTHROPIC_API_KEY, GHL_API_KEY, CONSOLE_PASSWORD) are set in the
 # Cloudflare dashboard under Settings > Variables and Secrets.

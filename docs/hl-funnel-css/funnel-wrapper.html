@@ -9,51 +9,49 @@
      so the iframe-styling rule in the CSS matches HL's native
      iframe directly (no wrapper required).
 
-     DO NOT paste a footer. The global `app/public/footer.js`
-     injector (loaded on every HL funnel page via the funnel
-     header tracking code) already appends `.cfobd-footer` on
-     DOM ready. Pasting another footer with a different class
-     would create a visible duplicate since the injector's
-     dedup check uses that class.
+     ---------- Page 8 (/start, free intake) ----------
+     The React app at pages.dev/ IS the free funnel — landing
+     hero, 11-question assessment, results, and $47 upsell all
+     render inside the iframe. Pasting a header above it
+     duplicates the app's own landing. So on /start, paste ONLY
+     the one-line body-class setter from the Page 8 section
+     below — it activates the dark-canvas iframe styling without
+     adding competing chrome.
+
+     ---------- Pages 9 and 10 ----------
+     The paid intake routes (/paid-47, /paid-297) embed just a
+     form, so the header chrome does real work: it names the
+     stage, shows funnel progress, and reinforces the tier the
+     customer just unlocked. Paste the full snippet on these.
+
+     ---------- Do NOT paste a footer ----------
+     The global `app/public/footer.js` injector (loaded via the
+     page's Header tracking code) already appends `.cfobd-footer`
+     on DOM ready. Pasting another footer would create a visible
+     duplicate since the injector's dedup check uses that class.
      ============================================================ -->
 
 <!-- ============================================================
-     PAGE 8 — FREE INTAKE (Business Health Check)
-     Dots: ● ○ ○    Tier: Business Health Check
+     PAGE 8 — FREE INTAKE (/start)
+     Minimal: just set the body class so the iframe-styling and
+     dark-canvas rules in funnel-wrapper.css activate. The React
+     app at pages.dev/ renders its own landing hero + assessment
+     flow inside the iframe, so no header chrome is pasted here.
      ============================================================ -->
-<header class="cfo-funnel-header">
-  <div class="cfo-brand">
-    <span class="cfo-brand-mark">CFO</span> By Design
-  </div>
-
-  <div class="cfo-progress">
-    <div class="cfo-dots" aria-label="Step 1 of 3">
-      <span class="cfo-dot is-current" aria-hidden="true"></span>
-      <span class="cfo-dot" aria-hidden="true"></span>
-      <span class="cfo-dot" aria-hidden="true"></span>
-    </div>
-    <div class="cfo-tier-label">
-      <strong>Business Health Check</strong> · Step 1 of 3
-    </div>
-  </div>
-
-  <h1 class="cfo-stage-title">Where is your business leaking profit?</h1>
-  <p class="cfo-stage-sub">
-    Eleven honest questions. Takes about four minutes.
-    You'll get a snapshot of what's working and what's not.
-  </p>
-</header>
-
 <script>document.body.classList.add('tier-free');</script>
 
 
 <!-- ============================================================
-     PAGE 9 — FULL DIAGNOSTIC (paid_47 / SOLOMON50 beta)
+     PAGE 9 — FULL DIAGNOSTIC (/mid-analysis)  (paid_47 / SOLOMON50 beta)
      Dots: ● ● ○    Tier: Full Diagnostic
      ============================================================ -->
 <header class="cfo-funnel-header">
   <div class="cfo-brand">
-    <span class="cfo-brand-mark">CFO</span> By Design
+    <a href="https://cfobydesign.com" target="_top" aria-label="CFO By Design">
+      <img src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png"
+           alt="CFO By Design"
+           width="180" height="44">
+    </a>
   </div>
 
   <div class="cfo-progress">
@@ -78,12 +76,16 @@
 
 
 <!-- ============================================================
-     PAGE 10 — BUSINESS GROWTH ANALYSIS (paid_297)
+     PAGE 10 — BUSINESS GROWTH ANALYSIS (/bga-intake)  (paid_297)
      Dots: ● ● ●    Tier: Business Growth Analysis
      ============================================================ -->
 <header class="cfo-funnel-header">
   <div class="cfo-brand">
-    <span class="cfo-brand-mark">CFO</span> By Design
+    <a href="https://cfobydesign.com" target="_top" aria-label="CFO By Design">
+      <img src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png"
+           alt="CFO By Design"
+           width="180" height="44">
+    </a>
   </div>
 
   <div class="cfo-progress">
