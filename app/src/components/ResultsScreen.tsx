@@ -231,6 +231,29 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
       <div className="max-w-3xl mx-auto space-y-8 py-12">
         <div className="space-y-6">
           <h3 className="font-display text-3xl font-bold">The Story</h3>
+
+          {/* Founder byline — ties Miguel's face to the first-person
+              narrative that follows. Headshot URL mirrors the standalone
+              /bga-upgrade sales page so we have one source of truth per
+              asset host. The gold ring + subtle gradient on the circle
+              matches the primary brand accent. */}
+          <div className="flex items-center gap-4 pt-2">
+            <img
+              src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a60f73581877afd27c4c4a6.webp"
+              alt="Miguel Hernandez"
+              width={80}
+              height={80}
+              loading="lazy"
+              className="h-20 w-20 rounded-full object-cover ring-2 ring-primary/40 ring-offset-2 ring-offset-background flex-shrink-0"
+            />
+            <div className="min-w-0">
+              <p className="font-display text-xl font-bold text-foreground leading-tight">Miguel Hernandez</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-[0.18em] mt-1">
+                Founder &amp; CEO &middot; CFO By Design
+              </p>
+            </div>
+          </div>
+
           <div className="space-y-4 text-muted-foreground leading-relaxed text-lg">
             <p>
               For more than fifteen years, I've sat across from business owners making six- and seven-figure decisions without a clear enough view of the numbers behind them.
