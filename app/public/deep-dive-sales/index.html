@@ -6,7 +6,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Business Growth Analysis — CFO by Design</title>
 <meta name="description" content="Every other fractional CFO firm gives you one person. We put our whole bench on it. A pre-call, seven people read your analysis, 50 minutes with Miguel, and you leave with a written 90-day plan finalized to what you decided on the call. $297, one time.">
-<meta name="robots" content="noindex,nofollow">
 <meta property="og:title" content="Business Growth Analysis — CFO by Design">
 <meta property="og:description" content="Every other firm gives you one person. We put our whole bench on it. $297, one time.">
 <meta property="og:type" content="website">
@@ -575,6 +574,135 @@
   .team-card p { margin: 0; font-size: 14px; color: var(--muted); line-height: 1.6; }
   .team-card--lead p { color: var(--fg); }
 
+  /* Proof — video + written testimonials */
+  .proof-videos {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 22px;
+    margin-top: 36px;
+  }
+  @media (min-width: 720px) { .proof-videos { grid-template-columns: 1fr 1fr; } }
+  .t-video { margin: 0; }
+  .t-video .frame {
+    position: relative;
+    padding-bottom: 56.25%;
+    border-radius: 12px;
+    overflow: hidden;
+    background: var(--surface);
+    border: 1px solid var(--line-strong);
+    box-shadow: 0 24px 60px -30px rgba(0,0,0,0.8);
+  }
+  .t-video .frame iframe,
+  .t-video .frame video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #000;
+  }
+  .t-video .frame .slot {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    text-align: center;
+    padding: 20px;
+    background:
+      radial-gradient(circle at 50% 45%, rgba(245,196,61,0.08) 0%, transparent 60%),
+      linear-gradient(160deg, hsl(226 40% 14%) 0%, hsl(224 44% 8%) 100%);
+    color: var(--muted-2);
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+  }
+  .t-video .frame .slot .play {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    padding-left: 3px;
+    font-size: 20px;
+    color: var(--gold);
+    border: 1px solid rgba(245,196,61,0.45);
+    background: rgba(245,196,61,0.08);
+  }
+  .t-video figcaption { margin-top: 14px; }
+  .t-video figcaption .result {
+    display: block;
+    font-family: var(--serif);
+    font-size: 19px;
+    line-height: 1.35;
+    color: var(--fg);
+    margin-bottom: 6px;
+  }
+
+  .proof-quotes {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 18px;
+    margin-top: 28px;
+  }
+  @media (min-width: 900px) { .proof-quotes { grid-template-columns: repeat(3, 1fr); } }
+  .t-quote {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    margin: 0;
+    padding: 30px 26px 24px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  .t-quote::before {
+    content: "\201C";
+    position: absolute;
+    top: 6px;
+    left: 20px;
+    font-family: var(--serif);
+    font-size: 64px;
+    line-height: 1;
+    color: var(--gold);
+    opacity: 0.55;
+  }
+  .t-quote blockquote {
+    margin: 18px 0 22px;
+    flex: 1;
+    font-size: 16px;
+    line-height: 1.65;
+    color: var(--fg);
+  }
+  .t-quote .stars { align-self: flex-end; color: var(--gold); letter-spacing: 3px; font-size: 13px; }
+  .t-person { display: flex; align-items: center; gap: 12px; padding-top: 16px; border-top: 1px solid var(--line); }
+  .t-person .avatar {
+    flex-shrink: 0;
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+    background: var(--surface-2);
+    color: var(--gold);
+    font-family: var(--serif);
+    font-weight: 700;
+    font-size: 16px;
+    box-shadow: 0 0 0 2px var(--bg), 0 0 0 3px rgba(245,196,61,0.4);
+  }
+  .t-person .avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .t-name { display: block; font-weight: 600; font-size: 15px; color: var(--fg); line-height: 1.3; }
+  .t-biz {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted-2);
+    line-height: 1.5;
+    margin-top: 2px;
+  }
+
   /* Objections */
   .qa {
     max-width: 720px;
@@ -1028,14 +1156,92 @@
   </div>
 </section>
 
+<!-- ============ 11. PROOF ============ -->
 <!--
-  ============ 11. PROOF ============
-  Left out on purpose. Elizabeth: "Until it exists, leave this out rather than
-  filling it. An empty proof section beats an invented one at a price where
-  the buyer is already skeptical." Insert testimonial video / two-to-three
-  written testimonials WITH real names, businesses and signed permission
-  paperwork once the testimonial shoot from section 8 of the copy doc is done.
+  Fill every [bracketed] slot with REAL testimonials only: real names,
+  real businesses, and signed permission on file for each one. Do not
+  publish with brackets showing. If you only have quotes so far, delete
+  the .proof-videos block (and vice versa) rather than leaving empty slots.
+  To remove the star row on a quote, delete its .stars div.
 -->
+<section class="text proof" id="proof">
+  <div class="wrap-wide">
+    <div class="eyebrow">In their words</div>
+    <h2>What owners say after the call.</h2>
+
+    <div class="proof-videos">
+      <figure class="t-video">
+        <div class="frame">
+          <!-- VIDEO 1: delete the .slot div below and paste ONE embed in its place:
+               YouTube: <iframe src="https://www.youtube-nocookie.com/embed/VIDEO_ID?rel=0" title="Client testimonial 1" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+               Vimeo:   <iframe src="https://player.vimeo.com/video/VIDEO_ID" title="Client testimonial 1" loading="lazy" allow="fullscreen; picture-in-picture" allowfullscreen></iframe>
+               Loom:    <iframe src="https://www.loom.com/embed/VIDEO_ID" title="Client testimonial 1" loading="lazy" allowfullscreen></iframe>
+               MP4 file: <video controls preload="none" playsinline poster="POSTER.jpg"><source src="FILE.mp4" type="video/mp4"></video> -->
+          <div class="slot"><div class="play" aria-hidden="true">&#9654;</div>Client video 1 &middot; coming soon</div>
+        </div>
+        <figcaption>
+          <span class="result">[Headline result in the client's words]</span>
+          <span class="t-name">[Client full name]</span>
+          <span class="t-biz">[Role &middot; Business &middot; City]</span>
+        </figcaption>
+      </figure>
+      <figure class="t-video">
+        <div class="frame">
+          <!-- VIDEO 2: delete the .slot div below and paste ONE embed in its place:
+               YouTube: <iframe src="https://www.youtube-nocookie.com/embed/VIDEO_ID?rel=0" title="Client testimonial 2" loading="lazy" allow="accelerometer; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+               Vimeo:   <iframe src="https://player.vimeo.com/video/VIDEO_ID" title="Client testimonial 2" loading="lazy" allow="fullscreen; picture-in-picture" allowfullscreen></iframe>
+               Loom:    <iframe src="https://www.loom.com/embed/VIDEO_ID" title="Client testimonial 2" loading="lazy" allowfullscreen></iframe>
+               MP4 file: <video controls preload="none" playsinline poster="POSTER.jpg"><source src="FILE.mp4" type="video/mp4"></video> -->
+          <div class="slot"><div class="play" aria-hidden="true">&#9654;</div>Client video 2 &middot; coming soon</div>
+        </div>
+        <figcaption>
+          <span class="result">[Headline result in the client's words]</span>
+          <span class="t-name">[Client full name]</span>
+          <span class="t-biz">[Role &middot; Business &middot; City]</span>
+        </figcaption>
+      </figure>
+    </div>
+
+    <div class="proof-quotes">
+      <figure class="t-quote">
+        <div class="stars" aria-label="5 out of 5">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+        <blockquote>[Client quote, 2&ndash;3 sentences in their own words. Strongest when it names a number, a decision they made, or what changed after the call.]</blockquote>
+        <figcaption class="t-person">
+          <!-- Swap the initials for a photo: <img src="PHOTO_URL" alt="Client name" loading="lazy" width="44" height="44"> -->
+          <span class="avatar" aria-hidden="true">AB</span>
+          <span>
+            <span class="t-name">[Client full name]</span>
+            <span class="t-biz">[Role &middot; Business &middot; City]</span>
+          </span>
+        </figcaption>
+      </figure>
+      <figure class="t-quote">
+        <div class="stars" aria-label="5 out of 5">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+        <blockquote>[Client quote, 2&ndash;3 sentences in their own words. Strongest when it names a number, a decision they made, or what changed after the call.]</blockquote>
+        <figcaption class="t-person">
+          <!-- Swap the initials for a photo: <img src="PHOTO_URL" alt="Client name" loading="lazy" width="44" height="44"> -->
+          <span class="avatar" aria-hidden="true">AB</span>
+          <span>
+            <span class="t-name">[Client full name]</span>
+            <span class="t-biz">[Role &middot; Business &middot; City]</span>
+          </span>
+        </figcaption>
+      </figure>
+      <figure class="t-quote">
+        <div class="stars" aria-label="5 out of 5">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+        <blockquote>[Client quote, 2&ndash;3 sentences in their own words. Strongest when it names a number, a decision they made, or what changed after the call.]</blockquote>
+        <figcaption class="t-person">
+          <!-- Swap the initials for a photo: <img src="PHOTO_URL" alt="Client name" loading="lazy" width="44" height="44"> -->
+          <span class="avatar" aria-hidden="true">AB</span>
+          <span>
+            <span class="t-name">[Client full name]</span>
+            <span class="t-biz">[Role &middot; Business &middot; City]</span>
+          </span>
+        </figcaption>
+      </figure>
+    </div>
+  </div>
+</section>
 
 <!-- ============ 12. OBJECTIONS ============ -->
 <section class="text objections">
