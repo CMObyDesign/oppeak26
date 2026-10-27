@@ -113,18 +113,24 @@ the `swot_paid_297` tag being applied to the contact, since
 ## Lane 3 — STANDALONE BGA
 
 Direct $297 BGA acquisition path, separate from Solomon and the Action
-Taker funnel.
+Taker funnel. Standalone entry point — reached via external traffic
+(ads, email campaigns, direct URL shares), **not** linked from the
+worker's `/report/{contactId}` CTA or any other Solomon flow in the
+repo. The free-report `$47 Full Diagnostic` CTA on `/report/{contactId}`
+goes directly to `PAYMENT_LINK_47` (`worker/src/index.js:2509`,
+pinned by `renderer_cta.test.js`), so `/bga-upgrade` sits outside
+the Solomon funnel.
 
 | Step | Destination | Wrangler var |
 |------|-------------|--------------|
-| 1 | `success.cfobydesign.com/bga-upgrade` (HL-hosted funnel; `app/public/deep-dive-sales/index.html` is the repo-tracked fallback / copy reference) | — (reached from the free report `$47 Full Diagnostic` CTA as a first-offer upsell, not from a worker env var) |
-| 2 | Buy → `PAYMENT_LINK_297` → `/audit-confirmed` → joins Lane 4 | — |
-| 3 | Decline → `PAYMENT_LINK_47` (step-down to the Full Diagnostic the user originally clicked for) | — |
+| 1 | `success.cfobydesign.com/bga-upgrade` (HL-hosted funnel; `app/public/deep-dive-sales/index.html` is the repo-tracked fallback / copy reference) — standalone entry, not linked from any Solomon flow in the repo | — |
+| 2 | `PAYMENT_LINK_297` | — |
+| 3 | → `/audit-confirmed` → joins Lane 4 | — |
 
 **`success.cfobydesign.com/bga-upgrade` is NOT the same thing as
 `/deeper-analysis` or `/bga-150-offer`.** `/bga-upgrade` is the
-standalone $297 first-offer page (HL-hosted); `/deeper-analysis` is
-the Action Taker $150 funnel entry; `/bga-150-offer` is the
+standalone $297 page (HL-hosted, external entry); `/deeper-analysis`
+is the Action Taker $150 funnel entry; `/bga-150-offer` is the
 discounted $150 OTO shown to paid_47 customers from the Full Diagnostic
 report (see "Paid_47 report BGA upsell" below). All three sell access
 to the same BGA fulfillment but are not interchangeable paths.
