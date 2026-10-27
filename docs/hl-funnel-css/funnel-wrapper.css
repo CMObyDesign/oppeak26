@@ -75,9 +75,12 @@ body::before {
   font-size: 1.125rem;
   letter-spacing: 0.02em;
   color: hsl(226 100% 97%);
-  line-height: 0;
 }
 
+/* line-height: 0 only on the image link, not the parent — otherwise
+   the legacy <span class="cfo-brand-mark">CFO</span> By Design text
+   wordmark collapses to zero height and overflows into the progress
+   block below it. */
 .cfo-brand a {
   display: inline-flex;
   align-items: center;
