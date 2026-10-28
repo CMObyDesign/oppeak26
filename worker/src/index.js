@@ -6311,7 +6311,7 @@ async function handleResetContactTags(request, env) {
 
 // Like callClaude but accepts an explicit rubric (for the console's override path).
 // When the rubric is the default, cache_control still applies — repeated runs hit the cache.
-async function callClaudeWithRubric(prompt, rubric, env) {
+async function callClaudeWithRubric(prompt, rubric, env, opts = {}) {
   // Test-only escape hatch — see callClaude above.
   if (typeof env?.__CLAUDE_STUB__ === "function") {
     return env.__CLAUDE_STUB__(prompt, env, rubric);
@@ -6323,6 +6323,21 @@ async function callClaudeWithRubric(prompt, rubric, env) {
       : { type: "text", text: rubric }
   ];
 
+  // 2026-10-28 (from Jordan Castellanos's queue-trace): the paid_47 Full
+  // Diagnostic consistently truncated at ~4000 chars / line 34 col 6 of
+  // the JSON output, which parseAgentJson then raised as
+  //   "Expected ',' or ']' after array element in JSON at position NNNN"
+  // on all three queue retries. Three deterministic failures = token
+  // budget overrun, not an infrastructure flake. The rubric asks for
+  // opener + strategistBrief + path + badge + headline + context +
+  // gaps[] + opportunities[] + opportunityFlags + structured_findings[]
+  // — that's 10-15 KB of JSON for a paid tier, well over 2500 tokens.
+  // Bumped to a 16k default (plenty for the longest paid_297 Business
+  // Growth Analysis) with per-caller override via opts.maxTokens for
+  // the few places that genuinely need a smaller budget (e.g. BGA
+  // Copilot sub-prompts).
+  const maxTokens = opts.maxTokens || 16000;
+
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -6332,7 +6347,7 @@ async function callClaudeWithRubric(prompt, rubric, env) {
     },
     body: JSON.stringify({
       model: CONFIG.CLAUDE_MODEL,
-      max_tokens: 2500,
+      max_tokens: maxTokens,
       system: systemBlock,
       messages: [{ role: "user", content: prompt }],
     }),
@@ -6342,7 +6357,14 @@ async function callClaudeWithRubric(prompt, rubric, env) {
     throw new Error(`Claude API ${response.status}: ${detail.slice(0, 300)}`);
   }
   const data = await response.json();
-  return data.content[0].text;
+  const text = data.content?.[0]?.text || "";
+  // When Claude hits the output cap it returns stop_reason === "max_tokens"
+  // and the final content block ends mid-JSON. Surfacing this upstream
+  // means parseAgentJson's error is actionable instead of mystifying.
+  if (data.stop_reason === "max_tokens") {
+    throw new Error(`Claude response truncated (stop_reason=max_tokens, max_tokens=${maxTokens}, output_bytes=${text.length}). Raise max_tokens for this caller.`);
+  }
+  return text;
 }
 
 // ----- end Ask Solomon console -----
@@ -6811,21 +6833,54 @@ export default {
         const traceCid = diagTraceMatch[1];
         if (!env.SOLOMON_LIBRARY) return json({ error: "SOLOMON_LIBRARY not bound" }, 500);
         const prefix = `queue_traces/${traceCid}/`;
-        const list = await env.SOLOMON_LIBRARY.list({ prefix, limit: 500 }).catch((err) => ({ _err: err }));
-        if (list?._err) return json({ error: `list failed: ${String(list._err.message || list._err).slice(0,200)}` }, 500);
-        const objects = list.objects || [];
-        objects.sort((a, b) => String(a.key).localeCompare(String(b.key)));
+        // Pagination (Codex P2 on #157). ISO-timestamp keys sort oldest-
+        // first lexicographically, so a bare list({limit:500}) returns
+        // the OLDEST 500 and silently hides newer traces once a contact
+        // accumulates past that cap — operators debugging the current
+        // failure would see stale old runs. Walk the cursor until R2
+        // stops reporting truncated=true (sanity cap at 10000 to bound
+        // the scan on any pathological contact), then sort newest-first
+        // and return `?limit=N` of them (default 100). The response
+        // reports both the fetched count and whether the full key space
+        // for this contact was walked so operators know if the picture
+        // is complete.
+        const latestLimit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit")) || 100));
+        const allKeys = [];
+        let cursor = undefined;
+        let walked = false;
+        let listErr = null;
+        for (let i = 0; i < 20; i++) { // 20 * 500 = 10000-key sanity cap
+          const page = await env.SOLOMON_LIBRARY.list({ prefix, limit: 500, cursor }).catch((err) => ({ _err: err }));
+          if (page?._err) { listErr = String(page._err.message || page._err).slice(0, 200); break; }
+          for (const obj of page.objects || []) allKeys.push(obj.key);
+          if (!page.truncated || !page.cursor) { walked = true; break; }
+          cursor = page.cursor;
+        }
+        if (listErr) return json({ error: `list failed: ${listErr}` }, 500);
+        // Newest-first — timestamps embedded in the key, so lexicographic
+        // descending IS chronological descending. Then take the top N so
+        // operators always see the latest N trace lines, never a stale
+        // first page.
+        allKeys.sort((a, b) => String(b).localeCompare(String(a)));
+        const picked = allKeys.slice(0, latestLimit);
+        // Re-sort the picked window ascending so the response reads
+        // oldest-first inside the window (the shape operators expect
+        // when following a run through its stages).
+        picked.sort((a, b) => String(a).localeCompare(String(b)));
         const traces = [];
-        for (const obj of objects) {
-          const body = await env.SOLOMON_LIBRARY.get(obj.key).catch(() => null);
+        for (const key of picked) {
+          const body = await env.SOLOMON_LIBRARY.get(key).catch(() => null);
           if (!body) continue;
           const text = await body.text().catch(() => null);
           if (!text) continue;
-          try { traces.push(JSON.parse(text)); } catch { traces.push({ raw: text.slice(0, 200), key: obj.key }); }
+          try { traces.push(JSON.parse(text)); } catch { traces.push({ raw: text.slice(0, 200), key }); }
         }
         return json({
           contactId: traceCid,
+          totalKeys: allKeys.length,
+          walkedFully: walked,
           traceCount: traces.length,
+          limit: latestLimit,
           traces,
         });
       }
