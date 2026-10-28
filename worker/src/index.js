@@ -96,6 +96,7 @@ import {
 import { normalizeContactFields, flatNormalized } from "./normalize.js";
 import { deriveMetrics } from "./derived.js";
 import { buildFactsForPrompt, validateStructuredFindings } from "./findings.js";
+import { claimsPaid47V2, validatePaid47V2, buildRegenerationNudge } from "./paid47_v2.js";
 
 // Versioning for canonical records (Phase 1 architecture — see
 // docs/SOLOMON_ARCHITECTURE.md and docs/CLOUDFLARE_DATA_MODEL.md). Each
@@ -1149,7 +1150,7 @@ INCOMPLETE INTAKE rules rather than fabricating an answer.
 Customer-facing classification may ONLY be:
 growth, needs-attention, or rehab.`,
 
-  paid_47: `$47 FULL DIAGNOSTIC
+  paid_47: `$47 FULL DIAGNOSTIC (tierGuideVersion: paid47-2.0)
 
 PURPOSE
 
@@ -1161,29 +1162,153 @@ The Full Diagnostic answers:
 "What is actually happening, how significant does it appear to be,
 how do the issues interact, and what deserves attention first?"
 
-This is deeper diagnosis than the free Business Health Check, but it is
-not the Business Growth Analysis and it is not a complete implementation
-roadmap.
+This is deeper diagnosis than the free Business Health Check, but it
+is not the Business Growth Analysis and it is not a complete
+implementation roadmap.
 
-DIAGNOSTIC OUTPUT
+VERSION TAGS (MANDATORY)
 
-Produce 3 primary gaps and 2 opportunities when the evidence supports them.
+Emit these two string fields verbatim at the top level of the response:
+- reportSchemaVersion: "paid47-v2"
+- tierGuideVersion:    "paid47-2.0"
 
-Do not manufacture a third gap or second opportunity simply to fill the
-requested count. If the intake does not support the full count with
-confidence, return fewer and explain what remains unknown.
+These tags gate the enriched renderer. A $47 response that omits them
+or carries other values will be downgraded to the legacy renderer and
+the owner loses the richer sections.
 
-For each primary gap:
+OUTPUT CONTRACT
 
-- State the issue clearly in language the owner would recognize.
-- Identify the specific evidence supporting it.
-- Explain why it matters financially or operationally.
-- Connect it to other findings when the relationship is supported.
-- Distinguish what is known from what is inferred.
-- State what remains unknown when the assessment cannot establish
-  magnitude, root cause, or financial impact.
-- Assign severity based on evidence, not tone.
-- Order the gaps by what deserves attention or clarification first.
+The $47 Full Diagnostic emits (in addition to the shared top-level
+fields path/badge/headline/opener/context/nextStepHeadline/nextStepBody):
+
+1. financialSnapshot[] — a compact table of the hard numbers the
+   diagnostic is anchored on. One row per Financial Snapshot item,
+   each with:
+   - label  (e.g. "Trailing 12-month revenue")
+   - value  (e.g. "$420,000" — formatted the way the owner would read it)
+   - meaning (one plain-English sentence; optional when the number
+     speaks for itself)
+   - sourceType ("customer_answer" | "deterministic_fact" | "derived_metric")
+   Only include rows whose numbers come directly from THEIR ANSWERS,
+   from FACTS, or from DERIVED METRICS. Do not estimate. Do not round
+   when the number is a hard figure the owner supplied.
+
+2. gaps[] — exactly up to 3 primary gaps, each with:
+   - id              (stable kebab-case slug, used by relatedFindingIds + connections[])
+   - title           (short, owner-recognizable)
+   - priority        ("CRITICAL" | "HIGH" | "MEDIUM")
+   - evidence[]      (what grounds this finding — see EVIDENCE RULES)
+   - known           (one sentence stating what is proven by evidence)
+   - diagnosis       (one or two sentences in Miguel's consultant voice;
+                      this is the INTERNAL explanation the renderer may
+                      show — write it as the strategist would speak it
+                      to the owner, direct and numbers-first)
+   - whyItMatters    (one sentence of economic consequence to the owner's
+                      P&L, cash position, or decision runway)
+   - unknown         (one sentence naming what the intake cannot establish
+                      and what would need to be verified to resolve it;
+                      say "none" only when the magnitude and root cause
+                      are both proven by the intake)
+   - decisionImplication (one sentence tying the finding to the owner's
+                      next financial decision — what changes about what
+                      they should do next because of this)
+   - relatedFindingIds[]  (ids of OTHER gaps this gap interacts with;
+                      used for synthesis without duplicating prose)
+
+   Do not manufacture a third gap simply to hit the count. If the
+   intake supports only 2 primary gaps with confidence, return 2 and
+   use coverage.gapsShortfallReason to say what the third would have
+   needed.
+
+3. opportunities[] — exactly up to 2 opportunities, each with:
+   - id
+   - title
+   - evidence[]            (same evidence shape as gaps)
+   - whyCredible           (one sentence tying this to a specific
+                            answer or deterministic fact)
+   - economicMechanism     (revenue capture | margin protection |
+                            cash timing | recurring revenue |
+                            reduced concentration | cost control |
+                            capital readiness | capacity use |
+                            financial decision-making)
+   - whatMustBeTrue        (one sentence of the premise the owner
+                            must validate before this is real)
+   - nextValidation        (one sentence naming the single data point
+                            or action that would confirm or kill the
+                            opportunity)
+
+   Use dollar amounts or percentages ONLY when supplied facts support
+   them. Do not invent ROI. Do not fold "pursue this" into an
+   opportunity whose premise is unproven — put the unresolved
+   premise in whatMustBeTrue.
+
+4. connections[] — cross-finding synthesis. One entry per material
+   interaction between two or more findings. Each with:
+   - title         (short phrase naming the interaction)
+   - findingIds[]  (two or more gap/opportunity ids that participate)
+   - explanation   (one or two sentences explaining what the
+                    interaction means financially, not just that it
+                    exists)
+
+   Do not duplicate the content of individual gaps here. Synthesis
+   means naming an interaction that no single gap captures. If no
+   material connection is supported, emit [] and set
+   coverage.connectionStatus = "no_material_connection_supported"
+   with coverage.noConnectionReason explaining why.
+
+5. questionsToClarify[] — the highest-value questions the strategist
+   should resolve during the included 30-minute review. Each with:
+   - question
+   - whyItMatters  (one sentence on which decision or finding this
+                    unblocks)
+
+   These must be questions that could change the priority order,
+   change the interpretation, clarify an unsupported assumption,
+   establish financial magnitude, or affect the owner's next
+   decision. Avoid generic discovery questions.
+
+6. decisionOrder[] — the recommended order of attention for the
+   owner. One entry per step with:
+   - step   (1-based integer)
+   - action (short sentence)
+   - whyNow (one sentence on why this comes before the others)
+
+   This is the strategist's ordering, grounded in immediacy,
+   financial consequence, dependency, and decision impact — the same
+   logic the renderer uses to order gaps[]. Keep it to the fewest
+   steps that actually matter; 2-4 is normal.
+
+7. coverage{} — self-reported metadata on what the output could and
+   could not establish:
+   - gapsRequested, gapsReturned
+   - gapsShortfallReason (null when gapsReturned === gapsRequested)
+   - opportunitiesRequested, opportunitiesReturned
+   - opportunitiesShortfallReason
+   - connectionStatus ("identified" | "no_material_connection_supported")
+   - noConnectionReason (null when identified)
+
+   coverage is the honesty surface: it is read by the response
+   quality gate and shown nowhere in the owner-facing report. A
+   coverage block that claims full counts while gaps[] is short, or
+   claims "identified" while connections[] is empty, is treated as
+   a quality failure.
+
+EVIDENCE RULES
+
+Every gap and every opportunity MUST carry at least one evidence
+entry, and every evidence entry MUST have:
+- type: "answer" | "derived_metric" | "opportunity_flag" | "deterministic_fact"
+- key:  the exact FACTS key, DERIVED METRICS metric name, or the
+        opportunity-flag name the finding is anchored on.
+
+PRIMARY GAP RULE: a primary gap whose ONLY evidence is of type
+"opportunity_flag" is rejected by the response quality gate. An
+opportunity flag may support a gap, but it cannot be the sole
+anchor. This is the Marisol discipline: a merchant-processing flag
+is a hint toward an opportunity, not a primary diagnostic.
+
+An evidence entry whose key does not appear in FACTS, DERIVED
+METRICS, or the known opportunity-flag set is rejected as unfounded.
 
 PRIORITY ORDER
 
@@ -1191,11 +1316,12 @@ Severity and priority order are different.
 
 Multiple findings may honestly carry the same severity.
 
-The first finding should be the issue Miguel would start with if he were
+The first gap should be the issue Miguel would start with if he were
 reviewing this diagnostic with the owner.
 
-Use immediacy, financial consequence, dependency, and decision impact to
-determine the order.
+Use immediacy, financial consequence, dependency, and decision
+impact to determine the order — the same logic that drives
+decisionOrder[].
 
 SYNTHESIS
 
@@ -1215,19 +1341,23 @@ Evaluate how the supported signals interact across areas such as:
 - growth capital
 - growth capacity
 
-Connect answers when they belong in the same financial conversation.
+Connect answers when they belong in the same financial conversation,
+and record those connections in connections[] with findingIds, NOT
+by duplicating prose inside gaps[].
 
 Example:
 Late invoicing + weak AR discipline + decisions based partly on bank
-balance may point to a broader cash-visibility problem.
+balance may point to a broader cash-visibility problem — that becomes
+one entry in connections[] whose findingIds reference the three gaps
+it ties together.
 
 Do not invent a causal relationship simply because two issues appear
 together.
 
 FINANCIAL IMPACT
 
-Use actual numbers aggressively when the owner supplied them or when a
-deterministic FACT / DERIVED METRIC provides them.
+Use actual numbers aggressively when the owner supplied them or when
+a deterministic FACT / DERIVED METRIC provides them.
 
 Quantify financial impact ONLY when the evidence supports the number.
 
@@ -1235,41 +1365,23 @@ When exact impact cannot be established:
 
 - explain the economic exposure,
 - explain why it matters,
-- and state the missing number or fact needed to measure it.
+- state the missing number or fact needed to measure it,
+- and put the missing-magnitude question into questionsToClarify[].
 
-Do not convert a hypothetical answer, estimate, or recommendation into a
-proven financial result.
-
-OPPORTUNITIES
-
-Identify up to 2 opportunities that are directly supported by the intake.
-
-Tie each opportunity to a real economic mechanism such as:
-
-- revenue capture
-- margin protection
-- better cash timing
-- recurring revenue
-- reduced concentration
-- cost control
-- capital readiness
-- better use of operating capacity
-- or stronger financial decision-making
-
-Use dollar amounts or percentages only when supplied facts support them.
-
-Do not invent ROI.
+Do not convert a hypothetical answer, estimate, or recommendation
+into a proven financial result.
 
 FINANCIAL VISIBILITY
 
 Miguel's bank-balance question remains a core diagnostic signal.
 
-When the owner says decisions are made from bank balance, somewhere in
-between, or they are unsure, connect that answer to the other financial
-signals in the intake.
+When the owner says decisions are made from bank balance, somewhere
+in between, or they are unsure, connect that answer to the other
+financial signals in the intake.
 
-Do not assume stale books, poor cash flow, missing KPIs, or inaccurate
-financial statements unless another answer establishes those facts.
+Do not assume stale books, poor cash flow, missing KPIs, or
+inaccurate financial statements unless another answer establishes
+those facts.
 
 DEBT
 
@@ -1284,25 +1396,12 @@ Never conflate:
 - delinquent debt,
 - or unknown debt.
 
-Total corporate debt and monthly debt service are foundational diagnostic
-numbers when available.
+Total corporate debt and monthly debt service are foundational
+diagnostic numbers when available, and when present they belong in
+financialSnapshot[] with sourceType "customer_answer" or
+"deterministic_fact".
 
 Do not use debt existence alone as evidence of distress.
-
-UNRESOLVED QUESTIONS
-
-Identify the highest-value questions the strategist should clarify during
-the included 30-minute review.
-
-These should be questions that could:
-
-- change the priority order,
-- materially change the interpretation,
-- clarify an unsupported assumption,
-- establish financial magnitude,
-- or affect the owner's next decision.
-
-Do not use generic discovery questions.
 
 FULL DIAGNOSTIC BOUNDARY
 
@@ -1319,8 +1418,8 @@ It should NOT:
 
 - pretend verified financial documents were reviewed when they were not,
 - produce the full 90-day / 6-month / 12-month Business Growth Plan,
-- present CFO By Design fractional-service recommendations as though the
-  BGA process has already happened,
+- present CFO By Design fractional-service recommendations as though
+  the BGA process has already happened,
 - or skip the human strategist review.
 
 NEXT STEP
@@ -1328,7 +1427,9 @@ NEXT STEP
 The primary next step after the $47 Full Diagnostic is the INCLUDED
 30-minute CFO By Design strategist review.
 
-The report should prepare the owner for that conversation.
+The report should prepare the owner for that conversation. nextStepHeadline
+and nextStepBody must point to the strategist review, not to the
+Business Growth Analysis purchase.
 
 The strategist review is where the team:
 
@@ -1337,8 +1438,8 @@ The strategist review is where the team:
 - interprets the findings in context,
 - and helps determine the first financial move worth addressing.
 
-Do not make the Business Growth Analysis purchase the primary CTA inside
-the Full Diagnostic report.
+Do not make the Business Growth Analysis purchase the primary CTA
+inside the Full Diagnostic report.
 
 VOICE
 
@@ -1452,6 +1553,106 @@ JSON ESCAPING (strict — your output is parsed by JSON.parse):
 - Do not emit raw unescaped quotes inside string values. Do not emit
   trailing commas. Do not wrap the response in markdown code fences.
 
+${tier === "paid_47" ? `
+Return ONLY valid JSON — no markdown code fences, no text before or after — in exactly this shape:
+{
+  "reportSchemaVersion": "paid47-v2",
+  "tierGuideVersion": "paid47-2.0",
+  "path": "rehab | needs-attention | growth",
+  "badge": "SHORT UPPERCASE LABEL",
+  "headline": "one bold sentence naming their reality",
+  "opener": "2-3 sentences describing their actual situation (this is the personalized hook used in their delivery email — write it so it could stand alone as the first paragraph of a message TO them)",
+  "context": "one sentence of perspective",
+  "financialSnapshot": [
+    { "label": "Trailing 12-month revenue", "value": "$420,000", "meaning": "optional one-sentence meaning", "sourceType": "customer_answer | deterministic_fact | derived_metric" }
+  ],
+  "gaps": [
+    {
+      "id": "kebab-case-stable-slug",
+      "title": "short, owner-recognizable",
+      "priority": "CRITICAL | HIGH | MEDIUM",
+      "evidence": [
+        { "type": "answer | derived_metric | opportunity_flag | deterministic_fact", "key": "<key from FACTS, DERIVED METRICS, or known opportunityFlags>" }
+      ],
+      "known": "one sentence stating what the evidence proves",
+      "diagnosis": "one or two sentences in Miguel's voice — the internal explanation; direct, numbers-first",
+      "whyItMatters": "one sentence of economic consequence",
+      "unknown": "one sentence naming what the intake cannot establish; 'none' only when fully proven",
+      "decisionImplication": "one sentence tying the finding to the owner's next decision",
+      "relatedFindingIds": ["other-gap-id"]
+    }
+  ],
+  "opportunities": [
+    {
+      "id": "kebab-case-stable-slug",
+      "title": "short",
+      "evidence": [
+        { "type": "answer | derived_metric | opportunity_flag | deterministic_fact", "key": "<key>" }
+      ],
+      "whyCredible": "one sentence tying to a specific answer or deterministic fact",
+      "economicMechanism": "revenue capture | margin protection | cash timing | recurring revenue | reduced concentration | cost control | capital readiness | capacity use | financial decision-making",
+      "whatMustBeTrue": "one sentence of the premise the owner must validate",
+      "nextValidation": "one sentence naming the single data point or action that would confirm or kill it"
+    }
+  ],
+  "connections": [
+    { "title": "short phrase naming the interaction", "findingIds": ["gap-id-a", "gap-id-b"], "explanation": "one or two sentences on what the interaction means financially" }
+  ],
+  "questionsToClarify": [
+    { "question": "the question", "whyItMatters": "which decision or finding this unblocks" }
+  ],
+  "decisionOrder": [
+    { "step": 1, "action": "short sentence", "whyNow": "one sentence on why first" }
+  ],
+  "coverage": {
+    "gapsRequested": 3,
+    "gapsReturned": 3,
+    "gapsShortfallReason": null,
+    "opportunitiesRequested": 2,
+    "opportunitiesReturned": 2,
+    "opportunitiesShortfallReason": null,
+    "connectionStatus": "identified | no_material_connection_supported",
+    "noConnectionReason": null
+  },
+  "nextStepHeadline": "short — point to the included 30-minute strategist review",
+  "nextStepBody": "2-3 sentences preparing the owner for the strategist review (NOT the $297 BGA purchase)",
+  "opportunityFlags": ["MERCHANT_PROCESSING_OPP"],
+  "strategistBrief": "INTERNAL-ONLY brief for the CFO consultant — NEVER shown to the client. The strategist brief is not customer-facing copy. Clearly distinguish what is known, what is inferred, what must be verified, and what the strategist should probe on the call. Explicitly warn the strategist against conclusions the available evidence does not support. Surface contradictions, missing context, and the likely first priority. Cover: (1) why this lead got their path verdict — which specific signals in their answers triggered it; (2) the top 2 upsell angles based on the opportunity flags fired and what's underneath their answers; (3) a single suggested opener question the consultant should use to open the strategy call; (4) WHAT TO PROBE — unresolved questions, contradictions in the intake, assumptions the strategist should NOT make, and specifics that must be verified before recommending action. Write in consultant-to-consultant voice — direct, no fluff. Where incomplete intake fields block confident assessment, name them here.",
+  "structured_findings": [
+    {
+      "finding_id": "kebab-case-stable-slug",
+      "category": "cash_flow | debt | revenue | visibility | team | other",
+      "severity": "low | medium | high",
+      "evidence": [
+        { "field": "<question_key from FACTS>", "value": "<the matching value>" }
+      ],
+      "derived_metrics": [
+        { "metric": "<metric name from DERIVED METRICS>", "value": "<the matching value>" }
+      ],
+      "interpretation": "one-line what this means for the business",
+      "recommendation": "one-line what to investigate or do"
+    }
+  ]
+}
+
+PAID_47 V2 EMISSION RULES (strict — enforced by the response quality gate):
+- Emit reportSchemaVersion EXACTLY "paid47-v2" and tierGuideVersion
+  EXACTLY "paid47-2.0". Other values downgrade the response.
+- Every gap and every opportunity MUST have an id (stable kebab-case
+  slug) and at least one evidence[] entry.
+- A primary gap whose ONLY evidence[].type is "opportunity_flag" is
+  rejected. An opportunity flag can support a gap but cannot be its
+  sole anchor.
+- Every evidence[].key must appear in FACTS, DERIVED METRICS, or the
+  known opportunity-flag set — do NOT invent keys.
+- connections[].findingIds must reference ids that appear in gaps[]
+  or opportunities[].
+- coverage[].connectionStatus === "no_material_connection_supported"
+  requires a non-empty noConnectionReason; connections[] MUST be
+  empty in that case.
+- coverage{} counts must match the actual array lengths you return.
+- financialSnapshot[] rows must each cite a sourceType; do not estimate.
+` : `
 Return ONLY valid JSON — no markdown code fences, no text before or after — in exactly this shape:
 {
   "path": "rehab | needs-attention | growth",
@@ -1485,6 +1686,7 @@ Return ONLY valid JSON — no markdown code fences, no text before or after — 
     }
   ]
 }
+`}
 
 STRUCTURED FINDINGS RULES (strict — a finding that breaks any rule is
 rejected before storage):
@@ -2266,6 +2468,40 @@ function buildReportHtml(agent) {
     return                       { label: "LOW",    color: "#92400e" };
   };
 
+  // paid47-v2 enriched gap renderer. Carries the gap's known/why-it-
+  // matters/unknown/decision-implication prose onto the card without
+  // bloating it into a visually exhausting panel — one card per gap,
+  // one short line per field, same critical-gaps layout as v1.
+  const gapV2Item = (g) => {
+    const priority = g.priority || "MEDIUM";
+    const bodyLines = [];
+    if (g.known) bodyLines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:6px;line-height:1.55;"><strong style="color:#1a1a1a;">Known:</strong> ${e(g.known)}</div>`);
+    if (g.whyItMatters) bodyLines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:4px;line-height:1.55;"><strong style="color:#1a1a1a;">Why it matters:</strong> ${e(g.whyItMatters)}</div>`);
+    if (g.unknown && String(g.unknown).trim().toLowerCase() !== "none") {
+      bodyLines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:4px;line-height:1.55;"><strong style="color:#1a1a1a;">Still unknown:</strong> ${e(g.unknown)}</div>`);
+    }
+    if (g.decisionImplication) bodyLines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:4px;line-height:1.55;"><strong style="color:#1a1a1a;">What this changes:</strong> ${e(g.decisionImplication)}</div>`);
+    return `
+    <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid ${priColor(priority)};border-radius:4px;">
+      <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:16px;">${e(g.title || "")}<span style="font-size:10px;font-weight:700;color:${priColor(priority)};letter-spacing:1.5px;margin-left:10px;">${e(priority)}</span></div>
+      ${bodyLines.join("")}
+    </td></tr><tr><td style="height:10px;"></td></tr>`;
+  };
+
+  const oppV2Item = (o) => {
+    const bodyLines = [];
+    if (o.whyCredible) bodyLines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:6px;line-height:1.55;"><strong style="color:#1a1a1a;">Why it's credible:</strong> ${e(o.whyCredible)}</div>`);
+    if (o.whatMustBeTrue) bodyLines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:4px;line-height:1.55;"><strong style="color:#1a1a1a;">What must be true:</strong> ${e(o.whatMustBeTrue)}</div>`);
+    if (o.nextValidation) bodyLines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:4px;line-height:1.55;"><strong style="color:#1a1a1a;">Next validation:</strong> ${e(o.nextValidation)}</div>`);
+    const mech = o.economicMechanism ? `<div style="font-family:Arial,sans-serif;color:#92400e;font-weight:700;font-size:11px;margin-top:8px;letter-spacing:1.5px;text-transform:uppercase;">${e(o.economicMechanism)}</div>` : "";
+    return `
+    <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid #c4a647;border-radius:4px;">
+      <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:16px;">${e(o.title || "")}</div>
+      ${bodyLines.join("")}
+      ${mech}
+    </td></tr><tr><td style="height:10px;"></td></tr>`;
+  };
+
   const gapItem = (g) => `
     <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid ${priColor(g.priority)};border-radius:4px;">
       <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:16px;">${e(g.title)}<span style="font-size:10px;font-weight:700;color:${priColor(g.priority)};letter-spacing:1.5px;margin-left:10px;">${e(g.priority)}</span></div>
@@ -2310,6 +2546,13 @@ function buildReportHtml(agent) {
       <div style="font-family:Arial,sans-serif;color:#92400e;font-weight:700;font-size:11px;margin-top:8px;letter-spacing:1.5px;text-transform:uppercase;">${e(o.impact)}</div>
     </td></tr><tr><td style="height:10px;"></td></tr>`;
 
+  // paid47-v2 branch: when the response carries reportSchemaVersion
+  // "paid47-v2" + tierGuideVersion "paid47-2.0", render the richer
+  // sections (Financial Snapshot, enriched gap cards, Connections,
+  // Questions To Clarify, Decision Order). Everything else goes
+  // through the legacy renderer so paid47-v1 reports still render.
+  const isV2 = agent.reportSchemaVersion === "paid47-v2" && agent.tierGuideVersion === "paid47-2.0";
+
   // Phase 2D: prefer structured findings when present; fall back to the
   // prose gaps array for runs where Solomon didn't emit structured output
   // (console runs without normalization; pre-Phase-2C generations stored
@@ -2317,23 +2560,84 @@ function buildReportHtml(agent) {
   // tell the renderer source apart beyond the "Based on:" receipts row
   // the structured path adds.
   const structured = Array.isArray(agent.structured_findings) ? agent.structured_findings : [];
-  const gaps = structured.length
-    ? structured.map(structuredGapItem).join("")
-    : (agent.gaps || []).map(gapItem).join("");
-  const opps = (agent.opportunities || []).map(oppItem).join("");
+  let gaps;
+  let opps;
+  if (isV2) {
+    gaps = (agent.gaps || []).map(gapV2Item).join("");
+    opps = (agent.opportunities || []).map(oppV2Item).join("");
+  } else {
+    gaps = structured.length
+      ? structured.map(structuredGapItem).join("")
+      : (agent.gaps || []).map(gapItem).join("");
+    opps = (agent.opportunities || []).map(oppItem).join("");
+  }
   const context = agent.context
     ? `<p style="font-family:Georgia,serif;font-style:italic;color:#6b7280;font-size:15px;line-height:1.6;margin:12px 0 0;">${e(agent.context)}</p>`
     : "";
+
+  // v2-only enriched sections. Each guarded by a non-empty check so a
+  // v2 run that honestly returned no connections (coverage.connectionStatus
+  // = no_material_connection_supported) does not render an empty header.
+  let snapshotBlock = "";
+  if (isV2 && Array.isArray(agent.financialSnapshot) && agent.financialSnapshot.length) {
+    const rows = agent.financialSnapshot.map((r) => `
+      <tr>
+        <td style="padding:8px 12px;border-bottom:1px solid #f3e9d2;font-family:Georgia,serif;font-size:14px;color:#374151;">${e(r.label || "")}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #f3e9d2;font-family:Georgia,serif;font-size:14px;font-weight:700;color:#1a1a1a;text-align:right;white-space:nowrap;">${e(r.value || "")}</td>
+      </tr>${r.meaning ? `<tr><td colspan="2" style="padding:4px 12px 10px;font-family:Georgia,serif;font-size:13px;color:#6b7280;font-style:italic;border-bottom:1px solid #f3e9d2;">${e(r.meaning)}</td></tr>` : ""}`).join("");
+    snapshotBlock = `
+<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Financial Snapshot</h2>
+<table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:collapse;background:#fdf8f0;border-radius:4px;">${rows}</table>`;
+  }
+
+  let connectionsBlock = "";
+  if (isV2 && Array.isArray(agent.connections) && agent.connections.length) {
+    const items = agent.connections.map((c) => `
+      <tr><td style="padding:12px 14px;background:#fdf8f0;border-left:4px solid #92400e;border-radius:4px;">
+        <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:15px;">${e(c.title || "")}</div>
+        <div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:4px;line-height:1.55;">${e(c.explanation || "")}</div>
+      </td></tr><tr><td style="height:8px;"></td></tr>`).join("");
+    connectionsBlock = `
+<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">How These Findings Interact</h2>
+<table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">${items}</table>`;
+  }
+
+  let questionsBlock = "";
+  if (isV2 && Array.isArray(agent.questionsToClarify) && agent.questionsToClarify.length) {
+    const items = agent.questionsToClarify.map((q) => `
+      <li style="margin-bottom:10px;font-family:Georgia,serif;color:#1a1a1a;font-size:14px;line-height:1.55;">
+        <strong>${e(q.question || "")}</strong>${q.whyItMatters ? `<div style="color:#6b7280;font-size:13px;font-style:italic;margin-top:2px;">${e(q.whyItMatters)}</div>` : ""}
+      </li>`).join("");
+    questionsBlock = `
+<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Questions to Clarify With the Strategist</h2>
+<ul style="margin:0;padding-left:20px;">${items}</ul>`;
+  }
+
+  let decisionBlock = "";
+  if (isV2 && Array.isArray(agent.decisionOrder) && agent.decisionOrder.length) {
+    const items = agent.decisionOrder.map((d) => `
+      <tr><td style="padding:10px 14px;background:#fdf8f0;border-left:4px solid #c4a647;border-radius:4px;">
+        <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:15px;">Step ${e(String(d.step || ""))}: ${e(d.action || "")}</div>
+        ${d.whyNow ? `<div style="font-family:Georgia,serif;color:#374151;font-size:13px;margin-top:4px;line-height:1.55;font-style:italic;">${e(d.whyNow)}</div>` : ""}
+      </td></tr><tr><td style="height:6px;"></td></tr>`).join("");
+    decisionBlock = `
+<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Order of Attention</h2>
+<table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">${items}</table>`;
+  }
 
   return `
 <div style="display:inline-block;padding:6px 14px;background:#fef3c7;color:#92400e;font-weight:700;font-size:11px;letter-spacing:2px;border-radius:999px;font-family:Arial,sans-serif;">${e(agent.badge)}</div>
 <h1 style="font-family:Georgia,serif;font-size:26px;font-weight:700;margin:20px 0 16px;color:#1a1a1a;line-height:1.3;">${e(agent.headline)}</h1>
 <p style="font-family:Georgia,serif;font-size:17px;color:#374151;line-height:1.65;margin:0;">${e(agent.opener)}</p>
 ${context}
+${snapshotBlock}
 <h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Critical Gaps Identified</h2>
 <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">${gaps}</table>
 <h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Your Highest-Impact Opportunities</h2>
 <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">${opps}</table>
+${connectionsBlock}
+${decisionBlock}
+${questionsBlock}
 <h2 style="font-family:Georgia,serif;font-size:20px;font-weight:700;color:#1a1a1a;margin:32px 0 12px;">${e(agent.nextStepHeadline)}</h2>
 <p style="font-family:Georgia,serif;font-size:16px;color:#374151;line-height:1.6;font-style:italic;margin:0;">${e(agent.nextStepBody)}</p>
 `.trim();
@@ -5678,6 +5982,82 @@ async function writeQueueTrace(env, contactId, stage, extra = {}) {
   }
 }
 
+// paid47-v2 response quality gate wrapper. Validates the parsed agent
+// response against the v2 contract; on deficiencies, regenerates once
+// with the deficiency list appended as a follow-up user turn so the
+// model sees its own last attempt and the exact fixes it needs.
+//
+// Fail-soft: if the regenerated response still fails validation, the
+// v2-only fields are stripped so buildReportHtml falls back to the
+// legacy renderer. The owner always gets a report; what they lose on
+// a soft fail is the enriched sections, not the whole purchase.
+async function runPaid47V2QualityGate({ env, contactId, prompt, rubric, raw, agent, factsBundle, derivedMetrics }) {
+  const factKeys = new Set(Object.keys(factsBundle?.facts || {}));
+  const metricNames = new Set((derivedMetrics || []).map((m) => m?.metric).filter(Boolean));
+  const context = { validFactKeys: factKeys, validMetricNames: metricNames };
+
+  let result = validatePaid47V2(agent, context);
+  await writeQueueTrace(env, contactId, "paid47_v2_validate", {
+    isV2: result.isV2,
+    ok: result.ok,
+    deficiencyCount: result.deficiencies.length,
+    firstDeficiency: result.deficiencies[0]?.code || null,
+  });
+
+  if (result.ok) return agent;
+
+  // Downgrade path: response didn't even claim v2 (missing version
+  // tags). Nothing to regenerate — the model gave us a v1 shape under
+  // the v2 contract. Strip v2-only fields and return.
+  if (!result.isV2) {
+    await writeQueueTrace(env, contactId, "paid47_v2_downgrade", { reason: "no_version_tags" });
+    return stripPaid47V2Fields(agent);
+  }
+
+  // Try one regeneration with the deficiency list appended.
+  try {
+    const nudge = buildRegenerationNudge(result.deficiencies);
+    await writeQueueTrace(env, contactId, "paid47_v2_regenerate_start", {
+      deficiencyCount: result.deficiencies.length,
+    });
+    const retryRaw = await callClaudeWithRubric(prompt, rubric, env, {
+      priorAssistant: raw,
+      followupUser: nudge,
+    });
+    const retryAgent = parseAgentJson(retryRaw);
+    const retryResult = validatePaid47V2(retryAgent, context);
+    await writeQueueTrace(env, contactId, "paid47_v2_regenerate_done", {
+      ok: retryResult.ok,
+      deficiencyCount: retryResult.deficiencies.length,
+    });
+    if (retryResult.ok) return retryAgent;
+    // Second attempt also failed — downgrade on the retry response
+    // (it may still carry a usable v1 shape).
+    return stripPaid47V2Fields(retryAgent);
+  } catch (err) {
+    await writeQueueTrace(env, contactId, "paid47_v2_regenerate_error", {
+      error: String(err?.message || err).slice(0, 300),
+    });
+    return stripPaid47V2Fields(agent);
+  }
+}
+
+// Remove the v2-only top-level fields so buildReportHtml and
+// ResultsScreen fall back to the legacy paid47-v1 renderer paths.
+// gaps[] and opportunities[] are preserved — they're populated under
+// both contracts, just with different shapes.
+function stripPaid47V2Fields(agent) {
+  if (!agent || typeof agent !== "object") return agent;
+  delete agent.reportSchemaVersion;
+  delete agent.tierGuideVersion;
+  delete agent.financialSnapshot;
+  delete agent.connections;
+  delete agent.questionsToClarify;
+  delete agent.decisionOrder;
+  delete agent.coverage;
+  return agent;
+}
+
 async function handleSolomonQueueMessage(message, env) {
   const payload = message.body;
   const attemptNumber = (message.attempt ?? message.attempts ?? 1);
@@ -5749,11 +6129,24 @@ async function handleSolomonQueueMessage(message, env) {
     await writeQueueTrace(env, contactId, "claude_call_start", { tier, promptBytes: prompt.length });
     const claudeStartedAt = Date.now();
     const raw = await callClaudeWithRubric(prompt, rubric, env);
-    const agent = parseAgentJson(raw);
+    let agent = parseAgentJson(raw);
     await writeQueueTrace(env, contactId, "claude_call_done", { tier, elapsedMs: Date.now() - claudeStartedAt, agentPath: agent?.path || null });
 
     if (tier === "free") {
       agent.opportunityFlags = (agent.opportunityFlags || []).filter(f => f !== "DIGITAL_PRESENCE_OPP");
+    }
+
+    // paid47-v2 response quality gate: on a $47 run, the richer
+    // contract (financialSnapshot, connections[], gaps with
+    // evidence/known/unknown, coverage{}) is validated and one
+    // regeneration is attempted when deficiencies are found. If
+    // regeneration still fails, the response is downgraded to the
+    // v1 renderer rather than failing the whole run — the owner
+    // paid $47 and gets *a* report, not a broken page.
+    if (tier === "paid_47") {
+      agent = await runPaid47V2QualityGate({
+        env, contactId, prompt, rubric, raw, agent, factsBundle, derivedMetrics,
+      });
     }
 
     sanitizeStructuredFindings(agent, {
@@ -6326,9 +6719,10 @@ async function handleResetContactTags(request, env) {
 // Like callClaude but accepts an explicit rubric (for the console's override path).
 // When the rubric is the default, cache_control still applies — repeated runs hit the cache.
 async function callClaudeWithRubric(prompt, rubric, env, opts = {}) {
-  // Test-only escape hatch — see callClaude above.
+  // Test-only escape hatch — see callClaude above. The stub receives
+  // the full opts object so tests can observe followup turns too.
   if (typeof env?.__CLAUDE_STUB__ === "function") {
-    return env.__CLAUDE_STUB__(prompt, env, rubric);
+    return env.__CLAUDE_STUB__(prompt, env, rubric, opts);
   }
   const isDefault = rubric === ASSESSMENT_RUBRIC;
   const systemBlock = [
@@ -6352,6 +6746,16 @@ async function callClaudeWithRubric(prompt, rubric, env, opts = {}) {
   // Copilot sub-prompts).
   const maxTokens = opts.maxTokens || 16000;
 
+  // Regeneration path (paid47-v2 quality gate): the caller may supply a
+  // prior assistant response + a follow-up user message so the model
+  // sees its own last attempt and can correct it. Both must be set
+  // together — one without the other is ignored.
+  const messages = [{ role: "user", content: prompt }];
+  if (opts.priorAssistant && opts.followupUser) {
+    messages.push({ role: "assistant", content: String(opts.priorAssistant) });
+    messages.push({ role: "user", content: String(opts.followupUser) });
+  }
+
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -6363,7 +6767,7 @@ async function callClaudeWithRubric(prompt, rubric, env, opts = {}) {
       model: CONFIG.CLAUDE_MODEL,
       max_tokens: maxTokens,
       system: systemBlock,
-      messages: [{ role: "user", content: prompt }],
+      messages,
     }),
   });
   if (!response.ok) {

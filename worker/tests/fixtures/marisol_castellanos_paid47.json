@@ -1,0 +1,119 @@
+{
+  "_note": "Marisol Castellanos golden fixture — the first successful paid_47 Full Diagnostic generation (2026-10-28, contact DeubTUGSn9U9IL4layqU). This fixture captures the agent response shape the paid47-v2 contract targets: three primary gaps anchored to the AR aging + growth supportability + pricing diagnostic (NOT merchant processing, which was previously surfacing as a primary gap on nothing but an opportunity flag). The structural tests in paid47_v2_golden.test.js read this file, so a regression that shifts the primary diagnoses back onto a flag-only basis fails those tests.",
+  "reportSchemaVersion": "paid47-v2",
+  "tierGuideVersion": "paid47-2.0",
+  "path": "needs-attention",
+  "badge": "FULL DIAGNOSTIC",
+  "headline": "Growth is outrunning your cash and visibility discipline.",
+  "opener": "Marisol, you're running a growing business on a thinner cash cushion than it looks. Your A/R aging is drifting older, you're pricing without a formal cost build-up, and most decisions are coming from the bank balance instead of a close.",
+  "context": "Three issues, one financial conversation: the cash you've already earned isn't landing fast enough, your pricing may be leaving margin on the table, and you can't tell either way without a monthly close.",
+  "financialSnapshot": [
+    { "label": "Trailing 12-month revenue", "value": "$420,000", "meaning": "", "sourceType": "customer_answer" },
+    { "label": "Monthly debt service", "value": "$850", "meaning": "$10,200 annualized.", "sourceType": "customer_answer" },
+    { "label": "Annualized debt service", "value": "$10,200", "meaning": "Monthly × 12.", "sourceType": "derived_metric" },
+    { "label": "A/R 30+ days", "value": "$28,000", "meaning": "", "sourceType": "customer_answer" },
+    { "label": "A/R 60+ days", "value": "$9,000", "meaning": "32.1% of overdue A/R is already in 60+.", "sourceType": "customer_answer" },
+    { "label": "60+ A/R as months of debt service", "value": "10.59 months", "meaning": "", "sourceType": "derived_metric" }
+  ],
+  "gaps": [
+    {
+      "id": "ar-aging-drifting-older",
+      "title": "A/R aging is drifting older, not holding steady",
+      "priority": "HIGH",
+      "evidence": [
+        { "type": "derived_metric", "key": "ar_60_plus_months_of_debt_service" },
+        { "type": "derived_metric", "key": "ar_60_plus_share_of_30_plus" }
+      ],
+      "known": "$9,000 of your $28,000 overdue A/R is already 60+ days — about a third of the overdue bucket.",
+      "diagnosis": "Collections are not keeping up with aging; the problem is drifting older, not holding at 30+. At $850/mo in debt service, that 60+ bucket represents 10.6 months of obligations tied up as receivables.",
+      "whyItMatters": "Cash you've already earned is sitting with customers instead of covering debt and payroll.",
+      "unknown": "Which customers hold the 60+ balance and whether any are at genuine collection risk.",
+      "decisionImplication": "Running a 30/60/90 collections sweep before adding another hire will unlock cash you already own.",
+      "relatedFindingIds": ["pricing-not-cost-aligned", "growth-outpacing-visibility"]
+    },
+    {
+      "id": "growth-outpacing-visibility",
+      "title": "Growth is outpacing financial visibility",
+      "priority": "HIGH",
+      "evidence": [
+        { "type": "answer", "key": "financial_decision_basis" },
+        { "type": "answer", "key": "has_documented_budget" }
+      ],
+      "known": "You said decisions are made from bank balance, and you don't have a documented budget.",
+      "diagnosis": "You can see cash in but you can't see cost drift, so scaling adds risk you can't quantify.",
+      "whyItMatters": "The next hire or next piece of equipment lands on top of a cost base you aren't tracking monthly.",
+      "unknown": "What your actual monthly close cadence is and whether any management reporting exists.",
+      "decisionImplication": "Stand up a monthly close before the next headcount decision.",
+      "relatedFindingIds": ["ar-aging-drifting-older", "pricing-not-cost-aligned"]
+    },
+    {
+      "id": "pricing-not-cost-aligned",
+      "title": "Pricing is not anchored to a cost build-up",
+      "priority": "MEDIUM",
+      "evidence": [
+        { "type": "answer", "key": "financial_decision_basis" }
+      ],
+      "known": "Pricing was set without a formal cost build-up and hasn't been reviewed against current costs.",
+      "diagnosis": "Each new job carries unknown margin — some may be unprofitable at today's cost base.",
+      "whyItMatters": "Volume growth on thin or negative margin makes the cash problem worse, not better.",
+      "unknown": "True gross margin by service line.",
+      "decisionImplication": "Rebuild one or two highest-volume prices from cost up before adding volume.",
+      "relatedFindingIds": ["growth-outpacing-visibility"]
+    }
+  ],
+  "opportunities": [
+    {
+      "id": "tighten-collections-cycle",
+      "title": "Tighten the collections cycle",
+      "evidence": [
+        { "type": "derived_metric", "key": "ar_60_plus_months_of_debt_service" }
+      ],
+      "whyCredible": "$9,000 of overdue A/R is already past 60 days — a measured problem, not a hunch.",
+      "economicMechanism": "cash timing",
+      "whatMustBeTrue": "You have the staff capacity to run structured 30/60/90 outreach.",
+      "nextValidation": "One week of logged outreach + outcome counts."
+    },
+    {
+      "id": "cost-based-pricing-review",
+      "title": "Rebuild pricing from cost up on top-volume lines",
+      "evidence": [
+        { "type": "answer", "key": "financial_decision_basis" }
+      ],
+      "whyCredible": "You said pricing has not been reviewed against cost; that gap is a direct margin lever.",
+      "economicMechanism": "margin protection",
+      "whatMustBeTrue": "You can isolate a top-two service line that drives most of the revenue.",
+      "nextValidation": "One cost build-up compared to current price for that line."
+    }
+  ],
+  "connections": [
+    {
+      "title": "Collections drag + pricing drift + weak visibility are one problem",
+      "findingIds": ["ar-aging-drifting-older", "pricing-not-cost-aligned", "growth-outpacing-visibility"],
+      "explanation": "You're growing on cash you haven't collected, at prices you haven't verified, without a monthly close that would surface either issue in time to course-correct."
+    }
+  ],
+  "questionsToClarify": [
+    { "question": "Which customers hold the 60+ A/R balance and are any at genuine collection risk?", "whyItMatters": "Changes whether the fix is outreach cadence or write-down policy." },
+    { "question": "What is your actual monthly close cadence today?", "whyItMatters": "Decides whether the first move is a close or a full financial-visibility rebuild." },
+    { "question": "What are your top two service lines by revenue?", "whyItMatters": "Scopes the cost-based pricing rebuild to a tractable surface area." }
+  ],
+  "decisionOrder": [
+    { "step": 1, "action": "Run a 30/60/90 A/R collections sweep this week.", "whyNow": "You already earned this cash; nothing is faster than collecting it." },
+    { "step": 2, "action": "Stand up a monthly close.", "whyNow": "Everything downstream depends on seeing the P&L monthly." },
+    { "step": 3, "action": "Rebuild pricing on top-two service lines from cost up.", "whyNow": "Protects margin as volume grows." }
+  ],
+  "coverage": {
+    "gapsRequested": 3,
+    "gapsReturned": 3,
+    "gapsShortfallReason": null,
+    "opportunitiesRequested": 2,
+    "opportunitiesReturned": 2,
+    "opportunitiesShortfallReason": null,
+    "connectionStatus": "identified",
+    "noConnectionReason": null
+  },
+  "nextStepHeadline": "Book your included 30-minute strategist review.",
+  "nextStepBody": "Miguel will walk through these three findings, press on the two open questions above, and help you pick the first move. The strategist review is included with the Full Diagnostic — book the time that works.",
+  "opportunityFlags": ["MERCHANT_PROCESSING_OPP"],
+  "strategistBrief": "Marisol scored needs-attention. Three primary gaps anchored to A/R aging (deterministic ratio), growth-visibility (bank-balance decision basis + no budget), and pricing-cost alignment. Merchant processing is a flag but not a primary diagnostic — do NOT lead the call there. Top probe: what the actual close cadence is, which 60+ customers are at risk, and the top-two service lines by revenue."
+}
