@@ -45,6 +45,18 @@ const PATH_STYLE: Record<string, { score: string; badge: string }> = {
 export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: ResultsScreenProps) => {
   const location = useLocation();
   const isBeta = location.pathname.startsWith("/beta");
+
+  // paid47-v2 detection — enriched sections (Financial Snapshot,
+  // Connections, Order of Attention, Questions to Clarify) and the
+  // v2 gap/opportunity shape only render when both version tags
+  // match verbatim. A $47 report that didn't make it through the
+  // quality gate was downgraded on the Worker (version tags stripped)
+  // and falls back to the legacy v1 render path.
+  const isPaid47V2 = Boolean(
+    report?.tier === "paid_47" &&
+      report?.reportSchemaVersion === "paid47-v2" &&
+      report?.tierGuideVersion === "paid47-2.0",
+  );
   const [couponCode, setCouponCode] = useState("");
   const [couponStatus, setCouponStatus] = useState<"idle" | "invalid" | "applying" | "applied">("idle");
   // Surfaces the real reason a coupon apply failed (rate limit, origin block,
@@ -326,27 +338,115 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
         />
       </div>
 
+      {/* paid47-v2 Financial Snapshot — only on $47 reports whose
+          version tags match the enriched contract. v1 reports and the
+          free tier skip this section entirely so the renderer parity
+          with the Worker's /report page stays clean. */}
+      {isPaid47V2 && Array.isArray(report.financialSnapshot) && report.financialSnapshot.length > 0 && (
+        <div className="space-y-6 py-12 border-t border-white/5">
+          <h3 className="font-display text-3xl font-bold text-center">Financial Snapshot</h3>
+          <Card className="glass-card border-white/5 divide-y divide-white/5">
+            {report.financialSnapshot!.map((row, i) => (
+              <div key={i} className="p-4 flex items-center justify-between gap-6">
+                <div className="min-w-0">
+                  <div className="font-medium text-foreground">{row.label}</div>
+                  {row.meaning && <div className="text-sm text-muted-foreground italic mt-1">{row.meaning}</div>}
+                </div>
+                <div className="font-display text-lg font-bold text-primary whitespace-nowrap">{row.value}</div>
+              </div>
+            ))}
+          </Card>
+        </div>
+      )}
+
       {/* Gaps Section — generic alarm language removed; the per-card
           severity/priority already communicates how serious each item is.
-          Severity is not tone (brand rule). */}
+          Severity is not tone (brand rule). v2 gaps have no legacy
+          `impact` field; the renderer joins the enriched prose fields
+          so the existing GapCard keeps its single-line layout. */}
       <div className="space-y-8 py-12 border-t border-white/5">
         <h3 className="font-display text-3xl font-bold text-center">What Deserves Your Attention</h3>
         <div className="grid gap-4">
-          {report.gaps.map((gap, i) => (
-            <GapCard key={i} title={gap.title} impact={gap.impact} priority={gap.priority} />
-          ))}
+          {report.gaps.map((gap: any, i) => {
+            const impact = isPaid47V2
+              ? [gap.known, gap.whyItMatters, gap.decisionImplication].filter(Boolean).join(" · ")
+              : gap.impact;
+            return <GapCard key={i} title={gap.title} impact={impact || ""} priority={gap.priority} />;
+          })}
         </div>
       </div>
 
-      {/* Opportunities Section */}
+      {/* Opportunities Section — v2 opportunities carry
+          whyCredible/whatMustBeTrue/nextValidation; join them for the
+          card's prose line and use the economicMechanism as the badge. */}
       <div className="space-y-8 py-12 border-t border-white/5">
         <h3 className="font-display text-3xl font-bold text-center">YOUR HIGHEST-IMPACT OPPORTUNITIES</h3>
         <div className="grid md:grid-cols-2 gap-6">
-          {report.opportunities.map((opp, i) => (
-            <OpportunityCard key={i} title={opp.title} desc={opp.desc} impact={opp.impact} />
-          ))}
+          {report.opportunities.map((opp: any, i) => {
+            const desc = isPaid47V2
+              ? [opp.whyCredible, opp.whatMustBeTrue && `Must be true: ${opp.whatMustBeTrue}`, opp.nextValidation && `Next: ${opp.nextValidation}`].filter(Boolean).join(" · ")
+              : opp.desc;
+            const impact = isPaid47V2 ? (opp.economicMechanism || "").toUpperCase() : opp.impact;
+            return <OpportunityCard key={i} title={opp.title} desc={desc || ""} impact={impact || ""} />;
+          })}
         </div>
       </div>
+
+      {/* paid47-v2 Connections — cross-finding synthesis. Keyed by
+          finding ids on the Worker side; here we just render the
+          strategist's prose explanation. */}
+      {isPaid47V2 && Array.isArray(report.connections) && report.connections.length > 0 && (
+        <div className="space-y-6 py-12 border-t border-white/5">
+          <h3 className="font-display text-3xl font-bold text-center">How These Findings Interact</h3>
+          <div className="grid gap-4">
+            {report.connections!.map((c, i) => (
+              <Card key={i} className="p-6 glass-card border-white/5">
+                <h4 className="font-display text-lg font-bold mb-2">{c.title}</h4>
+                <p className="text-muted-foreground leading-relaxed">{c.explanation}</p>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* paid47-v2 Decision Order — the strategist's recommended first
+          moves. Shown as a numbered action list; the step order is
+          grounded in immediacy, consequence, and dependency. */}
+      {isPaid47V2 && Array.isArray(report.decisionOrder) && report.decisionOrder.length > 0 && (
+        <div className="space-y-6 py-12 border-t border-white/5">
+          <h3 className="font-display text-3xl font-bold text-center">Order of Attention</h3>
+          <div className="grid gap-3">
+            {report.decisionOrder!.map((d, i) => (
+              <Card key={i} className="p-5 glass-card border-white/5 flex items-start gap-4">
+                <div className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center font-display font-bold shrink-0">
+                  {d.step}
+                </div>
+                <div>
+                  <div className="font-medium text-foreground">{d.action}</div>
+                  {d.whyNow && <div className="text-sm text-muted-foreground italic mt-1">{d.whyNow}</div>}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* paid47-v2 Questions to Clarify — what to open the included
+          30-minute strategist review with. Not generic discovery
+          questions; the gate rejects those. */}
+      {isPaid47V2 && Array.isArray(report.questionsToClarify) && report.questionsToClarify.length > 0 && (
+        <div className="space-y-6 py-12 border-t border-white/5">
+          <h3 className="font-display text-3xl font-bold text-center">Questions to Clarify With the Strategist</h3>
+          <div className="grid gap-3">
+            {report.questionsToClarify!.map((q, i) => (
+              <Card key={i} className="p-5 glass-card border-white/5">
+                <div className="font-medium text-foreground">{q.question}</div>
+                {q.whyItMatters && <div className="text-sm text-muted-foreground italic mt-1">{q.whyItMatters}</div>}
+              </Card>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* What You Get Section — components sold plainly, no invented
           dollar values. The old "$150 / $197 / $39 / $59 / was $484"

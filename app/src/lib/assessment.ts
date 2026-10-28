@@ -3,6 +3,7 @@ const WORKER_URL = "https://swot-engine.cfobydesign.workers.dev";
 
 export type AssessmentTier = "free" | "paid_47" | "paid_297";
 
+// --- Legacy paid47-v1 shapes (free tier still uses these too) --------------
 export interface AgentGap {
   title: string;
   impact: string;
@@ -13,6 +14,87 @@ export interface AgentOpportunity {
   desc: string;
   impact: string;
 }
+
+// --- paid47-v2 enriched shapes (optional; absent on v1 reports) ------------
+//
+// All fields on these shapes are optional from the application's
+// perspective: an old paid47-v1 report (or any free-tier report) must
+// still render under the enriched renderer without hitting undefined
+// property reads. The renderer branches on `reportSchemaVersion` to
+// decide whether to show enriched sections at all.
+//
+// `relatedFindingIds` on AgentGap + top-level `connections[]` carrying
+// `findingIds` + `explanation` is the ID-based cross-finding model (gaps
+// stay single-purpose; synthesis lives in `connections[]`), chosen over
+// duplicating narrative in both places.
+//
+// `evidence[].type` is the deterministic provenance the quality gate
+// inspects: a primary gap whose only evidence is `opportunity_flag` is
+// rejected (that was the merchant-processing bug on Marisol's run).
+
+export interface AgentEvidenceRef {
+  type: "answer" | "derived_metric" | "opportunity_flag" | "deterministic_fact";
+  key: string;
+}
+export interface AgentGapV2 {
+  id: string;
+  title: string;
+  priority: "CRITICAL" | "HIGH" | "MEDIUM" | string;
+  evidence?: AgentEvidenceRef[];
+  known?: string;
+  diagnosis?: string;        // internal; renderer may suppress
+  whyItMatters?: string;
+  unknown?: string;
+  decisionImplication?: string;
+  relatedFindingIds?: string[];
+  // Legacy v1 fields the renderer still falls back to if an enriched
+  // gap arrives without the richer prose fields. One intentional overlap
+  // so a gap can be rendered under either path without a shape pivot.
+  impact?: string;
+}
+export interface AgentOpportunityV2 {
+  id?: string;
+  title: string;
+  evidence?: AgentEvidenceRef[];
+  whyCredible?: string;
+  economicMechanism?: string;
+  whatMustBeTrue?: string;
+  nextValidation?: string;
+  // Legacy fallbacks:
+  desc?: string;
+  impact?: string;
+}
+export interface AgentFinancialSnapshotRow {
+  label: string;
+  value: string;
+  meaning?: string;
+  sourceType?: "customer_answer" | "deterministic_fact" | "derived_metric";
+}
+export interface AgentConnection {
+  title: string;
+  findingIds?: string[];
+  explanation: string;
+}
+export interface AgentQuestionToClarify {
+  question: string;
+  whyItMatters?: string;
+}
+export interface AgentDecisionStep {
+  step: number;
+  action: string;
+  whyNow?: string;
+}
+export interface AgentCoverage {
+  gapsRequested?: number;
+  gapsReturned?: number;
+  gapsShortfallReason?: string | null;
+  opportunitiesRequested?: number;
+  opportunitiesReturned?: number;
+  opportunitiesShortfallReason?: string | null;
+  connectionStatus?: "identified" | "no_material_connection_supported" | string;
+  noConnectionReason?: string | null;
+}
+
 export interface AgentReport {
   success: boolean;
   tier: string;
@@ -27,12 +109,26 @@ export interface AgentReport {
   headline: string;
   opener: string;
   context: string;
-  gaps: AgentGap[];
-  opportunities: AgentOpportunity[];
+  // Pre-upgrade shape (free + legacy paid47-v1).
+  gaps: AgentGap[] | AgentGapV2[];
+  opportunities: AgentOpportunity[] | AgentOpportunityV2[];
   nextStepHeadline: string;
   nextStepBody: string;
   opportunityFlags: string[];
   bookingLink: string | null;
+
+  // --- paid47-v2 additions (all optional; absent on free + v1) -----------
+  // Version tags present only on reports generated under the enriched
+  // contract. Renderers check `reportSchemaVersion === "paid47-v2"`
+  // before showing the enriched sections.
+  reportSchemaVersion?: string;        // e.g. "paid47-v2"
+  tierGuideVersion?: string;           // e.g. "paid47-2.0"
+
+  financialSnapshot?: AgentFinancialSnapshotRow[];
+  connections?: AgentConnection[];
+  questionsToClarify?: AgentQuestionToClarify[];
+  decisionOrder?: AgentDecisionStep[];
+  coverage?: AgentCoverage;
 }
 
 /** Helper to convert any raw answer value into a human-readable string using question options */

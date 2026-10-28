@@ -239,27 +239,46 @@ describe("Rubric v3 — TIER_GUIDE content", () => {
     assert.equal(INTAKE_MIN_ANSWERS.free, 11);
   });
 
-  it("paid_47 carries the approved customer-directive block (2026-10-17 round-6 directive)", () => {
-    // Section headers from the approved rewrite — PURPOSE / DIAGNOSTIC
-    // OUTPUT / PRIORITY ORDER / SYNTHESIS / FINANCIAL IMPACT /
-    // OPPORTUNITIES / FINANCIAL VISIBILITY / DEBT / UNRESOLVED QUESTIONS
-    // / FULL DIAGNOSTIC BOUNDARY / NEXT STEP / VOICE.
+  it("paid_47 carries the paid47-v2 contract block (tierGuideVersion paid47-2.0)", () => {
+    // Section headers from the paid47-v2 rewrite — PURPOSE / VERSION
+    // TAGS / OUTPUT CONTRACT / EVIDENCE RULES / PRIORITY ORDER /
+    // SYNTHESIS / FINANCIAL IMPACT / FINANCIAL VISIBILITY / DEBT /
+    // FULL DIAGNOSTIC BOUNDARY / NEXT STEP / VOICE.
     assert.match(TIER_GUIDE.paid_47, /\$47 FULL DIAGNOSTIC/);
+    assert.match(TIER_GUIDE.paid_47, /tierGuideVersion:\s*paid47-2\.0/);
     assert.match(TIER_GUIDE.paid_47, /^PURPOSE$/m);
-    assert.match(TIER_GUIDE.paid_47, /^DIAGNOSTIC OUTPUT$/m);
+    assert.match(TIER_GUIDE.paid_47, /^VERSION TAGS \(MANDATORY\)$/m);
+    assert.match(TIER_GUIDE.paid_47, /^OUTPUT CONTRACT$/m);
+    assert.match(TIER_GUIDE.paid_47, /^EVIDENCE RULES$/m);
     assert.match(TIER_GUIDE.paid_47, /^PRIORITY ORDER$/m);
     assert.match(TIER_GUIDE.paid_47, /^SYNTHESIS$/m);
     assert.match(TIER_GUIDE.paid_47, /^FINANCIAL IMPACT$/m);
-    assert.match(TIER_GUIDE.paid_47, /^OPPORTUNITIES$/m);
     assert.match(TIER_GUIDE.paid_47, /^FINANCIAL VISIBILITY$/m);
     assert.match(TIER_GUIDE.paid_47, /^DEBT$/m);
-    assert.match(TIER_GUIDE.paid_47, /^UNRESOLVED QUESTIONS$/m);
     assert.match(TIER_GUIDE.paid_47, /^FULL DIAGNOSTIC BOUNDARY$/m);
     assert.match(TIER_GUIDE.paid_47, /^NEXT STEP$/m);
     assert.match(TIER_GUIDE.paid_47, /^VOICE$/m);
 
+    // v2 schema + guide version tags locked in verbatim — the response
+    // quality gate matches these exact strings.
+    assert.match(TIER_GUIDE.paid_47, /reportSchemaVersion:\s*"paid47-v2"/);
+    assert.match(TIER_GUIDE.paid_47, /tierGuideVersion:\s*"paid47-2\.0"/);
+
+    // v2 output shape — the enriched sections every $47 run must emit.
+    assert.match(TIER_GUIDE.paid_47, /financialSnapshot/);
+    assert.match(TIER_GUIDE.paid_47, /relatedFindingIds/);
+    assert.match(TIER_GUIDE.paid_47, /connections\[\]/);
+    assert.match(TIER_GUIDE.paid_47, /questionsToClarify/);
+    assert.match(TIER_GUIDE.paid_47, /decisionOrder/);
+    assert.match(TIER_GUIDE.paid_47, /coverage\{\}/);
+
+    // Marisol discipline: a primary gap grounded only in an
+    // opportunity flag is rejected.
+    assert.match(TIER_GUIDE.paid_47, /primary gap whose ONLY evidence is of type\s+"opportunity_flag" is rejected/);
+    assert.match(TIER_GUIDE.paid_47, /merchant-processing flag\s+is a hint toward an opportunity, not a primary diagnostic/);
+
     // Core promises the block locks in:
-    assert.match(TIER_GUIDE.paid_47, /Do not manufacture a third gap or second opportunity simply to fill the\s+requested count/);
+    assert.match(TIER_GUIDE.paid_47, /Do not manufacture a third gap simply to hit the count/);
     assert.match(TIER_GUIDE.paid_47, /Severity and priority order are different/);
     assert.match(TIER_GUIDE.paid_47, /Do not analyze each answer in isolation/);
     assert.match(TIER_GUIDE.paid_47, /Do not invent ROI/);
@@ -267,11 +286,11 @@ describe("Rubric v3 — TIER_GUIDE content", () => {
     // The included 30-min strategist review is the primary next step —
     // NOT the BGA purchase CTA.
     assert.match(TIER_GUIDE.paid_47, /INCLUDED\s+30-minute CFO By Design strategist review/);
-    assert.match(TIER_GUIDE.paid_47, /Do not make the Business Growth Analysis purchase the primary CTA inside\s+the Full Diagnostic report/);
+    assert.match(TIER_GUIDE.paid_47, /Do not make the Business Growth Analysis purchase the primary CTA\s+inside the Full Diagnostic report/);
     // Full Diagnostic boundary — not the BGA, not a 90-day plan, not
     // CFO fractional-service recommendations.
     assert.match(TIER_GUIDE.paid_47, /not the Business Growth Analysis/);
-    assert.match(TIER_GUIDE.paid_47, /not a complete implementation\s+roadmap/);
+    assert.match(TIER_GUIDE.paid_47, /not a complete\s+implementation roadmap/);
     assert.match(TIER_GUIDE.paid_47, /pretend verified financial documents were reviewed when they were not/);
     assert.match(TIER_GUIDE.paid_47, /growth, needs-attention, or rehab/);
 
