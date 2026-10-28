@@ -6833,21 +6833,54 @@ export default {
         const traceCid = diagTraceMatch[1];
         if (!env.SOLOMON_LIBRARY) return json({ error: "SOLOMON_LIBRARY not bound" }, 500);
         const prefix = `queue_traces/${traceCid}/`;
-        const list = await env.SOLOMON_LIBRARY.list({ prefix, limit: 500 }).catch((err) => ({ _err: err }));
-        if (list?._err) return json({ error: `list failed: ${String(list._err.message || list._err).slice(0,200)}` }, 500);
-        const objects = list.objects || [];
-        objects.sort((a, b) => String(a.key).localeCompare(String(b.key)));
+        // Pagination (Codex P2 on #157). ISO-timestamp keys sort oldest-
+        // first lexicographically, so a bare list({limit:500}) returns
+        // the OLDEST 500 and silently hides newer traces once a contact
+        // accumulates past that cap — operators debugging the current
+        // failure would see stale old runs. Walk the cursor until R2
+        // stops reporting truncated=true (sanity cap at 10000 to bound
+        // the scan on any pathological contact), then sort newest-first
+        // and return `?limit=N` of them (default 100). The response
+        // reports both the fetched count and whether the full key space
+        // for this contact was walked so operators know if the picture
+        // is complete.
+        const latestLimit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit")) || 100));
+        const allKeys = [];
+        let cursor = undefined;
+        let walked = false;
+        let listErr = null;
+        for (let i = 0; i < 20; i++) { // 20 * 500 = 10000-key sanity cap
+          const page = await env.SOLOMON_LIBRARY.list({ prefix, limit: 500, cursor }).catch((err) => ({ _err: err }));
+          if (page?._err) { listErr = String(page._err.message || page._err).slice(0, 200); break; }
+          for (const obj of page.objects || []) allKeys.push(obj.key);
+          if (!page.truncated || !page.cursor) { walked = true; break; }
+          cursor = page.cursor;
+        }
+        if (listErr) return json({ error: `list failed: ${listErr}` }, 500);
+        // Newest-first — timestamps embedded in the key, so lexicographic
+        // descending IS chronological descending. Then take the top N so
+        // operators always see the latest N trace lines, never a stale
+        // first page.
+        allKeys.sort((a, b) => String(b).localeCompare(String(a)));
+        const picked = allKeys.slice(0, latestLimit);
+        // Re-sort the picked window ascending so the response reads
+        // oldest-first inside the window (the shape operators expect
+        // when following a run through its stages).
+        picked.sort((a, b) => String(a).localeCompare(String(b)));
         const traces = [];
-        for (const obj of objects) {
-          const body = await env.SOLOMON_LIBRARY.get(obj.key).catch(() => null);
+        for (const key of picked) {
+          const body = await env.SOLOMON_LIBRARY.get(key).catch(() => null);
           if (!body) continue;
           const text = await body.text().catch(() => null);
           if (!text) continue;
-          try { traces.push(JSON.parse(text)); } catch { traces.push({ raw: text.slice(0, 200), key: obj.key }); }
+          try { traces.push(JSON.parse(text)); } catch { traces.push({ raw: text.slice(0, 200), key }); }
         }
         return json({
           contactId: traceCid,
+          totalKeys: allKeys.length,
+          walkedFully: walked,
           traceCount: traces.length,
+          limit: latestLimit,
           traces,
         });
       }
