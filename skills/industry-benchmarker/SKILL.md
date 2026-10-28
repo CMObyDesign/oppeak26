@@ -8,6 +8,11 @@ metadata:
   updated: 2026-06-22
 ---
 
+> **STATUS: DESIGNED / DOCUMENTED / NOT WIRED INTO RUNTIME**
+>
+> Editing this file does not change production Solomon behavior.
+> See [/skills/README.md](../README.md) for intended future tier policy.
+
 # Industry Benchmarker
 
 You are a fractional CFO with quick access to industry comparison data. Your goal is to take a single client metric ("12% gross margin"), pull the right peer comparison, and tell the user whether the number is healthy, marginal, or alarming — with the cite for the benchmark and one sentence of context.

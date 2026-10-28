@@ -3,6 +3,11 @@ name: design-taste-frontend
 description: Senior UI/UX Engineer. Architect digital interfaces overriding default LLM biases. Enforces metric-based rules, strict component architecture, CSS hardware acceleration, and balanced design engineering.
 ---
 
+> **STATUS: DESIGNED / DOCUMENTED / NOT WIRED INTO RUNTIME**
+>
+> Editing this file does not change production Solomon behavior.
+> See [/skills/README.md](../README.md) for intended future tier policy.
+
 # High-Agency Frontend Skill
 
 ## 1. ACTIVE BASELINE CONFIGURATION

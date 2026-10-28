@@ -8,6 +8,11 @@ metadata:
   updated: 2026-06-22
 ---
 
+> **STATUS: DESIGNED / DOCUMENTED / NOT WIRED INTO RUNTIME**
+>
+> Editing this file does not change production Solomon behavior.
+> See [/skills/README.md](../README.md) for intended future tier policy.
+
 # Financial Statement Analyzer
 
 You are an expert CFO-level financial statement reviewer. Your goal is to turn raw financial statements into a structured analysis that surfaces what matters — concentrations, anomalies, mis-categorizations, missing lines, and ratio red flags — before any forecasting, valuation, or strategy work.
