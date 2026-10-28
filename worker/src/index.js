@@ -5471,137 +5471,195 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
 
   // Idempotency: skip if we already ran for this contact+tier moments ago
   // (double-submit or a GHL webhook retry) — avoids a duplicate report + email.
-  const idem = await reserveIdempotency(`${contact.id}_${tier}`, env);
+  //
+  // Replay escape hatch (2026-10-28): when a prior run was cancelled by
+  // the client-disconnect timeout (the pre-async-split failure mode) or
+  // crashed mid-run, the idempotency reservation stays live for 3
+  // minutes with no completion marker. Every retry within that window
+  // short-circuits with {deduped: true} and never generates the report
+  // — Liz hit this when resending the webhook from the HL workflow
+  // after the first run timed out. Pass `replay: true` in the body
+  // (or `?replay=1` on the URL) to force a fresh run, releasing the
+  // stale reservation first. HL's "Re-execute" step can be configured
+  // to carry this flag so a manual re-run always clears the guard.
+  const replayRequested = body?.replay === true
+    || body?.force === true
+    || requestUrl.searchParams.get("replay") === "1"
+    || requestUrl.searchParams.get("force") === "1";
+  const idemKey = `${contact.id}_${tier}`;
+  if (replayRequested) {
+    const staleIdemPath = `idem/${encodeURIComponent(idemKey)}.json`;
+    await releaseIdempotency(staleIdemPath, env).catch(() => {});
+    console.warn(`[from-ghl-survey] replay flag set — cleared idempotency for ${idemKey}`);
+  }
+  const idem = await reserveIdempotency(idemKey, env);
   if (idem.duplicate) {
-    return json({ success: true, deduped: true, contactId: contact.id, tier });
-  }
-
-  let agent;
-  const startedAt = Date.now();
-  try {
-    const raw = await callClaudeWithRubric(prompt, rubric, env);
-    agent = parseAgentJson(raw);
-  } catch (err) {
-    await releaseIdempotency(idem.path, env); // failed — let a retry through
-    return json({ success: false, error: "Solomon error: " + err.message }, 500);
-  }
-  const elapsedMs = Date.now() - startedAt;
-
-  if (tier === "free") {
-    agent.opportunityFlags = (agent.opportunityFlags || []).filter(f => f !== "DIGITAL_PRESENCE_OPP");
-  }
-
-  // Phase 2C: validate structured findings against the deterministic
-  // facts + derived metrics. Any finding that cites a field that isn't
-  // in the normalized intake, or a metric that wasn't computed by
-  // deriveMetrics(), is REJECTED here — before it reaches the stored
-  // diagnostic_json or the HTML renderer. Invalid findings are logged
-  // (reasons included) and stripped. The prose arrays (gaps,
-  // opportunities) are untouched; this layer only polices the
-  // structured_findings addition.
-  sanitizeStructuredFindings(agent, {
-    normalized: factsBundle?.facts || flatNormalized(normalizedAnswers || []),
-    derivedMetrics: derivedMetrics || [],
-  }, `handleGHLSurveyWebhook contact ${contact.id}`);
-
-  const reportHtml = buildReportHtml(agent);
-
-  // Canonical write (Phase 1b). Runs synchronously BEFORE the GHL
-  // writeback so the stored record exists before anyone reads from
-  // HighLevel. Returns a shape describing success / skipped / failure;
-  // the response includes it so callers can trace which record this
-  // generation produced. Dry runs, missing D1 binding, and duplicate
-  // source_event_id all surface as `skipped` with a reason.
-
-  const canonical = await writeCanonicalRecord(env, {
-    contact: { id: contactId, ...contact },
-    tier,
-    answers,
-    agent,
-    reportHtml,
-    sourceEventId: body?.event_id || body?.webhook_id || body?.source_event_id || null,
-    dryRun,
-    normalizedAnswers,
-    derivedMetrics,
-  });
-  if (canonical?.skipped && canonical.reason === "duplicate_submission") {
-    // The GHL retry carried the same source_event_id and D1 saw it
-    // first. Return early — do not run the GHL writeback a second time
-    // (that would duplicate the delivery email on paid tiers).
     return json({
       success: true,
       deduped: true,
-      source_event_id: canonical.source_event_id,
-      contactId,
+      contactId: contact.id,
       tier,
+      hint: "A prior run reserved this contact+tier within the last 3 minutes. If that run was cancelled mid-execution (client timeout, worker crash), pass `replay: true` in the body to force a fresh generation.",
     });
   }
 
-  const reportFieldKey =
+  // ────────────────────────────────────────────────────────────────────
+  // ASYNC SPLIT (2026-10-28 fix for paid_47 Full Diagnostic timing out).
+  //
+  // HighLevel's "Custom Webhook" workflow action has a HARD 60-second
+  // response timeout. If the webhook endpoint doesn't send a response
+  // within 60s HL marks the action FAILED and closes the connection —
+  // which on Cloudflare Workers cancels the still-running request.
+  //
+  // Solomon's paid_47 and paid_297 generations routinely take 60-180s
+  // (Claude call + the full rubric). Before this split, the sequence
+  // was: HL POST → worker starts Claude call → 60s elapses → HL times
+  // out and disconnects → worker's request is cancelled → nothing is
+  // written to the contact → the Reveal page polls /status forever.
+  // Liz's 2026-10-28 test confirmed this with the HL workflow history
+  // ("Custom Webhook Action error: Response timed out ... 60 seconds").
+  //
+  // Fix: every gate above this point runs synchronously (auth, tier,
+  // completeness, normalization, idempotency) so a bad request still
+  // gets a meaningful HTTP error. Below this point — Claude call,
+  // canonical write, GHL writeback, lifecycle tags, tracking event —
+  // runs inside ctx.waitUntil(). The handler returns 202 Accepted
+  // right away, HL sees a fast success, and the actual generation
+  // keeps running on the Cloudflare worker past the client disconnect.
+  // The Reveal page's /status poll picks up the writeback whenever
+  // Solomon finishes, same as before.
+  //
+  // Error handling in the async path: any failure releases the
+  // idempotency reservation so a retry (manual re-POST, or GHL
+  // workflow retry) is allowed through. Errors are logged for
+  // Cloudflare log inspection but cannot be returned to HL because
+  // the response is already gone.
+  // ────────────────────────────────────────────────────────────────────
+
+  const runAsync = async () => {
+    try {
+      let agent;
+      try {
+        const raw = await callClaudeWithRubric(prompt, rubric, env);
+        agent = parseAgentJson(raw);
+      } catch (err) {
+        await releaseIdempotency(idem.path, env);
+        console.error(`[from-ghl-survey:async] Solomon error for contact ${contactId} tier ${tier}:`, err?.message || err);
+        return;
+      }
+
+      if (tier === "free") {
+        agent.opportunityFlags = (agent.opportunityFlags || []).filter(f => f !== "DIGITAL_PRESENCE_OPP");
+      }
+
+      // Phase 2C: validate structured findings against the deterministic
+      // facts + derived metrics. Any finding that cites a field that isn't
+      // in the normalized intake, or a metric that wasn't computed by
+      // deriveMetrics(), is REJECTED here — before it reaches the stored
+      // diagnostic_json or the HTML renderer. Invalid findings are logged
+      // (reasons included) and stripped. The prose arrays (gaps,
+      // opportunities) are untouched; this layer only polices the
+      // structured_findings addition.
+      sanitizeStructuredFindings(agent, {
+        normalized: factsBundle?.facts || flatNormalized(normalizedAnswers || []),
+        derivedMetrics: derivedMetrics || [],
+      }, `handleGHLSurveyWebhook contact ${contact.id}`);
+
+      const reportHtml = buildReportHtml(agent);
+
+      // Canonical write (Phase 1b). Runs before the GHL writeback so the
+      // stored record exists before anyone reads from HighLevel. Dry runs,
+      // missing D1 binding, and duplicate source_event_id all surface as
+      // `skipped` with a reason. On duplicate_submission we early-return
+      // so a GHL retry doesn't duplicate the delivery email.
+      const canonical = await writeCanonicalRecord(env, {
+        contact: { id: contactId, ...contact },
+        tier,
+        answers,
+        agent,
+        reportHtml,
+        sourceEventId: body?.event_id || body?.webhook_id || body?.source_event_id || null,
+        dryRun,
+        normalizedAnswers,
+        derivedMetrics,
+      });
+      if (canonical?.skipped && canonical.reason === "duplicate_submission") {
+        return;
+      }
+
+      await finalizeSurveyWriteback({
+        env, ctx, requestUrl,
+        contactId, contact, tier, answers, agent, reportHtml,
+        canonical, dryRun,
+      });
+    } catch (err) {
+      // Catch-all: anything the inner try blocks missed (sanitize
+      // throwing, writeCanonicalRecord throwing, finalize throwing).
+      // Release idempotency so a retry can succeed.
+      await releaseIdempotency(idem.path, env).catch(() => {});
+      console.error(`[from-ghl-survey:async] unexpected error for contact ${contactId} tier ${tier}:`, err?.message || err);
+    }
+  };
+
+  ctx.waitUntil(runAsync());
+
+  return json({
+    success: true,
+    accepted: true,
+    async: true,
+    contactId,
+    tier,
+    note: "Solomon generation + report writeback running asynchronously (ctx.waitUntil). HL should move on; the Reveal page's /status poll will surface the report once Solomon finishes.",
+  }, 202);
+}
+
+// Finalize the GHL writeback + lifecycle tags + tracking event for a
+// generated report. Extracted so the async split in handleGHLSurveyWebhook
+// has a single call site after Claude finishes. The behavior here is
+// unchanged from before the async refactor — same field writes, same
+// tag chaining, same tracking event, all still fanned out via
+// ctx.waitUntil for parallelism inside the parent waitUntil.
+async function finalizeSurveyWriteback({
+  env, ctx, requestUrl,
+  contactId, contact, tier, answers, agent, reportHtml,
+  canonical, dryRun,
+}) {
+  const reportFieldKey_fn =
     tier === "paid_297" ? "business_playbook"
     : tier === "paid_47" ? "swot_full_report"
     : "swot_free_report";
 
-  const fields = [
+  const fields_fn = [
     { key: "swot_path", field_value: String(agent.path || "") },
     { key: "swot_rehab_flag", field_value: agent.path === "rehab" ? "true" : "false" },
-    { key: reportFieldKey, field_value: reportHtml },
+    { key: reportFieldKey_fn, field_value: reportHtml },
   ];
-  if (agent.opener) fields.push({ key: "swot_email_blurb", field_value: String(agent.opener) });
-  if (agent.strategistBrief) fields.push({ key: "swot_strategist_brief", field_value: String(agent.strategistBrief) });
-  fields.push({ key: "swot_report_path", field_value: `${requestUrl.origin}/report/${contactId}` });
-  if (tier === "paid_297") fields.push({ key: "swot_deep_dive_booked", field_value: "true" });
+  if (agent.opener) fields_fn.push({ key: "swot_email_blurb", field_value: String(agent.opener) });
+  if (agent.strategistBrief) fields_fn.push({ key: "swot_strategist_brief", field_value: String(agent.strategistBrief) });
+  fields_fn.push({ key: "swot_report_path", field_value: `${requestUrl.origin}/report/${contactId}` });
+  if (tier === "paid_297") fields_fn.push({ key: "swot_deep_dive_booked", field_value: "true" });
 
-  // Tag policy per tier:
-  //   free      — write swot_free_lead + report-ready tag (email fires).
-  //   paid_47   — write swot_paid_47 + report-ready tag. Payment cleared
-  //               upstream; report gets delivered.
-  //   paid_297  — sell-first flow. Two shapes:
-  //     (a) fresh: no swot_paid_297 yet. Apply swot_paid_297_pending on
-  //         submit. On successful writeback ALSO apply swot_playbook_written
-  //         as a durable signal the Playbook was actually stored. Payment
-  //         workflow must gate delivery on BOTH swot_paid_297 (payment
-  //         succeeded) AND swot_playbook_written (writeback succeeded);
-  //         if writeback fails, swot_playbook_written never lands and the
-  //         delivery email is safely held.
-  //     (b) already-paid customer submits (survey landed late, replay,
-  //         resubmit): contact already carries swot_paid_297, so we're
-  //         effectively acting as paid_47 does — apply the report-ready
-  //         tag directly on writeback success (chained). Otherwise the
-  //         payment event has already passed and nothing else will trigger
-  //         the delivery email.
-  const alreadyPaid297 = (contact.tags || [])
+  const alreadyPaid297_fn = (contact.tags || [])
     .map((t) => String(t).toLowerCase())
     .includes("swot_paid_297");
 
-  const tierTag =
+  const tierTag_fn =
     tier === "paid_297"
-      ? (alreadyPaid297 ? "swot_paid_297" : "swot_paid_297_pending")
+      ? (alreadyPaid297_fn ? "swot_paid_297" : "swot_paid_297_pending")
       : tier === "paid_47" ? "swot_paid_47"
       : "swot_free_lead";
-  // paid_297 fresh submits defer the report-ready email trigger to the
-  // payment workflow. paid_297 replays for already-paid customers fire it
-  // directly (chained on writeback success). All other tiers fire it as before.
-  const reportReadyTag =
-    tier === "paid_297" && !alreadyPaid297
+  const reportReadyTag_fn =
+    tier === "paid_297" && !alreadyPaid297_fn
       ? null
       : `swot_report_ready_${tier.replace(/^paid_/, "")}`;
-  const lifecycleTags = [
-    tierTag,
+  const lifecycleTags_fn = [
+    tierTag_fn,
     ...pathTags(agent.path),
     ...(agent.opportunityFlags || []).map((f) => String(f).toLowerCase()),
   ].filter(Boolean);
 
-  ctx.waitUntil(Promise.allSettled([
-    // Chained: writeback must succeed before either the email-trigger tag
-    // (paid_47 / paid_297 replay / free) OR the paid_297-fresh writeback
-    // signal tag (swot_playbook_written) lands. The ghl_sync log row is
-    // appended either way — success or failure — so operations can see
-    // which generations landed in HighLevel.
-    updateGHLContact(contactId, fields, env, { dryRun }).then(async ok => {
-      // Record the writeback outcome in the ghl_sync log. canonical?.reportId
-      // is null when the canonical write was skipped (dry run, no D1 binding,
-      // etc.) — recordGhlWriteback no-ops in that case.
+  await Promise.allSettled([
+    updateGHLContact(contactId, fields_fn, env, { dryRun }).then(async ok => {
       await recordGhlWriteback(env, {
         reportId: canonical?.reportId || null,
         contactId,
@@ -5612,30 +5670,19 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
         console.warn("[from-ghl-survey] Contact writeback failed; skipping post-write tags");
         return;
       }
-      const postWriteTags = [];
-      if (reportReadyTag) postWriteTags.push(reportReadyTag);
-      // paid_297 fresh flow: durable signal that the Playbook is actually
-      // stored on the contact. Payment workflow gates the delivery email
-      // and swot_paid_297 on this tag — if it's missing, the payment
-      // workflow should not fire the report-ready tag.
-      if (tier === "paid_297" && !alreadyPaid297) {
-        postWriteTags.push("swot_playbook_written");
-        // Race guard: payment could have cleared between our initial
-        // fetchGHLContact (before the Claude call) and now (after the ~5-30s
-        // Solomon run + writeback). In that case the payment workflow saw
-        // no swot_playbook_written yet and withheld swot_report_ready_paid_297,
-        // and our alreadyPaid297 was false so we'd normally skip firing it
-        // ourselves. Re-check the tag NOW and apply the ready tag if payment
-        // landed during the run, so the delivery email isn't stranded.
+      const postWriteTags_fn = [];
+      if (reportReadyTag_fn) postWriteTags_fn.push(reportReadyTag_fn);
+      if (tier === "paid_297" && !alreadyPaid297_fn) {
+        postWriteTags_fn.push("swot_playbook_written");
         const fresh = await fetchGHLContact(contactId, env).catch(() => null);
         const nowPaid = fresh && (fresh.tags || [])
           .map((t) => String(t).toLowerCase())
           .includes("swot_paid_297");
-        if (nowPaid) postWriteTags.push("swot_report_ready_paid_297");
+        if (nowPaid) postWriteTags_fn.push("swot_report_ready_paid_297");
       }
-      if (postWriteTags.length) return addGHLTag(contactId, postWriteTags, env, { dryRun });
+      if (postWriteTags_fn.length) return addGHLTag(contactId, postWriteTags_fn, env, { dryRun });
     }),
-    addGHLTag(contactId, lifecycleTags, env, { dryRun }),
+    addGHLTag(contactId, lifecycleTags_fn, env, { dryRun }),
     fireTrackingEvent({
       event_type: `report_generated_${tier}`,
       tier,
@@ -5650,27 +5697,9 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
       answers,
       source: "ghl_survey",
     }, env, { dryRun }),
-  ]));
-
-  return json({
-    success: true,
-    tier,
-    contactId,
-    path: agent.path,
-    flags: agent.opportunityFlags || [],
-    elapsedMs,
-    tagsAppliedAsync: lifecycleTags,
-    dryRun,
-    canonical: canonical?.ok
-      ? {
-          submissionId: canonical.submissionId,
-          reportId: canonical.reportId,
-          reportVersion: canonical.reportVersion,
-          r2_html_key: canonical.r2_html_key,
-        }
-      : { skipped: true, reason: canonical?.reason || canonical?.error || "unknown" },
-  });
+  ]);
 }
+
 // ----- end GHL survey webhook -----
 
 // ----- Payment-status webhook (LC Payments → Solomon) -----

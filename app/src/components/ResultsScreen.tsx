@@ -231,6 +231,29 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
       <div className="max-w-3xl mx-auto space-y-8 py-12">
         <div className="space-y-6">
           <h3 className="font-display text-3xl font-bold">The Story</h3>
+
+          {/* Founder byline — ties Miguel's face to the first-person
+              narrative that follows. Headshot URL mirrors the standalone
+              /bga-upgrade sales page so we have one source of truth per
+              asset host. The gold ring + subtle gradient on the circle
+              matches the primary brand accent. */}
+          <div className="flex items-center gap-4 pt-2">
+            <img
+              src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a60f73581877afd27c4c4a6.webp"
+              alt="Miguel Hernandez"
+              width={80}
+              height={80}
+              loading="lazy"
+              className="h-20 w-20 rounded-full object-cover ring-2 ring-primary/40 ring-offset-2 ring-offset-background flex-shrink-0"
+            />
+            <div className="min-w-0">
+              <p className="font-display text-xl font-bold text-foreground leading-tight">Miguel Hernandez</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-[0.18em] mt-1">
+                Founder &amp; CEO &middot; CFO By Design
+              </p>
+            </div>
+          </div>
+
           <div className="space-y-4 text-muted-foreground leading-relaxed text-lg">
             <p>
               For more than fifteen years, I've sat across from business owners making six- and seven-figure decisions without a clear enough view of the numbers behind them.
@@ -273,12 +296,18 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
             report instead of letting all customers see the same
             generic fallback copy. The report has no explicit
             "strength" field, so that slot stays on its fallback until
-            Solomon's output grows one. */}
+            Solomon's output grows one.
+
+            2026-10-28: Previously fed `report.context` into the
+            strength slot. `report.context` is Solomon's one-sentence
+            PERSPECTIVE/framing ("one sentence of perspective" per the
+            rubric) — often naming the biggest risk, not a strength.
+            That put IRS-risk sentences under the "What's already
+            working" label. Dropped until Solomon grows a real
+            strength field; the generic fallback is accurate instead
+            of actively misleading. */}
         <SwotQuadrant
           items={{
-            strength: report.context
-              ? { body: report.context }
-              : undefined,
             needsAttention: (() => {
               const top = report.gaps.find((g) => g.priority === "CRITICAL")
                        || report.gaps.find((g) => g.priority === "HIGH")
@@ -393,20 +422,61 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
           <div className="p-4 rounded-xl border border-white/5 bg-secondary/20 text-muted-foreground text-sm">
             We'll send a copy of your Business Health Check to <span className="font-medium text-foreground">{leadData?.email || "your email"}</span>.
           </div>
-          {isBeta ? (
-            /* Beta cohort: coupon input (SOLOMON50) that skips payment and
-               routes to the mid-analysis survey. Beta users cannot use the
-               regular payment link because HL requires a card even on 100%
-               off coupons. */
-            <div className="space-y-4 text-left">
+          {/* Payment CTA — shown on BOTH /beta and the regular free
+              results page. Previously /beta hid the pay button and
+              showed only the beta-code input, which (a) blocked real
+              paying customers who happened to land on /beta from
+              checking out, and (b) made the beta flow a dead-end for
+              anyone without a code. 2026-10-28: pay path is the
+              primary CTA; the beta code input (when isBeta) is a
+              secondary redeem path below it. */}
+          <div className="space-y-4">
+            <div className="flex justify-center">
+              <CountdownTimer
+                durationHours={OFFERS.DIAGNOSTIC_47.durationHours}
+                label={OFFERS.DIAGNOSTIC_47.label}
+              />
+            </div>
+            {!getRemainingTime(OFFERS.DIAGNOSTIC_47.durationHours).isExpired ? (
+              <Button
+                onClick={() => {
+                  console.log("[Analytics] SWOT_UPGRADE_CLICK");
+                  navigateExternal(PAYMENT_LINK_47);
+                }}
+                className="w-full h-20 text-xl font-bold rounded-xl shadow-glow-gold transition-all hover:-translate-y-1 active:translate-y-0 bg-primary hover:bg-primary/90 text-primary-foreground relative overflow-hidden group"
+              >
+                <div className="relative z-10 flex flex-col items-center">
+                  <span>Get My Full Diagnosis + Strategy Session — $47</span>
+                  {!getRemainingTime(OFFERS.ACTION_BONUS_50.durationHours).isExpired && (
+                    <span className="text-[10px] uppercase tracking-widest text-primary-foreground/80 mt-1 font-mono">
+                      ⚡ Includes $50 Action Taker Bonus (24h only)
+                    </span>
+                  )}
+                </div>
+              </Button>
+            ) : (
+              <div className="p-6 rounded-xl border border-amber-500/20 bg-amber-500/5 text-amber-500 text-sm font-medium">
+                The limited-time $47 diagnostic offer has expired.
+              </div>
+            )}
+          </div>
+          {isBeta && (
+            /* Beta cohort redemption — secondary path. HL payment links
+               require a card even on 100%-off coupons, which blocks
+               SOLOMON50 beta users; this input calls /apply-solomon50
+               to apply the tag and skip payment, then routes to the
+               mid-analysis survey. Placeholder deliberately does NOT
+               name the actual code (previous "e.g. SOLOMON50" leaked
+               it to anyone on /beta). */
+            <div className="space-y-4 text-left pt-4 border-t border-white/5">
               <div className="flex items-center gap-2 justify-center">
                 <Sparkles className="h-4 w-4 text-primary" />
                 <p className="text-xs uppercase tracking-[0.3em] font-mono text-primary text-center">
-                  Beta Access — Complimentary Full Diagnostic
+                  Have a beta code?
                 </p>
               </div>
               <p className="text-center text-muted-foreground text-sm">
-                Enter your beta code below to unlock the full analysis at no cost.
+                Enter the code from your welcome email to unlock the full analysis at no cost.
               </p>
               <div className="flex flex-col sm:flex-row gap-3 items-stretch">
                 <Input
@@ -415,7 +485,7 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
                     setCouponCode(e.target.value);
                     if (couponStatus === "invalid") setCouponStatus("idle");
                   }}
-                  placeholder="Enter code (e.g. SOLOMON50)"
+                  placeholder="Enter beta code"
                   autoComplete="off"
                   spellCheck={false}
                   className="flex-1 h-14 text-base"
@@ -431,9 +501,10 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
                   onClick={handleApplyCoupon}
                   disabled={couponStatus === "applying" || couponStatus === "applied" || !couponCode.trim()}
                   size="lg"
+                  variant="outline"
                   className="h-14"
                 >
-                  {couponStatus === "applying" ? "Applying…" : couponStatus === "applied" ? "Applied ✓" : "Apply"}
+                  {couponStatus === "applying" ? "Applying…" : couponStatus === "applied" ? "Applied ✓" : "Redeem"}
                   {couponStatus === "idle" && <ArrowRight className="ml-2 h-4 w-4" />}
                 </Button>
               </div>
@@ -441,41 +512,6 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
                 <p className="text-sm text-destructive font-mono text-center leading-relaxed">
                   {couponErrDetail || "We couldn't apply that code. Check the spelling, or try again in a moment."}
                 </p>
-              )}
-              <p className="text-xs text-muted-foreground text-center">
-                Beta cohort · Skip payment, go straight to the intake.
-              </p>
-            </div>
-          ) : (
-            /* Regular cohort: paid $47 upgrade via GHL payment link. */
-            <div className="space-y-4">
-              <div className="flex justify-center">
-                <CountdownTimer
-                  durationHours={OFFERS.DIAGNOSTIC_47.durationHours}
-                  label={OFFERS.DIAGNOSTIC_47.label}
-                />
-              </div>
-              {!getRemainingTime(OFFERS.DIAGNOSTIC_47.durationHours).isExpired ? (
-                <Button
-                  onClick={() => {
-                    console.log("[Analytics] SWOT_UPGRADE_CLICK");
-                    navigateExternal(PAYMENT_LINK_47);
-                  }}
-                  className="w-full h-20 text-xl font-bold rounded-xl shadow-glow-gold transition-all hover:-translate-y-1 active:translate-y-0 bg-primary hover:bg-primary/90 text-primary-foreground relative overflow-hidden group"
-                >
-                  <div className="relative z-10 flex flex-col items-center">
-                    <span>Get My Full Diagnosis + Strategy Session — $47</span>
-                    {!getRemainingTime(OFFERS.ACTION_BONUS_50.durationHours).isExpired && (
-                      <span className="text-[10px] uppercase tracking-widest text-primary-foreground/80 mt-1 font-mono">
-                        ⚡ Includes $50 Action Taker Bonus (24h only)
-                      </span>
-                    )}
-                  </div>
-                </Button>
-              ) : (
-                <div className="p-6 rounded-xl border border-amber-500/20 bg-amber-500/5 text-amber-500 text-sm font-medium">
-                  The limited-time $47 diagnostic offer has expired.
-                </div>
               )}
             </div>
           )}
