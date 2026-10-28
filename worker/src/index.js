@@ -6311,7 +6311,7 @@ async function handleResetContactTags(request, env) {
 
 // Like callClaude but accepts an explicit rubric (for the console's override path).
 // When the rubric is the default, cache_control still applies — repeated runs hit the cache.
-async function callClaudeWithRubric(prompt, rubric, env) {
+async function callClaudeWithRubric(prompt, rubric, env, opts = {}) {
   // Test-only escape hatch — see callClaude above.
   if (typeof env?.__CLAUDE_STUB__ === "function") {
     return env.__CLAUDE_STUB__(prompt, env, rubric);
@@ -6323,6 +6323,21 @@ async function callClaudeWithRubric(prompt, rubric, env) {
       : { type: "text", text: rubric }
   ];
 
+  // 2026-10-28 (from Jordan Castellanos's queue-trace): the paid_47 Full
+  // Diagnostic consistently truncated at ~4000 chars / line 34 col 6 of
+  // the JSON output, which parseAgentJson then raised as
+  //   "Expected ',' or ']' after array element in JSON at position NNNN"
+  // on all three queue retries. Three deterministic failures = token
+  // budget overrun, not an infrastructure flake. The rubric asks for
+  // opener + strategistBrief + path + badge + headline + context +
+  // gaps[] + opportunities[] + opportunityFlags + structured_findings[]
+  // — that's 10-15 KB of JSON for a paid tier, well over 2500 tokens.
+  // Bumped to a 16k default (plenty for the longest paid_297 Business
+  // Growth Analysis) with per-caller override via opts.maxTokens for
+  // the few places that genuinely need a smaller budget (e.g. BGA
+  // Copilot sub-prompts).
+  const maxTokens = opts.maxTokens || 16000;
+
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -6332,7 +6347,7 @@ async function callClaudeWithRubric(prompt, rubric, env) {
     },
     body: JSON.stringify({
       model: CONFIG.CLAUDE_MODEL,
-      max_tokens: 2500,
+      max_tokens: maxTokens,
       system: systemBlock,
       messages: [{ role: "user", content: prompt }],
     }),
@@ -6342,7 +6357,14 @@ async function callClaudeWithRubric(prompt, rubric, env) {
     throw new Error(`Claude API ${response.status}: ${detail.slice(0, 300)}`);
   }
   const data = await response.json();
-  return data.content[0].text;
+  const text = data.content?.[0]?.text || "";
+  // When Claude hits the output cap it returns stop_reason === "max_tokens"
+  // and the final content block ends mid-JSON. Surfacing this upstream
+  // means parseAgentJson's error is actionable instead of mystifying.
+  if (data.stop_reason === "max_tokens") {
+    throw new Error(`Claude response truncated (stop_reason=max_tokens, max_tokens=${maxTokens}, output_bytes=${text.length}). Raise max_tokens for this caller.`);
+  }
+  return text;
 }
 
 // ----- end Ask Solomon console -----
