@@ -5504,38 +5504,84 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   }
 
   // ────────────────────────────────────────────────────────────────────
-  // ASYNC SPLIT (2026-10-28 fix for paid_47 Full Diagnostic timing out).
+  // QUEUE DISPATCH (2026-10-28 Codex P1 follow-up on #154).
   //
-  // HighLevel's "Custom Webhook" workflow action has a HARD 60-second
-  // response timeout. If the webhook endpoint doesn't send a response
-  // within 60s HL marks the action FAILED and closes the connection —
-  // which on Cloudflare Workers cancels the still-running request.
+  // HL's custom webhook has a HARD 60-second response timeout and
+  // Cloudflare's ctx.waitUntil caps at 30 seconds after response send,
+  // so the prior async-split still cancelled paid_47 and paid_297 runs
+  // (60-180s wall-clock) — just silently instead of visibly. Cloudflare's
+  // own docs point at Queues for exactly this pattern:
   //
-  // Solomon's paid_47 and paid_297 generations routinely take 60-180s
-  // (Claude call + the full rubric). Before this split, the sequence
-  // was: HL POST → worker starts Claude call → 60s elapses → HL times
-  // out and disconnects → worker's request is cancelled → nothing is
-  // written to the contact → the Reveal page polls /status forever.
-  // Liz's 2026-10-28 test confirmed this with the HL workflow history
-  // ("Custom Webhook Action error: Response timed out ... 60 seconds").
+  //   > If the work cannot finish within the waitUntil() time limit,
+  //   > send messages to a Queue and process them in a separate consumer
+  //   > Worker. Queues provide reliable delivery and automatic retries.
   //
-  // Fix: every gate above this point runs synchronously (auth, tier,
-  // completeness, normalization, idempotency) so a bad request still
-  // gets a meaningful HTTP error. Below this point — Claude call,
-  // canonical write, GHL writeback, lifecycle tags, tracking event —
-  // runs inside ctx.waitUntil(). The handler returns 202 Accepted
-  // right away, HL sees a fast success, and the actual generation
-  // keeps running on the Cloudflare worker past the client disconnect.
-  // The Reveal page's /status poll picks up the writeback whenever
-  // Solomon finishes, same as before.
+  // Flow:
+  //   1. Every sync gate above this point ran, so a bad request already
+  //      got a meaningful HTTP error (401/403/404/409/502).
+  //   2. The idempotency reservation is already live — a concurrent dupe
+  //      won't enqueue twice.
+  //   3. Enqueue a MINIMAL payload (contactId, tier, dryRun, source_event_id,
+  //      idem path, request origin). The queue consumer re-fetches the
+  //      contact + rebuilds answers + runs Solomon end-to-end with the
+  //      full 15-minute per-invocation budget and automatic retries.
+  //   4. Return 202 immediately so HL's workflow action succeeds in <5s.
   //
-  // Error handling in the async path: any failure releases the
-  // idempotency reservation so a retry (manual re-POST, or GHL
-  // workflow retry) is allowed through. Errors are logged for
-  // Cloudflare log inspection but cannot be returned to HL because
-  // the response is already gone.
+  // Fallback: when the queue binding isn't provisioned yet (missing
+  // SOLOMON_QUEUE), fall back to ctx.waitUntil + the inline runAsync so
+  // the endpoint keeps responding during the queue-creation window.
+  // The response's `transport` field tells callers which path ran.
   // ────────────────────────────────────────────────────────────────────
 
+  const queuePayload = {
+    version: 1,
+    contactId,
+    tier,
+    dryRun,
+    allowPartial: body?.allowPartial === true,
+    sourceEventId: body?.event_id || body?.webhook_id || body?.source_event_id || null,
+    idemPath: idem.path,
+    requestOrigin: requestUrl.origin,
+    enqueuedAt: new Date().toISOString(),
+  };
+
+  if (env.SOLOMON_QUEUE && typeof env.SOLOMON_QUEUE.send === "function") {
+    try {
+      await env.SOLOMON_QUEUE.send(queuePayload);
+      return json({
+        success: true,
+        accepted: true,
+        async: true,
+        transport: "queue",
+        contactId,
+        tier,
+        note: "Solomon generation enqueued; the queue consumer runs with a 15-minute budget + automatic retries. The Reveal page's /status poll will surface the report once Solomon finishes.",
+      }, 202);
+    } catch (err) {
+      // Enqueue failed — release idempotency so the next retry proceeds,
+      // and fall through to the ctx.waitUntil fallback so this request
+      // still has a chance of landing a report. Log loudly so operators
+      // know queue dispatch broke.
+      console.error(`[from-ghl-survey] SOLOMON_QUEUE.send failed for contact ${contactId} tier ${tier}:`, err?.message || err);
+      await releaseIdempotency(idem.path, env).catch(() => {});
+    }
+  }
+
+  // Fallback path (queue binding missing OR enqueue just failed): keep
+  // the ctx.waitUntil shape so the endpoint doesn't 500. Paid tiers will
+  // still get cancelled at ~30s past response — this is a stopgap for
+  // the deploy window where queues haven't been provisioned yet.
+  console.warn(`[from-ghl-survey] falling back to ctx.waitUntil for contact ${contactId} tier ${tier} — SOLOMON_QUEUE missing or send failed. Paid tiers will time out at ~30s.`);
+  const idem2 = env.SOLOMON_QUEUE ? await reserveIdempotency(idemKey, env) : idem;
+  if (idem2.duplicate && !idem.path) {
+    return json({
+      success: true,
+      deduped: true,
+      transport: "waituntil-fallback",
+      contactId,
+      tier,
+    });
+  }
   const runAsync = async () => {
     try {
       let agent;
@@ -5543,74 +5589,201 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
         const raw = await callClaudeWithRubric(prompt, rubric, env);
         agent = parseAgentJson(raw);
       } catch (err) {
-        await releaseIdempotency(idem.path, env);
-        console.error(`[from-ghl-survey:async] Solomon error for contact ${contactId} tier ${tier}:`, err?.message || err);
+        await releaseIdempotency(idem2.path, env);
+        console.error(`[from-ghl-survey:fallback] Solomon error for contact ${contactId} tier ${tier}:`, err?.message || err);
         return;
       }
-
       if (tier === "free") {
         agent.opportunityFlags = (agent.opportunityFlags || []).filter(f => f !== "DIGITAL_PRESENCE_OPP");
       }
-
-      // Phase 2C: validate structured findings against the deterministic
-      // facts + derived metrics. Any finding that cites a field that isn't
-      // in the normalized intake, or a metric that wasn't computed by
-      // deriveMetrics(), is REJECTED here — before it reaches the stored
-      // diagnostic_json or the HTML renderer. Invalid findings are logged
-      // (reasons included) and stripped. The prose arrays (gaps,
-      // opportunities) are untouched; this layer only polices the
-      // structured_findings addition.
       sanitizeStructuredFindings(agent, {
         normalized: factsBundle?.facts || flatNormalized(normalizedAnswers || []),
         derivedMetrics: derivedMetrics || [],
       }, `handleGHLSurveyWebhook contact ${contact.id}`);
-
       const reportHtml = buildReportHtml(agent);
-
-      // Canonical write (Phase 1b). Runs before the GHL writeback so the
-      // stored record exists before anyone reads from HighLevel. Dry runs,
-      // missing D1 binding, and duplicate source_event_id all surface as
-      // `skipped` with a reason. On duplicate_submission we early-return
-      // so a GHL retry doesn't duplicate the delivery email.
       const canonical = await writeCanonicalRecord(env, {
         contact: { id: contactId, ...contact },
-        tier,
-        answers,
-        agent,
-        reportHtml,
-        sourceEventId: body?.event_id || body?.webhook_id || body?.source_event_id || null,
-        dryRun,
-        normalizedAnswers,
-        derivedMetrics,
+        tier, answers, agent, reportHtml,
+        sourceEventId: queuePayload.sourceEventId,
+        dryRun, normalizedAnswers, derivedMetrics,
       });
-      if (canonical?.skipped && canonical.reason === "duplicate_submission") {
-        return;
-      }
-
+      if (canonical?.skipped && canonical.reason === "duplicate_submission") return;
       await finalizeSurveyWriteback({
         env, ctx, requestUrl,
         contactId, contact, tier, answers, agent, reportHtml,
         canonical, dryRun,
       });
     } catch (err) {
-      // Catch-all: anything the inner try blocks missed (sanitize
-      // throwing, writeCanonicalRecord throwing, finalize throwing).
-      // Release idempotency so a retry can succeed.
-      await releaseIdempotency(idem.path, env).catch(() => {});
-      console.error(`[from-ghl-survey:async] unexpected error for contact ${contactId} tier ${tier}:`, err?.message || err);
+      await releaseIdempotency(idem2.path, env).catch(() => {});
+      console.error(`[from-ghl-survey:fallback] unexpected error for contact ${contactId} tier ${tier}:`, err?.message || err);
     }
   };
-
   ctx.waitUntil(runAsync());
-
   return json({
     success: true,
     accepted: true,
     async: true,
+    transport: "waituntil-fallback",
     contactId,
     tier,
-    note: "Solomon generation + report writeback running asynchronously (ctx.waitUntil). HL should move on; the Reveal page's /status poll will surface the report once Solomon finishes.",
+    note: "SOLOMON_QUEUE not configured — using ctx.waitUntil fallback. Paid tiers will time out at ~30s. Provision solomon-generation + solomon-generation-dlq queues to unlock durable generation.",
   }, 202);
+}
+
+// Queue consumer: runs the full Solomon generation + canonical write +
+// GHL writeback with a 15-minute per-invocation budget. Called by the
+// Workers runtime for every message that /from-ghl-survey enqueues to
+// SOLOMON_QUEUE. See the "QUEUE DISPATCH" block in
+// handleGHLSurveyWebhook for the producer side.
+//
+// Behavior:
+//   - Fresh fetch of the contact so late GHL field writebacks are visible.
+//   - Rebuilds answers / normalization / facts bundle from scratch so the
+//     consumer isn't tied to a stale payload shape.
+//   - Runs Solomon → canonical D1/R2 write → GHL writeback → lifecycle
+//     + report-ready tags → tracking event, same as the pre-queue inline
+//     code path.
+//
+// Retries:
+//   - Any thrown error reaches Queues' retry policy (max_retries from
+//     wrangler.toml, exponential backoff).
+//   - On the FINAL attempt, we catch the error ourselves, apply
+//     swot|deliveryfailed to the contact (so an HL automation or
+//     operator can see the terminal failure), release the idempotency
+//     reservation (so a fresh manual re-POST can succeed), and ack the
+//     message rather than throwing. If we threw, Queues would move it
+//     to the DLQ, which the Worker doesn't have a consumer for yet.
+async function handleSolomonQueueMessage(message, env) {
+  const payload = message.body;
+  const attemptNumber = (message.attempt ?? message.attempts ?? 1);
+  const maxAttempts = 3; // keep in sync with wrangler.toml max_retries + 1 initial
+  const isFinalAttempt = attemptNumber >= maxAttempts;
+  const { contactId, tier, dryRun, allowPartial, sourceEventId, idemPath, requestOrigin } = payload || {};
+
+  if (!contactId || !tier) {
+    console.error(`[solomon-queue] malformed payload (missing contactId/tier):`, JSON.stringify(payload));
+    message.ack();
+    return;
+  }
+
+  try {
+    const contact = await fetchGHLContact(contactId, env);
+    if (!contact) throw new Error(`contact ${contactId} not found in GHL`);
+
+    const answers = await answersFromContactFields(contact, env);
+    if (!answers.length) throw new Error(`no survey answers on contact ${contactId}`);
+
+    // Re-run completeness in case the first webhook landed partway
+    // through HL's field writeback and the queued attempt now sees the
+    // full intake. If it's still short we DO NOT want to generate on
+    // half an intake — throw to let Queues retry a few minutes later,
+    // by which time HL should have finished writing the rest.
+    const completeness = checkIntakeCompleteness(answers, tier, {
+      rawCustomFields: contact.customFields || [],
+      allowPartial,
+    });
+    if (!completeness.ok) {
+      throw new Error(`intake short for ${contactId} tier ${tier}: ${completeness.answersSeen} of ${completeness.minExpected}`);
+    }
+
+    let normalizedAnswers = null;
+    let derivedMetrics = null;
+    let factsBundle = null;
+    try {
+      const catalog = await fetchGHLCustomFieldsCatalog(env);
+      normalizedAnswers = normalizeContactFields(contact, catalog);
+      derivedMetrics = deriveMetrics(flatNormalized(normalizedAnswers));
+      factsBundle = buildFactsForPrompt(normalizedAnswers, derivedMetrics);
+    } catch (err) {
+      // Catalog unavailable — Solomon can still run on raw answers, but
+      // the structured_findings sanitizer will skip. Log and continue.
+      console.warn(`[solomon-queue] catalog unavailable for ${contactId}:`, err?.message || err);
+    }
+
+    const contactPayload = {
+      name: [contact.firstName, contact.lastName].filter(Boolean).join(" ") || contact.contactName || "Business Owner",
+      email: contact.email || "",
+      contactId: contact.id,
+    };
+    const businessProfile = {};
+    const prompt = buildPrompt(tier, answers, contactPayload, businessProfile, factsBundle);
+    const rubric = ASSESSMENT_RUBRIC;
+
+    const raw = await callClaudeWithRubric(prompt, rubric, env);
+    const agent = parseAgentJson(raw);
+
+    if (tier === "free") {
+      agent.opportunityFlags = (agent.opportunityFlags || []).filter(f => f !== "DIGITAL_PRESENCE_OPP");
+    }
+
+    sanitizeStructuredFindings(agent, {
+      normalized: factsBundle?.facts || flatNormalized(normalizedAnswers || []),
+      derivedMetrics: derivedMetrics || [],
+    }, `solomon-queue contact ${contactId}`);
+
+    const reportHtml = buildReportHtml(agent);
+
+    const canonical = await writeCanonicalRecord(env, {
+      contact: { id: contactId, ...contact },
+      tier, answers, agent, reportHtml,
+      sourceEventId, dryRun, normalizedAnswers, derivedMetrics,
+    });
+    if (canonical?.skipped && canonical.reason === "duplicate_submission") {
+      message.ack();
+      return;
+    }
+
+    // Reconstruct the ctx shape finalizeSurveyWriteback expects — it uses
+    // ctx.waitUntil for parallelism inside the writeback, but queue
+    // consumer invocations don't give us a real ctx. Pass a shim that
+    // just awaits inline — we have the full 15-min budget here so there's
+    // no reason to fire-and-forget anyway.
+    const ctxShim = { waitUntil: async (p) => { try { await p; } catch (e) { console.warn("[solomon-queue:waitUntilShim]", e?.message || e); } } };
+    const requestUrlShim = { origin: requestOrigin || "https://swot-engine.cfobydesign.workers.dev" };
+
+    await finalizeSurveyWriteback({
+      env, ctx: ctxShim, requestUrl: requestUrlShim,
+      contactId, contact, tier, answers, agent, reportHtml,
+      canonical, dryRun,
+    });
+
+    message.ack();
+  } catch (err) {
+    const detail = err?.message || String(err);
+    console.error(`[solomon-queue] generation failed for ${contactId} tier ${tier} attempt ${attemptNumber}/${maxAttempts}:`, detail);
+
+    if (isFinalAttempt) {
+      // Terminal failure — apply swot|deliveryfailed so an HL automation
+      // or an operator can see this contact has an undeliverable
+      // generation, and release idempotency so a manual re-POST with
+      // replay:true can retry. Then ack to avoid the DLQ (which the
+      // Worker doesn't consume).
+      try {
+        await addGHLTag(contactId, ["swot|deliveryfailed"], env);
+      } catch (tagErr) {
+        console.error(`[solomon-queue] failed to apply swot|deliveryfailed to ${contactId}:`, tagErr?.message || tagErr);
+      }
+      if (idemPath) {
+        await releaseIdempotency(idemPath, env).catch(() => {});
+      }
+      // Record the terminal failure in the ghl_sync log for operator
+      // visibility — reportId is null since Solomon didn't finish.
+      try {
+        await recordGhlWriteback(env, {
+          reportId: null,
+          contactId,
+          status: "failed",
+          error: `queue terminal failure attempt ${attemptNumber}/${maxAttempts}: ${detail.slice(0, 500)}`,
+        });
+      } catch { /* best effort */ }
+      message.ack();
+      return;
+    }
+
+    // Not the final attempt — throw to let Queues retry with exponential
+    // backoff.
+    throw err;
+  }
 }
 
 // Finalize the GHL writeback + lifecycle tags + tracking event for a
@@ -7109,6 +7282,25 @@ export default {
 
     return json({ success: true, tier, ...agent, bookingLink });
   },
+
+  // Queue consumer (2026-10-28 Codex P1 follow-up). Dispatched by the
+  // Workers runtime for every message /from-ghl-survey enqueues to
+  // SOLOMON_QUEUE. One message per invocation (max_batch_size = 1), so
+  // the loop here is defensive — Queues can batch if the config
+  // changes. See handleSolomonQueueMessage for retry policy + terminal
+  // failure handling.
+  async queue(batch, env, _ctx) {
+    for (const message of batch.messages) {
+      try {
+        await handleSolomonQueueMessage(message, env);
+      } catch (err) {
+        // handleSolomonQueueMessage already decided whether to ack or
+        // throw. A throw bubbles here means a non-final attempt that
+        // Queues should retry — re-throw to let the runtime handle it.
+        throw err;
+      }
+    }
+  },
 };
 
 // -----------------------------------------------------------------------------
@@ -7156,6 +7348,10 @@ export {
   pathTags,
   // Phase 2C sanitizer
   sanitizeStructuredFindings,
+  // Queue consumer (Codex P1 follow-up on #154) — exported so tests can
+  // drive the consumer against a stubbed GHL/Claude/env without going
+  // through the Workers Queues runtime.
+  handleSolomonQueueMessage,
 };
 
 // Phase 2A: normalization layer. Re-exported from index so tests that
