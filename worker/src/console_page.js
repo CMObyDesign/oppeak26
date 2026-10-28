@@ -407,6 +407,16 @@ export const CONSOLE_PAGE = `<!DOCTYPE html>
         </div>
         <textarea id="answers" rows="10" data-mode="story" placeholder="Describe the business in your own words. Cover revenue, biggest challenges, debt picture, taxes, AR aging, financial visibility, growth plans — anything that gives Solomon a real picture. Example:&#10;&#10;A $2.5M B2B agency, mostly retainer work. Cash flow is the constant headache — invoices go out on net-30 but most clients pay closer to net-45 so we're always one slow month away from payroll stress. Carrying about $150K in a working capital line plus some equipment debt. Taxes filed but we're 60 days behind on payroll deposits — Miguel knows about this. No real budget — I look at the bank account to decide what to pay each Friday."></textarea>
         <div id="guided-fields" style="display:none; max-height:600px; overflow-y:auto; border:1px solid #e5e7eb; border-radius:6px; padding:12px; background:#fafafa;"></div>
+        <!-- Story-mode checklist: what Solomon needs to see in the narrative
+             for the selected tier to produce a complete report. Hidden in
+             Guided mode. Populated by renderStoryChecklist() on load,
+             on tier change, and on mode change. Each item is a signal
+             the rubric expects; a story missing most of them will come
+             back thin or hit the quality gate on paid_47. -->
+        <details id="story-checklist" open style="margin-top:8px;">
+          <summary style="font-size:11px;color:#6b7280;cursor:pointer;">📋 <strong>What Solomon needs to see</strong> — click to expand</summary>
+          <div id="story-checklist-body" style="margin-top:8px;padding:12px;background:#fef9e8;border:1px solid #fde68a;border-radius:6px;font-size:12px;line-height:1.5;color:#1a1a1a;"></div>
+        </details>
         <div id="mode-hint" style="font-size:11px;color:#9ca3af;margin-top:4px;">
           📖 Story mode: describe the business in prose. Solomon extracts signals from the narrative.
         </div>
@@ -1999,21 +2009,114 @@ function setInputMode(mode) {
     if (cfg.placeholder) ta.placeholder = cfg.placeholder;
   }
 
+  // Story-mode checklist is only useful on the Story path. Hide it in
+  // Guided mode where every signal has its own labeled field.
+  const checklistEl = document.getElementById("story-checklist");
+  if (checklistEl) checklistEl.style.display = mode === "guided" ? "none" : "";
+
   const labelEl = document.querySelector('label[for="answers"]');
   if (labelEl) labelEl.textContent = cfg.label;
   const hintEl = document.getElementById("mode-hint");
   if (hintEl) hintEl.textContent = cfg.hint;
 }
 
-// Re-render guided fields when tier changes (only if in guided mode).
+// Story-mode checklist — what Solomon needs to see in the narrative for
+// the selected tier to produce a complete report. Keeps operators from
+// pasting a scenario that's too thin for the paid-tier quality gate.
+//
+// Each tier builds on the previous:
+//   free     = Q1-Q11 Business Health Check signals (the browser
+//              intake collects exactly these)
+//   paid_47  = free + Q12-Q28 financial detail (debt, cash flow,
+//              reporting cadence, break-even, margins, growth capital,
+//              operating runway, vendor costs, tax status, advisory,
+//              12-month objectives)
+//   paid_297 = paid_47 + verified-document strategic context (prior-
+//              year financials, product/service mix, team size, exit
+//              or capital raise horizon)
+//
+// A story missing most paid_47 items will come back with gaps that
+// honestly say "unknown" — not useful. The queue consumer's quality
+// gate will reject or soft-downgrade; the console path (this one) will
+// still render but you'll see thin "unknown" prose everywhere.
+const STORY_CHECKLIST = {
+  free: {
+    title: "FREE · Business Health Check — Solomon needs:",
+    items: [
+      "Business type (what you do, who buys)",
+      "How customers find you (channel mix)",
+      "Industry / vertical",
+      "Current debt, tax, and legal standing (any issues, in good standing, etc.)",
+      "How you make financial decisions today (bank balance vs actual numbers)",
+      "What you deliver that clients can't get elsewhere (UVP)",
+      "The exact words clients use when they refer you",
+      "Where revenue leaks most often (change orders, missed invoicing, etc.)",
+      "What a 20% profit uplift would change about the business",
+      "Demand in your market you're not yet positioned to capture",
+      "Concentration risk — what happens if your top account/channel disappears in 90 days",
+    ],
+    footer: "Miss these and the free report comes back generic.",
+  },
+  paid_47: {
+    title: "PARTIAL SWOT ($47) · Full Diagnostic — Solomon needs everything in Free, PLUS:",
+    items: [
+      "Total corporate debt (dollar amount, across all loans/LOC)",
+      "Monthly debt service (dollar amount)",
+      "How major financial decisions actually get made (framework, gut, cadence)",
+      "Banking relationship — transactional vs strategic",
+      "Credit access history (recent SBA, LOC changes, applications)",
+      "Cash flow predictability (lumpy vs steady, payroll vs collections timing)",
+      "A/R management — $30+ past due and $60+ past due amounts, who's late",
+      "Monthly close cadence — on time, 2-3 weeks late, no close at all",
+      "Break-even number (even approximate — a stated number or 'don't know')",
+      "Margin awareness by product / service / client segment",
+      "Growth capital adequacy for the next 12 months",
+      "Operating runway in months if revenue stopped (cash only, no LOC)",
+      "Vendor / supplier cost review history",
+      "Business tax return status (filed, late, in dispute)",
+      "Advisory / strategy support (CPA, bookkeeper, CFO, none)",
+      "Financial report review cadence",
+      "12-month financial objectives (specific: revenue, profit, debt, hiring)",
+    ],
+    footer: "paid47-v2 contract: on the production queue path the quality gate requires evidence-anchored gaps, financialSnapshot numbers, cross-finding connections, questions to clarify, and a decision order. A thin story will downgrade to the legacy renderer and the owner loses the enriched sections. (The /asksolomon console path skips the gate — Claude's raw response renders as-is — but the same signals produce a better report.)",
+  },
+  paid_297: {
+    title: "FULL SWOT ($297) · Business Growth Analysis — Solomon needs everything in Partial, PLUS:",
+    items: [
+      "Prior-year P&L shape (revenue, COGS, gross margin, net profit — stated or 'not available')",
+      "Product / service mix (what % of revenue each)",
+      "Team size and roles (W-2, 1099, offshore, outsourced)",
+      "Any verified financial documents available (tax returns, bank statements, P&L)",
+      "Capital raise or exit horizon (any planned event in the next 24 months)",
+      "Strategic priorities in the owner's own words — what the BGA call should center on",
+      "Any specific constraints Miguel should know (regulatory, family, health, partner)",
+    ],
+    footer: "A full BGA report assumes the Partial SWOT signals are present AND these strategic anchors. Without them the 90-day plan will be generic.",
+  },
+};
+
+function renderStoryChecklist(tier) {
+  const body = document.getElementById("story-checklist-body");
+  if (!body) return;
+  const t = STORY_CHECKLIST[tier] || STORY_CHECKLIST.free;
+  const items = t.items.map(s => "<li>" + escapeHtml(s) + "</li>").join("");
+  body.innerHTML =
+    '<div style="font-weight:700;margin-bottom:6px;color:#92400e;">' + escapeHtml(t.title) + "</div>" +
+    '<ul style="margin:0 0 8px 18px;padding:0;">' + items + "</ul>" +
+    '<div style="font-size:11px;color:#6b7280;font-style:italic;">' + escapeHtml(t.footer) + "</div>";
+}
+
+// Re-render guided fields AND the story checklist when tier changes.
 window.addEventListener("DOMContentLoaded", () => {
   const tierEl = document.getElementById("tier");
+  renderStoryChecklist(tierEl ? tierEl.value : "free");
   if (tierEl) {
     tierEl.addEventListener("change", () => {
       const ta = document.getElementById("answers");
       if (ta && ta.dataset.mode === "guided") {
         renderGuidedFields(tierEl.value);
       }
+      renderStoryChecklist(tierEl.value);
     });
   }
 });

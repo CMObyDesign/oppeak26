@@ -96,10 +96,10 @@ describe("SOLOMON50 beta invariants", () => {
     // moved synthesis into connections[] (cross-finding ties, keyed by
     // id); the invariant we're protecting is "connect signals across
     // answers; don't manufacture a third gap to hit the count."
-    assert.match(TIER_GUIDE.paid_47, /synthesize the financial\s+picture supported by the assessment/);
-    assert.match(TIER_GUIDE.paid_47, /Do not analyze each answer in isolation/);
-    assert.match(TIER_GUIDE.paid_47, /how the supported signals interact/);
-    assert.match(TIER_GUIDE.paid_47, /Do not manufacture a third gap simply to hit the count/);
+    assert.match(TIER_GUIDE.paid_47, /synthesize\s+the\s+financial\s+picture\s+supported\s+by\s+the\s+assessment/);
+    assert.match(TIER_GUIDE.paid_47, /Do\s+not\s+analyze\s+each\s+answer\s+in\s+isolation/);
+    assert.match(TIER_GUIDE.paid_47, /how\s+the\s+supported\s+signals\s+interact/);
+    assert.match(TIER_GUIDE.paid_47, /Do\s+not\s+manufacture\s+a\s+third\s+gap\s+simply\s+to\s+hit\s+the\s+count/);
     // paid47-v2: synthesis belongs in connections[] with findingIds,
     // not duplicated inside gaps[].
     assert.match(TIER_GUIDE.paid_47, /connections\[\]/);

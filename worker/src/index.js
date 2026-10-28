@@ -1155,308 +1155,124 @@ growth, needs-attention, or rehab.`,
 PURPOSE
 
 Go beyond identifying individual signals and synthesize the financial
-picture supported by the assessment.
-
-The Full Diagnostic answers:
-
-"What is actually happening, how significant does it appear to be,
-how do the issues interact, and what deserves attention first?"
-
-This is deeper diagnosis than the free Business Health Check, but it
-is not the Business Growth Analysis and it is not a complete
-implementation roadmap.
+picture supported by the assessment. Answer: what is actually
+happening, how significant is it, how do the issues interact, and
+what deserves attention first? This is deeper diagnosis than the free
+Business Health Check, but it is not the Business Growth Analysis and
+not a complete implementation roadmap.
 
 VERSION TAGS (MANDATORY)
 
-Emit these two string fields verbatim at the top level of the response:
+Emit at top level, verbatim:
 - reportSchemaVersion: "paid47-v2"
 - tierGuideVersion:    "paid47-2.0"
-
-These tags gate the enriched renderer. A $47 response that omits them
-or carries other values will be downgraded to the legacy renderer and
-the owner loses the richer sections.
+Missing or other values downgrade to the legacy renderer.
 
 OUTPUT CONTRACT
 
-The $47 Full Diagnostic emits (in addition to the shared top-level
-fields path/badge/headline/opener/context/nextStepHeadline/nextStepBody):
+Beyond path/badge/headline/opener/context/nextStepHeadline/nextStepBody:
 
-1. financialSnapshot[] — a compact table of the hard numbers the
-   diagnostic is anchored on. One row per Financial Snapshot item,
-   each with:
-   - label  (e.g. "Trailing 12-month revenue")
-   - value  (e.g. "$420,000" — formatted the way the owner would read it)
-   - meaning (one plain-English sentence; optional when the number
-     speaks for itself)
-   - sourceType ("customer_answer" | "deterministic_fact" | "derived_metric")
-   Only include rows whose numbers come directly from THEIR ANSWERS,
-   from FACTS, or from DERIVED METRICS. Do not estimate. Do not round
-   when the number is a hard figure the owner supplied.
-
-2. gaps[] — exactly up to 3 primary gaps, each with:
-   - id              (stable kebab-case slug, used by relatedFindingIds + connections[])
-   - title           (short, owner-recognizable)
-   - priority        ("CRITICAL" | "HIGH" | "MEDIUM")
-   - evidence[]      (what grounds this finding — see EVIDENCE RULES)
-   - known           (one sentence stating what is proven by evidence)
-   - diagnosis       (one or two sentences in Miguel's consultant voice;
-                      this is the INTERNAL explanation the renderer may
-                      show — write it as the strategist would speak it
-                      to the owner, direct and numbers-first)
-   - whyItMatters    (one sentence of economic consequence to the owner's
-                      P&L, cash position, or decision runway)
-   - unknown         (one sentence naming what the intake cannot establish
-                      and what would need to be verified to resolve it;
-                      say "none" only when the magnitude and root cause
-                      are both proven by the intake)
-   - decisionImplication (one sentence tying the finding to the owner's
-                      next financial decision — what changes about what
-                      they should do next because of this)
-   - relatedFindingIds[]  (ids of OTHER gaps this gap interacts with;
-                      used for synthesis without duplicating prose)
-
-   Do not manufacture a third gap simply to hit the count. If the
-   intake supports only 2 primary gaps with confidence, return 2 and
-   use coverage.gapsShortfallReason to say what the third would have
-   needed.
-
-3. opportunities[] — exactly up to 2 opportunities, each with:
-   - id
-   - title
-   - evidence[]            (same evidence shape as gaps)
-   - whyCredible           (one sentence tying this to a specific
-                            answer or deterministic fact)
-   - economicMechanism     (revenue capture | margin protection |
-                            cash timing | recurring revenue |
-                            reduced concentration | cost control |
-                            capital readiness | capacity use |
-                            financial decision-making)
-   - whatMustBeTrue        (one sentence of the premise the owner
-                            must validate before this is real)
-   - nextValidation        (one sentence naming the single data point
-                            or action that would confirm or kill the
-                            opportunity)
-
-   Use dollar amounts or percentages ONLY when supplied facts support
-   them. Do not invent ROI. Do not fold "pursue this" into an
-   opportunity whose premise is unproven — put the unresolved
-   premise in whatMustBeTrue.
-
-4. connections[] — cross-finding synthesis. One entry per material
-   interaction between two or more findings. Each with:
-   - title         (short phrase naming the interaction)
-   - findingIds[]  (two or more gap/opportunity ids that participate)
-   - explanation   (one or two sentences explaining what the
-                    interaction means financially, not just that it
-                    exists)
-
-   Do not duplicate the content of individual gaps here. Synthesis
-   means naming an interaction that no single gap captures. If no
-   material connection is supported, emit [] and set
-   coverage.connectionStatus = "no_material_connection_supported"
-   with coverage.noConnectionReason explaining why.
-
-5. questionsToClarify[] — the highest-value questions the strategist
-   should resolve during the included 30-minute review. Each with:
-   - question
-   - whyItMatters  (one sentence on which decision or finding this
-                    unblocks)
-
-   These must be questions that could change the priority order,
-   change the interpretation, clarify an unsupported assumption,
-   establish financial magnitude, or affect the owner's next
-   decision. Avoid generic discovery questions.
-
-6. decisionOrder[] — the recommended order of attention for the
-   owner. One entry per step with:
-   - step   (1-based integer)
-   - action (short sentence)
-   - whyNow (one sentence on why this comes before the others)
-
-   This is the strategist's ordering, grounded in immediacy,
-   financial consequence, dependency, and decision impact — the same
-   logic the renderer uses to order gaps[]. Keep it to the fewest
-   steps that actually matter; 2-4 is normal.
-
-7. coverage{} — self-reported metadata on what the output could and
-   could not establish:
-   - gapsRequested, gapsReturned
-   - gapsShortfallReason (null when gapsReturned === gapsRequested)
-   - opportunitiesRequested, opportunitiesReturned
-   - opportunitiesShortfallReason
-   - connectionStatus ("identified" | "no_material_connection_supported")
-   - noConnectionReason (null when identified)
-
-   coverage is the honesty surface: it is read by the response
-   quality gate and shown nowhere in the owner-facing report. A
-   coverage block that claims full counts while gaps[] is short, or
-   claims "identified" while connections[] is empty, is treated as
-   a quality failure.
+- financialSnapshot[] — hard numbers only (customer_answer |
+  deterministic_fact | derived_metric). Do not estimate.
+- gaps[] — up to 3 primary gaps. Each: id, title, priority, evidence,
+  known, diagnosis, whyItMatters, unknown, decisionImplication,
+  relatedFindingIds. Do not manufacture a third gap simply to hit the
+  count; return fewer and name the shortfall in coverage.
+- opportunities[] — up to 2. Each: id, title, evidence, whyCredible,
+  economicMechanism, whatMustBeTrue, nextValidation. Dollar amounts
+  only when facts support them. Do not invent ROI.
+- connections[] — cross-finding synthesis. Each: title, findingIds,
+  explanation. Synthesis names interactions no single gap captures.
+  If none supported, emit [] with coverage.connectionStatus
+  "no_material_connection_supported" + noConnectionReason.
+- questionsToClarify[] — questions that could change the priority
+  order, interpretation, magnitude, or next decision. Not generic
+  discovery.
+- decisionOrder[] — 2-4 numbered steps grounded in immediacy,
+  financial consequence, dependency, and decision impact.
+- coverage{} — self-reported counts + connectionStatus. The response
+  quality gate reads this; counts that don't match the actual arrays
+  are rejected.
 
 EVIDENCE RULES
 
-Every gap and every opportunity MUST carry at least one evidence
-entry, and every evidence entry MUST have:
+Every gap and opportunity MUST have ≥1 evidence entry. Each entry:
 - type: "answer" | "derived_metric" | "opportunity_flag" | "deterministic_fact"
-- key:  the exact FACTS key, DERIVED METRICS metric name, or the
-        opportunity-flag name the finding is anchored on.
+- key:  exact FACTS key, DERIVED METRICS metric name, or opportunity-
+        flag name.
 
-PRIMARY GAP RULE: a primary gap whose ONLY evidence is of type
-"opportunity_flag" is rejected by the response quality gate. An
-opportunity flag may support a gap, but it cannot be the sole
-anchor. This is the Marisol discipline: a merchant-processing flag
-is a hint toward an opportunity, not a primary diagnostic.
-
-An evidence entry whose key does not appear in FACTS, DERIVED
-METRICS, or the known opportunity-flag set is rejected as unfounded.
+A primary gap whose ONLY evidence is of type "opportunity_flag" is rejected.
+An opportunity flag may support a gap but cannot be the sole anchor — this
+is the Marisol discipline: a merchant-processing flag is a hint toward an
+opportunity, not a primary diagnostic. An evidence key not in FACTS /
+DERIVED METRICS / opportunityFlags is rejected as unfounded.
 
 PRIORITY ORDER
 
-Severity and priority order are different.
-
-Multiple findings may honestly carry the same severity.
-
-The first gap should be the issue Miguel would start with if he were
-reviewing this diagnostic with the owner.
-
-Use immediacy, financial consequence, dependency, and decision
-impact to determine the order — the same logic that drives
-decisionOrder[].
+Severity and priority order are different. Multiple findings may honestly
+carry the same severity. The first gap is the one Miguel would start with.
+Order by immediacy, financial consequence, dependency, and decision impact
+— the same logic as decisionOrder[].
 
 SYNTHESIS
 
-Do not analyze each answer in isolation.
-
-Evaluate how the supported signals interact across areas such as:
-
-- cash flow
-- corporate debt and monthly debt service
-- profitability and margins
-- accounts receivable
-- revenue concentration
-- sales or revenue leakage
-- financial visibility
-- reporting discipline
-- operating runway
-- growth capital
-- growth capacity
-
-Connect answers when they belong in the same financial conversation,
-and record those connections in connections[] with findingIds, NOT
-by duplicating prose inside gaps[].
-
-Example:
-Late invoicing + weak AR discipline + decisions based partly on bank
-balance may point to a broader cash-visibility problem — that becomes
-one entry in connections[] whose findingIds reference the three gaps
-it ties together.
-
-Do not invent a causal relationship simply because two issues appear
-together.
+Do not analyze each answer in isolation. Evaluate how the supported signals
+interact: cash flow, debt + service, margins, A/R, revenue concentration,
+revenue leakage, financial visibility, reporting discipline, operating
+runway, growth capital, growth capacity. Record interactions in
+connections[] with findingIds, NOT by duplicating prose inside gaps[]. Do
+not invent causal relationships.
 
 FINANCIAL IMPACT
 
-Use actual numbers aggressively when the owner supplied them or when
-a deterministic FACT / DERIVED METRIC provides them.
-
-Quantify financial impact ONLY when the evidence supports the number.
-
-When exact impact cannot be established:
-
-- explain the economic exposure,
-- explain why it matters,
-- state the missing number or fact needed to measure it,
-- and put the missing-magnitude question into questionsToClarify[].
-
-Do not convert a hypothetical answer, estimate, or recommendation
-into a proven financial result.
+Use real numbers when the owner supplied them or FACTS / DERIVED
+METRICS provide them. Quantify ONLY when evidence supports the
+number. When magnitude cannot be established: explain the exposure,
+name the missing number, and put the magnitude question into
+questionsToClarify[]. Do not convert a hypothetical into a proven
+result.
 
 FINANCIAL VISIBILITY
 
-Miguel's bank-balance question remains a core diagnostic signal.
-
-When the owner says decisions are made from bank balance, somewhere
-in between, or they are unsure, connect that answer to the other
-financial signals in the intake.
-
-Do not assume stale books, poor cash flow, missing KPIs, or
-inaccurate financial statements unless another answer establishes
-those facts.
+Miguel's bank-balance question is a core signal. When the owner says
+decisions come from bank balance, somewhere in between, or they are
+unsure, connect it to the other signals. Do not assume stale books,
+poor cash flow, missing KPIs, or inaccurate statements unless another
+answer establishes those facts.
 
 DEBT
 
-Follow the universal debt-subtype discipline exactly.
-
-Never conflate:
-
-- managed business debt,
-- revolving credit,
-- tax debt,
-- judgments or liens,
-- delinquent debt,
-- or unknown debt.
-
-Total corporate debt and monthly debt service are foundational
-diagnostic numbers when available, and when present they belong in
+Follow debt-subtype discipline. Never conflate managed business debt,
+revolving credit, tax debt, judgments/liens, delinquent debt, or
+unknown debt. Total corporate debt and monthly debt service go in
 financialSnapshot[] with sourceType "customer_answer" or
-"deterministic_fact".
-
-Do not use debt existence alone as evidence of distress.
+"deterministic_fact". Do not use debt existence alone as evidence of
+distress.
 
 FULL DIAGNOSTIC BOUNDARY
 
-The Full Diagnostic should:
+Do: connect signals, explain interactions, rank what matters,
+identify meaningful opportunities, name what remains unresolved, give
+the owner a clearer basis for the next decision.
 
-- connect the signals,
-- explain how they interact,
-- rank what matters,
-- identify meaningful opportunities,
-- name what remains unresolved,
-- and give the owner a clearer basis for the next financial decision.
-
-It should NOT:
-
-- pretend verified financial documents were reviewed when they were not,
-- produce the full 90-day / 6-month / 12-month Business Growth Plan,
-- present CFO By Design fractional-service recommendations as though
-  the BGA process has already happened,
-- or skip the human strategist review.
+Do NOT: pretend verified financial documents were reviewed when they
+were not; produce the full 90-day / 6-month / 12-month Business
+Growth Plan; present CFO By Design fractional-service recommendations
+as though the BGA process has already happened; skip the human
+strategist review.
 
 NEXT STEP
 
-The primary next step after the $47 Full Diagnostic is the INCLUDED
-30-minute CFO By Design strategist review.
-
-The report should prepare the owner for that conversation. nextStepHeadline
-and nextStepBody must point to the strategist review, not to the
-Business Growth Analysis purchase.
-
-The strategist review is where the team:
-
-- clarifies unresolved questions,
-- challenges assumptions,
-- interprets the findings in context,
-- and helps determine the first financial move worth addressing.
-
-Do not make the Business Growth Analysis purchase the primary CTA
-inside the Full Diagnostic report.
+Primary next step is the INCLUDED 30-minute CFO By Design strategist
+review. nextStepHeadline and nextStepBody must point to it, not the
+Business Growth Analysis purchase. Do not make the Business Growth
+Analysis purchase the primary CTA inside the Full Diagnostic report.
 
 VOICE
 
-Inherit the Miguel voice and evidence discipline from ASSESSMENT_RUBRIC.
-
-Be:
-
-- direct,
-- specific,
-- numbers-first,
-- plainspoken,
-- confident when evidence is clear,
-- and explicit when something remains unknown.
-
-Do not soften a supported conclusion into generic consultant language.
-
-Do not overstate certainty simply to make the report sound authoritative.
+Inherit the Miguel voice from ASSESSMENT_RUBRIC. Direct, specific,
+numbers-first, plainspoken, confident when evidence is clear, explicit
+when something remains unknown. Do not soften, do not overstate.
 
 Customer-facing classification may ONLY be:
 growth, needs-attention, or rehab.`,
@@ -6194,9 +6010,29 @@ async function handleSolomonQueueMessage(message, env) {
   } catch (err) {
     const detail = err?.message || String(err);
     console.error(`[solomon-queue] generation failed for ${contactId} tier ${tier} attempt ${attemptNumber}/${maxAttempts}:`, detail);
-    await writeQueueTrace(env, contactId, "error", { tier, attempt: attemptNumber, final: isFinalAttempt, error: detail.slice(0, 500) });
 
-    if (isFinalAttempt) {
+    // 524 short-circuit (2026-10-28 — from Marcus Delgado's trace):
+    // Cloudflare 524 means Anthropic's edge disconnected because the
+    // generation ran past the 100s edge timeout. That is not a
+    // transient flake — the same prompt will hit the same ceiling on
+    // every retry. On 524, skip the two remaining retries (which
+    // would waste another ~4 minutes of wall-clock before giving up)
+    // and go straight to terminal-failure handling so the operator
+    // sees the failure immediately and swot|deliveryfailed fires now.
+    // Streaming (callClaudeWithRubric) is the primary mitigation —
+    // this short-circuit is defense-in-depth for the case where
+    // streaming itself hits a 524 at the headers phase.
+    const isCloudflare524 = /Claude API 524\b/.test(detail);
+    const treatAsTerminal = isFinalAttempt || isCloudflare524;
+    await writeQueueTrace(env, contactId, "error", {
+      tier,
+      attempt: attemptNumber,
+      final: treatAsTerminal,
+      shortCircuit524: isCloudflare524 && !isFinalAttempt,
+      error: detail.slice(0, 500),
+    });
+
+    if (treatAsTerminal) {
       // Terminal failure — apply swot|deliveryfailed so an HL automation
       // or an operator can see this contact has an undeliverable
       // generation, and release idempotency so a manual re-POST with
@@ -6756,33 +6592,119 @@ async function callClaudeWithRubric(prompt, rubric, env, opts = {}) {
     messages.push({ role: "user", content: String(opts.followupUser) });
   }
 
+  // Streaming subrequest (2026-10-28 — from Marcus Delgado's paid_47
+  // queue trace: all 3 attempts returned Cloudflare 524 at ~2:06 each
+  // because the 24KB prompt + 16k max_tokens generation ran past
+  // Cloudflare's 100s edge timeout on a single-response fetch). With
+  // `stream: true`, Anthropic's edge begins emitting SSE events within
+  // seconds and each delta resets the edge timeout, so a 2-minute
+  // generation stays alive and the full response accumulates safely.
+  // Behaviorally identical to the single-response path from the
+  // caller's view: same text out, same max_tokens truncation surfaced
+  // as an error.
   const response = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "x-api-key": env.ANTHROPIC_API_KEY,
       "anthropic-version": CONFIG.ANTHROPIC_VERSION,
+      "accept": "text/event-stream",
     },
     body: JSON.stringify({
       model: CONFIG.CLAUDE_MODEL,
       max_tokens: maxTokens,
       system: systemBlock,
       messages,
+      stream: true,
     }),
   });
   if (!response.ok) {
     const detail = await response.text();
     throw new Error(`Claude API ${response.status}: ${detail.slice(0, 300)}`);
   }
-  const data = await response.json();
-  const text = data.content?.[0]?.text || "";
+  const { text, stopReason } = await readAnthropicStream(response);
   // When Claude hits the output cap it returns stop_reason === "max_tokens"
   // and the final content block ends mid-JSON. Surfacing this upstream
   // means parseAgentJson's error is actionable instead of mystifying.
-  if (data.stop_reason === "max_tokens") {
+  if (stopReason === "max_tokens") {
     throw new Error(`Claude response truncated (stop_reason=max_tokens, max_tokens=${maxTokens}, output_bytes=${text.length}). Raise max_tokens for this caller.`);
   }
   return text;
+}
+
+// Read an Anthropic Messages SSE stream and return the full text + the
+// final stop_reason. Events emitted during streaming:
+//   content_block_delta { delta: { type: "text_delta", text: "..." } }
+//     → accumulate text
+//   message_delta { delta: { stop_reason: "..." } }
+//     → capture final stop_reason
+//   message_stop → end
+// Malformed data lines are skipped. The whole function is safe to call
+// on any Response whose body is an SSE stream (undici / fetch Response
+// shape); if `body` is unavailable it falls back to .text() + a best-
+// effort "last chunk" parse so test stubs returning a plain string
+// still work. See exported helper _test_parseAnthropicSse below for
+// unit coverage.
+async function readAnthropicStream(response) {
+  if (!response.body || typeof response.body.getReader !== "function") {
+    // Fallback for environments that don't expose a byte stream
+    // (very old polyfills, some test shims). The response body is
+    // the raw SSE text; parse it in one shot.
+    const raw = await response.text();
+    return _test_parseAnthropicSse(raw);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let text = "";
+  let stopReason = null;
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      // Flush decoder's final bytes + any residual buffer.
+      buffer += decoder.decode();
+      ({ text, stopReason } = _consumeSseLines(buffer, text, stopReason));
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    const lastNewline = buffer.lastIndexOf("\n");
+    if (lastNewline === -1) continue;
+    const complete = buffer.slice(0, lastNewline + 1);
+    buffer = buffer.slice(lastNewline + 1);
+    ({ text, stopReason } = _consumeSseLines(complete, text, stopReason));
+  }
+  return { text, stopReason };
+}
+
+function _consumeSseLines(chunk, textAcc, stopReasonAcc) {
+  const lines = chunk.split("\n");
+  let text = textAcc;
+  let stopReason = stopReasonAcc;
+  for (const rawLine of lines) {
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+    if (!line.startsWith("data:")) continue;
+    const payload = line.slice(5).trim();
+    if (!payload || payload === "[DONE]") continue;
+    let event;
+    try { event = JSON.parse(payload); } catch { continue; }
+    if (event.type === "content_block_delta" && event.delta && event.delta.type === "text_delta") {
+      text += String(event.delta.text || "");
+    } else if (event.type === "message_delta" && event.delta && event.delta.stop_reason) {
+      stopReason = event.delta.stop_reason;
+    } else if (event.type === "message_stop" && event["amazon-bedrock-invocationMetrics"]) {
+      // Noop — Anthropic-via-Bedrock variant carries extra metrics
+      // we don't need; the branch exists so the parser doesn't
+      // mistake it for an error state.
+    }
+  }
+  return { text, stopReason };
+}
+
+// Exported for unit tests only: parse a complete SSE text blob in one
+// shot. Production callers go through readAnthropicStream which reads
+// incrementally.
+function _test_parseAnthropicSse(sseText) {
+  return _consumeSseLines(sseText, "", null);
 }
 
 // ----- end Ask Solomon console -----
@@ -7923,6 +7845,10 @@ export {
   // drive the consumer against a stubbed GHL/Claude/env without going
   // through the Workers Queues runtime.
   handleSolomonQueueMessage,
+  // Anthropic streaming SSE parser — exported for unit coverage so a
+  // malformed-stream regression surfaces in tests rather than only in
+  // a production 524-recovered run.
+  _test_parseAnthropicSse,
 };
 
 // Phase 2A: normalization layer. Re-exported from index so tests that
