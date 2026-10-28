@@ -276,6 +276,103 @@ describe("deriveMetrics — negative-input rejection", () => {
   });
 });
 
+// --- paid_47 upgrade metrics (annual_debt_service, ar_60_plus_share_of_30_plus)
+//
+// Added for the $47 Report Value Upgrade. Both are called out by name in
+// the PAID_47_RUNTIME_SPEC as metrics the Financial Snapshot must cite
+// deterministically rather than ask Solomon to improvise. Marisol's beta
+// test produced the canonical numbers in the examples below.
+
+describe("deriveMetrics — annual_debt_service", () => {
+  it("multiplies monthly_debt_service by 12 (Marisol's $850/mo → $10,200/yr)", () => {
+    const m = get(deriveMetrics({ monthly_debt_service: 850 }), "annual_debt_service");
+    assert.equal(m.value, 10200);
+    assert.equal(m.unit, "dollars");
+    assert.deepEqual(m.inputs, [{ field: "monthly_debt_service", value: 850 }]);
+  });
+
+  it("handles non-integer monthly service without floating-point noise", () => {
+    const m = get(deriveMetrics({ monthly_debt_service: 1234.56 }), "annual_debt_service");
+    // 1234.56 * 12 = 14814.72 exactly at 2 decimals
+    assert.equal(m.value, 14814.72);
+  });
+
+  it("does NOT emit when monthly_debt_service is missing", () => {
+    assert.equal(get(deriveMetrics({}), "annual_debt_service"), null);
+    assert.equal(get(deriveMetrics({ monthly_debt_service: null }), "annual_debt_service"), null);
+    assert.equal(get(deriveMetrics({ monthly_debt_service: "unknown" }), "annual_debt_service"), null);
+  });
+
+  it("does NOT emit for a negative monthly service (data-entry guard)", () => {
+    assert.equal(get(deriveMetrics({ monthly_debt_service: -850 }), "annual_debt_service"), null);
+  });
+
+  it("emits $0 for a business with zero debt service (zero is a real finding)", () => {
+    const m = get(deriveMetrics({ monthly_debt_service: 0 }), "annual_debt_service");
+    assert.equal(m.value, 0);
+  });
+});
+
+describe("deriveMetrics — ar_60_plus_share_of_30_plus", () => {
+  it("ratios 60+ AR against 30+ AR (Marisol's $9k/$28k ≈ 0.3214)", () => {
+    const m = get(
+      deriveMetrics({ ar_30_plus: 28000, ar_60_plus: 9000 }),
+      "ar_60_plus_share_of_30_plus",
+    );
+    // 9000 / 28000 = 0.32142857... rounds to 0.3214 at 4 decimals
+    assert.equal(m.value, 0.3214);
+    assert.equal(m.unit, "ratio");
+    assert.deepEqual(m.inputs, [
+      { field: "ar_60_plus", value: 9000 },
+      { field: "ar_30_plus", value: 28000 },
+    ]);
+  });
+
+  it("does NOT emit when either input is missing or 'unknown'", () => {
+    assert.equal(
+      get(deriveMetrics({ ar_30_plus: 28000 }), "ar_60_plus_share_of_30_plus"),
+      null,
+    );
+    assert.equal(
+      get(deriveMetrics({ ar_60_plus: 9000 }), "ar_60_plus_share_of_30_plus"),
+      null,
+    );
+    assert.equal(
+      get(
+        deriveMetrics({ ar_30_plus: 28000, ar_60_plus: "unknown" }),
+        "ar_60_plus_share_of_30_plus",
+      ),
+      null,
+    );
+  });
+
+  it("does NOT emit when ar_30_plus is zero (division-by-zero as missing input)", () => {
+    assert.equal(
+      get(
+        deriveMetrics({ ar_30_plus: 0, ar_60_plus: 9000 }),
+        "ar_60_plus_share_of_30_plus",
+      ),
+      null,
+    );
+  });
+
+  it("emits 0 when 60+ AR is zero but 30+ AR exists (collections are catching up)", () => {
+    const m = get(
+      deriveMetrics({ ar_30_plus: 28000, ar_60_plus: 0 }),
+      "ar_60_plus_share_of_30_plus",
+    );
+    assert.equal(m.value, 0);
+  });
+
+  it("emits 1.0 when all 30+ AR has aged to 60+ (collections have stalled)", () => {
+    const m = get(
+      deriveMetrics({ ar_30_plus: 10000, ar_60_plus: 10000 }),
+      "ar_60_plus_share_of_30_plus",
+    );
+    assert.equal(m.value, 1);
+  });
+});
+
 // --- findMetric ---------------------------------------------------------
 
 describe("findMetric", () => {

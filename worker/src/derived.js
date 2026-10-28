@@ -146,6 +146,40 @@ export function deriveMetrics(norm) {
     decimals: 2,
   });
 
+  // --- Annualized debt service ---------------------------------------------
+  // The paid_47 Financial Snapshot cites "$X per month, $X annualized" so
+  // the owner can see the obligation at the scale decisions are made at.
+  // monthly_debt_service × 12 is deterministic math; computing it here
+  // keeps Solomon from improvising arithmetic (and getting it wrong in
+  // ways that are hard to spot — a $20 error on $10,200 looks correct
+  // enough to pass review).
+  (() => {
+    const monthly = norm.monthly_debt_service;
+    if (!isNumber(monthly) || monthly < 0) return;
+    out.push({
+      metric: "annual_debt_service",
+      value: roundTo(monthly * 12, 2),
+      unit: "dollars",
+      inputs: [{ field: "monthly_debt_service", value: monthly }],
+    });
+  })();
+
+  // --- A/R aging concentration (60+ as share of 30+) -----------------------
+  // "$9,000 of your $28,000 overdue A/R is already 60+ days" is a direct
+  // concentration signal — collections are not keeping up with aging and
+  // the problem is drifting older, not holding steady. Expressed as a
+  // ratio (0.3214) so the renderer can decide whether to display as a
+  // percentage (32.1%) or in-line. Only emits when BOTH ar_30_plus and
+  // ar_60_plus are present AND ar_30_plus > 0 (division-by-zero on a
+  // business with zero overdue A/R is not a legitimate finding).
+  pushRatio({
+    metricName: "ar_60_plus_share_of_30_plus",
+    numeratorKey: "ar_60_plus",
+    denominatorKey: "ar_30_plus",
+    unit: "ratio",
+    decimals: 4,
+  });
+
   // --- Funnel conversion rates ---------------------------------------------
   // These do not fire today — the current GHL intake does not collect
   // the per-stage counts. The code is in place for the day the normalizer
