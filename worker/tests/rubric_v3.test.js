@@ -273,26 +273,30 @@ describe("Rubric v3 — TIER_GUIDE content", () => {
     assert.match(TIER_GUIDE.paid_47, /coverage\{\}/);
 
     // Marisol discipline: a primary gap grounded only in an
-    // opportunity flag is rejected.
-    assert.match(TIER_GUIDE.paid_47, /primary gap whose ONLY evidence is of type\s+"opportunity_flag" is rejected/);
-    assert.match(TIER_GUIDE.paid_47, /merchant-processing flag\s+is a hint toward an opportunity, not a primary diagnostic/);
+    // opportunity flag is rejected. \s+ is used for every inter-word
+    // boundary so prose that wraps across a newline (as it does on the
+    // trimmed paid47-2.0 TIER_GUIDE) still matches.
+    assert.match(TIER_GUIDE.paid_47, /primary\s+gap\s+whose\s+ONLY\s+evidence\s+is\s+of\s+type\s+"opportunity_flag"\s+is\s+rejected/);
+    assert.match(TIER_GUIDE.paid_47, /merchant-processing\s+flag\s+is\s+a\s+hint\s+toward\s+an\s+opportunity,\s+not\s+a\s+primary\s+diagnostic/);
 
-    // Core promises the block locks in:
-    assert.match(TIER_GUIDE.paid_47, /Do not manufacture a third gap simply to hit the count/);
-    assert.match(TIER_GUIDE.paid_47, /Severity and priority order are different/);
-    assert.match(TIER_GUIDE.paid_47, /Do not analyze each answer in isolation/);
-    assert.match(TIER_GUIDE.paid_47, /Do not invent ROI/);
-    assert.match(TIER_GUIDE.paid_47, /Do not use debt existence alone as evidence of distress/);
+    // Core promises the block locks in. \s+ is used for inter-word
+    // boundaries so prose that wraps across a newline still matches
+    // (the trimmed paid47-2.0 TIER_GUIDE word-wraps aggressively).
+    assert.match(TIER_GUIDE.paid_47, /Do\s+not\s+manufacture\s+a\s+third\s+gap\s+simply\s+to\s+hit\s+the\s+count/);
+    assert.match(TIER_GUIDE.paid_47, /Severity\s+and\s+priority\s+order\s+are\s+different/);
+    assert.match(TIER_GUIDE.paid_47, /Do\s+not\s+analyze\s+each\s+answer\s+in\s+isolation/);
+    assert.match(TIER_GUIDE.paid_47, /Do\s+not\s+invent\s+ROI/);
+    assert.match(TIER_GUIDE.paid_47, /Do\s+not\s+use\s+debt\s+existence\s+alone\s+as\s+evidence\s+of\s+distress/);
     // The included 30-min strategist review is the primary next step —
     // NOT the BGA purchase CTA.
-    assert.match(TIER_GUIDE.paid_47, /INCLUDED\s+30-minute CFO By Design strategist review/);
-    assert.match(TIER_GUIDE.paid_47, /Do not make the Business Growth Analysis purchase the primary CTA\s+inside the Full Diagnostic report/);
+    assert.match(TIER_GUIDE.paid_47, /INCLUDED\s+30-minute\s+CFO\s+By\s+Design\s+strategist\s+review/);
+    assert.match(TIER_GUIDE.paid_47, /Do\s+not\s+make\s+the\s+Business\s+Growth\s+Analysis\s+purchase\s+the\s+primary\s+CTA\s+inside\s+the\s+Full\s+Diagnostic\s+report/);
     // Full Diagnostic boundary — not the BGA, not a 90-day plan, not
     // CFO fractional-service recommendations.
-    assert.match(TIER_GUIDE.paid_47, /not the Business Growth Analysis/);
-    assert.match(TIER_GUIDE.paid_47, /not a complete\s+implementation roadmap/);
-    assert.match(TIER_GUIDE.paid_47, /pretend verified financial documents were reviewed when they were not/);
-    assert.match(TIER_GUIDE.paid_47, /growth, needs-attention, or rehab/);
+    assert.match(TIER_GUIDE.paid_47, /not\s+the\s+Business\s+Growth\s+Analysis/);
+    assert.match(TIER_GUIDE.paid_47, /not\s+a\s+complete\s+implementation\s+roadmap/);
+    assert.match(TIER_GUIDE.paid_47, /pretend\s+verified\s+financial\s+documents\s+were\s+reviewed\s+when\s+they\s+were\s+not/);
+    assert.match(TIER_GUIDE.paid_47, /growth,\s+needs-attention,\s+or\s+rehab/);
 
     // Hard regression bar: the discarded "synthesize the complete
     // picture" one-liner must stay out.
