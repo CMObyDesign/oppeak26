@@ -5548,6 +5548,10 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
   if (env.SOLOMON_QUEUE && typeof env.SOLOMON_QUEUE.send === "function") {
     try {
       await env.SOLOMON_QUEUE.send(queuePayload);
+      // Observability (2026-10-28): producer-side trace. If this trace
+      // exists but no "received" trace follows, the queue consumer isn't
+      // registered on the Worker in production — see /diag/queue-trace.
+      await writeQueueTrace(env, contactId, "enqueued", { tier, source: "from-ghl-survey" });
       return json({
         success: true,
         accepted: true,
@@ -5653,12 +5657,41 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
 //     reservation (so a fresh manual re-POST can succeed), and ack the
 //     message rather than throwing. If we threw, Queues would move it
 //     to the DLQ, which the Worker doesn't have a consumer for yet.
+// Append one trace line to R2 (SOLOMON_LIBRARY) at
+// queue_traces/{contactId}/{timestamp}-{stage}.json. Fire-and-forget,
+// never throws — observability must not break the pipeline it watches.
+// Read via GET /diag/queue-trace/{contactId}. See the comment on that
+// endpoint for the diagnostic contract.
+async function writeQueueTrace(env, contactId, stage, extra = {}) {
+  if (!env?.SOLOMON_LIBRARY || !contactId) return;
+  const now = new Date().toISOString();
+  const key = `queue_traces/${contactId}/${now}-${stage}.json`;
+  try {
+    const body = JSON.stringify({ ts: now, stage, contactId, ...extra });
+    await env.SOLOMON_LIBRARY.put(key, body, {
+      httpMetadata: { contentType: "application/json" },
+    });
+  } catch (err) {
+    // Observability failure is itself observable — log to console but
+    // don't throw up to the caller.
+    console.warn(`[queue-trace] put failed for ${key}: ${err?.message || err}`);
+  }
+}
+
 async function handleSolomonQueueMessage(message, env) {
   const payload = message.body;
   const attemptNumber = (message.attempt ?? message.attempts ?? 1);
   const maxAttempts = 3; // keep in sync with wrangler.toml max_retries + 1 initial
   const isFinalAttempt = attemptNumber >= maxAttempts;
   const { contactId, tier, dryRun, allowPartial, sourceEventId, idemPath, requestOrigin } = payload || {};
+
+  // Observability (2026-10-28 Codex P1 follow-up): write a trace to R2
+  // at every stage so GET /diag/queue-trace/{contactId} can show
+  // exactly how far the consumer got. A missing "received" trace means
+  // the consumer wasn't invoked at all (queue consumer not registered,
+  // or still enqueued); a trace that stops at "fetched_contact" means
+  // Claude never ran; etc.
+  await writeQueueTrace(env, contactId, "received", { attempt: attemptNumber, tier });
 
   if (!contactId || !tier) {
     console.error(`[solomon-queue] malformed payload (missing contactId/tier):`, JSON.stringify(payload));
@@ -5669,9 +5702,11 @@ async function handleSolomonQueueMessage(message, env) {
   try {
     const contact = await fetchGHLContact(contactId, env);
     if (!contact) throw new Error(`contact ${contactId} not found in GHL`);
+    await writeQueueTrace(env, contactId, "fetched_contact", { tier, hasTags: !!contact.tags?.length, hasFields: !!contact.customFields?.length });
 
     const answers = await answersFromContactFields(contact, env);
     if (!answers.length) throw new Error(`no survey answers on contact ${contactId}`);
+    await writeQueueTrace(env, contactId, "built_answers", { tier, answersCount: answers.length });
 
     // Re-run completeness in case the first webhook landed partway
     // through HL's field writeback and the queued attempt now sees the
@@ -5683,6 +5718,7 @@ async function handleSolomonQueueMessage(message, env) {
       allowPartial,
     });
     if (!completeness.ok) {
+      await writeQueueTrace(env, contactId, "completeness_short", { tier, seen: completeness.answersSeen, minExpected: completeness.minExpected });
       throw new Error(`intake short for ${contactId} tier ${tier}: ${completeness.answersSeen} of ${completeness.minExpected}`);
     }
 
@@ -5698,6 +5734,7 @@ async function handleSolomonQueueMessage(message, env) {
       // Catalog unavailable — Solomon can still run on raw answers, but
       // the structured_findings sanitizer will skip. Log and continue.
       console.warn(`[solomon-queue] catalog unavailable for ${contactId}:`, err?.message || err);
+      await writeQueueTrace(env, contactId, "catalog_unavailable", { tier, error: String(err?.message || err).slice(0, 200) });
     }
 
     const contactPayload = {
@@ -5709,8 +5746,11 @@ async function handleSolomonQueueMessage(message, env) {
     const prompt = buildPrompt(tier, answers, contactPayload, businessProfile, factsBundle);
     const rubric = ASSESSMENT_RUBRIC;
 
+    await writeQueueTrace(env, contactId, "claude_call_start", { tier, promptBytes: prompt.length });
+    const claudeStartedAt = Date.now();
     const raw = await callClaudeWithRubric(prompt, rubric, env);
     const agent = parseAgentJson(raw);
+    await writeQueueTrace(env, contactId, "claude_call_done", { tier, elapsedMs: Date.now() - claudeStartedAt, agentPath: agent?.path || null });
 
     if (tier === "free") {
       agent.opportunityFlags = (agent.opportunityFlags || []).filter(f => f !== "DIGITAL_PRESENCE_OPP");
@@ -5722,11 +5762,20 @@ async function handleSolomonQueueMessage(message, env) {
     }, `solomon-queue contact ${contactId}`);
 
     const reportHtml = buildReportHtml(agent);
+    await writeQueueTrace(env, contactId, "report_html_built", { tier, htmlBytes: reportHtml?.length || 0 });
 
     const canonical = await writeCanonicalRecord(env, {
       contact: { id: contactId, ...contact },
       tier, answers, agent, reportHtml,
       sourceEventId, dryRun, normalizedAnswers, derivedMetrics,
+    });
+    await writeQueueTrace(env, contactId, "canonical_written", {
+      tier,
+      ok: !!canonical?.ok,
+      skipped: !!canonical?.skipped,
+      skipReason: canonical?.reason || null,
+      reportId: canonical?.reportId || null,
+      error: canonical?.error || null,
     });
     if (canonical?.skipped && canonical.reason === "duplicate_submission") {
       message.ack();
@@ -5747,10 +5796,12 @@ async function handleSolomonQueueMessage(message, env) {
       canonical, dryRun,
     });
 
+    await writeQueueTrace(env, contactId, "writeback_done", { tier });
     message.ack();
   } catch (err) {
     const detail = err?.message || String(err);
     console.error(`[solomon-queue] generation failed for ${contactId} tier ${tier} attempt ${attemptNumber}/${maxAttempts}:`, detail);
+    await writeQueueTrace(env, contactId, "error", { tier, attempt: attemptNumber, final: isFinalAttempt, error: detail.slice(0, 500) });
 
     if (isFinalAttempt) {
       // Terminal failure — apply swot|deliveryfailed so an HL automation
@@ -6729,6 +6780,53 @@ export default {
           droppedCount: dropped.length,
           kept,
           dropped,
+        });
+      }
+
+      // GET /diag/queue-trace/{contactId} — list the Solomon-queue
+      // trace lines (2026-10-28 Codex P1 follow-up). handleSolomonQueueMessage
+      // + the /from-ghl-survey producer path write a trace to R2 at
+      // queue_traces/{contactId}/{iso-timestamp}-{stage}.json at every
+      // step. This endpoint returns them sorted oldest-first so an
+      // operator can see exactly how far the queue consumer got:
+      //
+      //   enqueued only                   → consumer not registered (or
+      //                                     message not yet picked up)
+      //   received only                   → consumer invoked but died
+      //                                     before fetching contact
+      //   fetched_contact → built_answers → completeness_short / passed
+      //   claude_call_start then no done  → Claude call failed or hit
+      //                                     a Workers wall-clock cap
+      //   canonical_written with ok=false → D1 insert failed; see error
+      //   writeback_done                  → full success
+      //   error (final=true)              → terminal failure, deliveryfailed applied
+      //
+      // Same auth as /diag/contact (x-console-password header only).
+      const diagTraceMatch = path.match(/^\/diag\/queue-trace\/([A-Za-z0-9_-]+)$/);
+      if (diagTraceMatch) {
+        const pwHeader = request.headers.get("x-console-password");
+        if (!env.CONSOLE_PASSWORD || pwHeader !== env.CONSOLE_PASSWORD) {
+          return json({ error: "Unauthorized" }, 401);
+        }
+        const traceCid = diagTraceMatch[1];
+        if (!env.SOLOMON_LIBRARY) return json({ error: "SOLOMON_LIBRARY not bound" }, 500);
+        const prefix = `queue_traces/${traceCid}/`;
+        const list = await env.SOLOMON_LIBRARY.list({ prefix, limit: 500 }).catch((err) => ({ _err: err }));
+        if (list?._err) return json({ error: `list failed: ${String(list._err.message || list._err).slice(0,200)}` }, 500);
+        const objects = list.objects || [];
+        objects.sort((a, b) => String(a.key).localeCompare(String(b.key)));
+        const traces = [];
+        for (const obj of objects) {
+          const body = await env.SOLOMON_LIBRARY.get(obj.key).catch(() => null);
+          if (!body) continue;
+          const text = await body.text().catch(() => null);
+          if (!text) continue;
+          try { traces.push(JSON.parse(text)); } catch { traces.push({ raw: text.slice(0, 200), key: obj.key }); }
+        }
+        return json({
+          contactId: traceCid,
+          traceCount: traces.length,
+          traces,
         });
       }
       // GET /asksolomon/library — list library items with metadata.

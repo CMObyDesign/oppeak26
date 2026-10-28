@@ -15,10 +15,18 @@ export const OFFERS = {
   },
 };
 
+// Always resets to the current time — each new completion starts a
+// fresh 48h / 24h / 168h countdown. The previous `if (!already set)`
+// guard caused the "$47 offer has expired" dead-end on 2026-10-28:
+// Liz's first SOLOMON50 test of the day set this key; every subsequent
+// test (fresh contact, different email alias, different browser session
+// via `window.localStorage` persisting) inherited that timestamp, so
+// the 48h window was partially or fully elapsed by the time she
+// re-tested — HIDING the real $47 pay button entirely and showing the
+// "expired" message instead. One completion = one fresh countdown is
+// the only semantic that matches the UX intent.
 export function setAssessmentTimestamp() {
-  if (!localStorage.getItem(ASSESSMENT_COMPLETED_KEY)) {
-    localStorage.setItem(ASSESSMENT_COMPLETED_KEY, Date.now().toString());
-  }
+  localStorage.setItem(ASSESSMENT_COMPLETED_KEY, Date.now().toString());
 }
 
 export function getAssessmentTimestamp(): number | null {
