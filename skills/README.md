@@ -1,89 +1,55 @@
-# CFO ByDesign Skills
-
-> **Status: DESIGNED / DOCUMENTED / NOT YET WIRED INTO RUNTIME.**
->
-> These files are workflow specifications ("skill contracts"), **not**
-> runtime capabilities the Worker loads automatically. Nothing in
-> `worker/src/` imports from `skills/`. The Solomon prompt stack built
-> by `worker/src/index.js:buildPrompt()` does not read these files;
-> they do not change what Solomon returns in production.
->
-> The language below ("skills the Solomon SWOT Engine loads") describes
-> the **intended** Phase-2 architecture, not the current state. Treat
-> each skill here as documentation of a workflow the strategist (or a
-> future automated loader) is expected to follow — not as a function
-> that fires on its own today.
->
-> The BGA Copilot strategist console (`worker/src/bga_copilot/`) is
-> where the equivalent production tooling lives: deterministic service
-> matching, roadmap generation, document extraction, pre-send QA, and
-> approve-and-send are all shipped modules, each with its own test
-> file.
-
----
-
-7 CFO-specific skills the Solomon SWOT Engine [will load, once Phase 2 wires them in] to produce CFO-grade outputs. Each skill is a workflow contract — when to load, what to ask for, how to act, what to return.
-
-Mirrors the SKILL-AUTHORING-STANDARD pattern from the parent Spark Operations skills library.
-
-**Shipped:** 2026-06-22 (Phase 1 — contracts only; Python tools and references in Phase 2)
-
-## The 7 Skills
-
-| # | Skill | What it does | Primary consumer |
-|---|---|---|---|
-| 1 | [financial-statement-analyzer](financial-statement-analyzer/SKILL.md) | Parse P&L / BS / cash flow, flag anomalies, surface pre-call questions | Upstream of all others |
-| 2 | [cash-flow-forecaster](cash-flow-forecaster/SKILL.md) | 13-week rolling forecasts, scenario stress tests, runway analysis | $297 deep dive + fractional CFO retainers |
-| 3 | [debt-restructure-analyzer](debt-restructure-analyzer/SKILL.md) | Map debt stack, rank by economic damage, recommend restructure path | MCA-stacked clients, workout situations |
-| 4 | [tax-resolution-intake](tax-resolution-intake/SKILL.md) | Structured intake for IRS / state tax liabilities, severity triage, EA / attorney handoff packet | Any TAX_RESOLUTION_OPP flag from SWOT |
-| 5 | [industry-benchmarker](industry-benchmarker/SKILL.md) | Compare client metrics to peer NAICS + revenue band benchmarks (RMA, IRS SOI, BizMiner) | Interpretation layer for the above |
-| 6 | [proposal-drafter](proposal-drafter/SKILL.md) | Miguel-voice proposals — fractional retainers + project scopes — story-first, voice-checked | SWOT follow-on, cold discovery follow-on |
-| 7 | [meeting-notes-extractor](meeting-notes-extractor/SKILL.md) | Transcripts → action lists, decisions, verbatim quote pack, CFO-side flag scan | Every client conversation |
-
-## Skill graph
+# CFO By Design · Solomon Skills
 
 ```
-                meeting-notes-extractor
-                          │
-                          ▼
-              financial-statement-analyzer
-                ┌──────────┼──────────┐
-                ▼          ▼          ▼
-        cash-flow-      debt-      tax-resolution-
-        forecaster   restructure-     intake
-                      analyzer
-                ┌──────────┼──────────┐
-                ▼          ▼          ▼
-              industry-benchmarker
-                          │
-                          ▼
-                  proposal-drafter
+REFERENCE SPEC ONLY — NOT RUNTIME AUTHORITY
+
+Nothing under /skills/ is currently imported, loaded, read, or executed by
+the Worker.
+
+Editing a SKILL.md file does not change Solomon's production behavior.
+
+Production financial reasoning currently comes from:
+- ASSESSMENT_RUBRIC
+- TIER_GUIDE
+- buildPrompt()
+- deterministic facts / derived metrics
+- structured output schema / renderer
+- worker/src/bga_copilot/* for BGA orchestration
 ```
 
-## What's intentionally NOT in these drafts (deferred to Phase 2)
+## Intended Future Architecture
 
-- Python scripts (`scripts/` folders) — these are spec-only; tools come next
-- Knowledge base references (`references/` folders) — RMA tables, IRS letter-code catalog, NAICS-to-benchmark maps
-- Templates (`templates/` folders) — proposal templates, intake forms, hand-off packets
-- Cross-reference into `.claude-plugin/marketplace.json` and `.codex/skills-index.json`
+Skills are reusable CFO capabilities, not product tiers.
 
-Each skill's SKILL.md is the workflow contract. Phase 2 builds the supporting infrastructure once the contracts are approved.
+The same financial capability may be available at different levels of depth depending on the product tier.
 
-## Voice & opinionation notes (worth a re-read before approving)
+Tier policy controls:
 
-- All skills carry an opinionated practitioner voice. They tell you what to do, not what's available.
-- Several skills have **hard rules** (tax-resolution refuses to advise on representation; industry-benchmarker refuses to invent benchmarks; proposal-drafter bans 5 buzzwords). These create teeth — agents that load them will refuse to violate the rule.
-- All skills lead with "Bottom line first" communication and confidence tagging (🟢/🟡/🔴).
+- whether the capability may be invoked,
+- which inputs it may use,
+- the depth of analysis allowed,
+- whether verification is required,
+- and what output it may produce.
 
-## Roadmap
+## Intended Access Matrix
 
-**Phase 1 (this folder, shipped 2026-06-22):** 7 SKILL.md contracts + folder-level CLAUDE.md index.
+```
+Capability                     Free              $47               BGA
+cash-flow-forecaster            signal_only       diagnose          verified_planning
+debt-restructure-analyzer       signal_only       diagnose          sequence/recommend
+financial-statement-analyzer    disabled          docs_if_present   verified_analysis
+industry-benchmarker            limited           diagnose          strategic_analysis
+tax-resolution-intake           signal_only       diagnose          sequence/service_fit
+meeting-notes-extractor         disabled          disabled          enabled
+proposal-drafter                disabled          disabled          strategist_only
+review-response-reputation      outside_core      outside_core      outside_core
+taste-skill                     experimental      experimental      experimental
+```
 
-**Phase 2 (next):**
-1. Wire the Solomon backend (`worker/src/index.js`) to load relevant skills based on SWOT path — see `CLAUDE.md` for the path → skills map.
-2. Build Python scripts in priority order: `cash-flow-forecaster` → `proposal-drafter` → `financial-statement-analyzer` first.
-3. Build knowledge bases (`references/`): RMA ratio tables, IRS letter-code catalog, NAICS-to-benchmark maps, debt-instrument glossary.
-4. Build templates (`templates/`): proposal opener templates, intake forms, hand-off packets.
-5. Build `cfobd-client-context.md` per-engagement context-file pattern per the SKILL-AUTHORING-STANDARD.
+## Important
 
-**Phase 3 (later):** Consultant-facing Solomon console at `solomon-console.cfobydesign.workers.dev` (CF Pages + CF Access auth) where Miguel's team can QA outputs, replay prompts, and approve reports before client send.
+This matrix is **policy design only** until a production loader and enforcement layer are implemented.
+
+See [`/prompts/UNIVERSAL_RUBRIC_RUNTIME_SPEC.md`](../prompts/UNIVERSAL_RUBRIC_RUNTIME_SPEC.md) for the "shared skills + BGA orchestration" philosophy that governs how tier policy should eventually gate these capabilities.
+
+See [`worker/src/bga_copilot/`](../worker/src/bga_copilot/) for the equivalent shipped tooling — deterministic modules with their own test files that cover the BGA-specific workflow (document extraction, verified-financial writes, roadmap generation, service matching, prep brief, challenge, call-decisions extraction, pre-send QA, and approve-and-send).

@@ -1,56 +1,73 @@
 # prompts/
 
-**Status: REFERENCE ONLY — NOT WIRED INTO RUNTIME.**
+```
+STATUS: REFERENCE SPECIFICATIONS ONLY — NOT RUNTIME AUTHORITY
 
-The files in this directory are early-draft prompt documents preserved
-for reference. They are **not imported, read, or otherwise consumed by
-the Worker at runtime**. Editing a file here does not change what
-Solomon sees in production.
+Nothing in this directory is imported or consumed by the Worker.
+Editing these files does not change Solomon's production behavior.
+```
 
-## Where the production prompts actually live
+## Production authority
 
-- Free, $47, and $297/BGA tier prompts are all built inline inside
-  `worker/src/index.js`:
-    - `ASSESSMENT_RUBRIC` string constant (around line 129) —
-      the universal rubric header, carries `RUBRIC_VERSION = "r3.0"`
-    - `TIER_GUIDE[tier]` object (around line 611) —
-      per-tier instructions (free / paid_47 / paid_297)
-    - `buildPrompt(tier, answers, ...)` function (around line 668) —
-      assembles the final USER message passed to Claude; carries
-      `PROMPT_VERSION = "p2.2"`
-- The BGA Copilot strategist-facing prompts (roadmap draft, prep
-  brief, challenge, call-decisions, red-team QA) live in their
-  respective modules under `worker/src/bga_copilot/*.js`.
+Production prompt behavior lives in:
 
-## Why this directory still exists
+**`worker/src/index.js`**
 
-Historical reference for the prompt structure the project started with.
-Useful as a readable prose spec of the FREE tier format; the
-`strategist_brief_prompt.md` doc describes the brief shape in prose.
+- `ASSESSMENT_RUBRIC`
+- `TIER_GUIDE.free`
+- `TIER_GUIDE.paid_47`
+- `TIER_GUIDE.paid_297`
+- `buildPrompt()`
 
-## What was removed
+BGA Copilot prompts live under:
 
-Two files were pure placeholders (literal text:
-`"Placeholder: attachment content ... was not available on disk in this
-environment. Replace this file with the exact attached draft content."`)
-and have been deleted:
+**`worker/src/bga_copilot/`**
 
-- `paid_tier_prompt.md`
-- `strategist_brief_deep_dive_prompt.md`
+The structured output schema and report renderer also materially affect what the customer receives.
 
-They had no content worth preserving and risked tricking a future editor
-into believing they were authoritative.
+## Files in this directory
 
-## Known stale content in the files that remain
+- [`UNIVERSAL_RUBRIC_RUNTIME_SPEC.md`](./UNIVERSAL_RUBRIC_RUNTIME_SPEC.md) — product ladder, shared financial capabilities, Miguel / Solomon identity, anti-withholding rules.
+- [`FREE_TIER_RUNTIME_SPEC.md`](./FREE_TIER_RUNTIME_SPEC.md) — Business Health Check behavior.
+- [`PAID_47_RUNTIME_SPEC.md`](./PAID_47_RUNTIME_SPEC.md) — $47 Full Diagnostic behavior, output contract, quality gate, deterministic math.
+- [`STRATEGIST_REVIEW_SPEC.md`](./STRATEGIST_REVIEW_SPEC.md) — internal 30-minute strategist review prompt.
+- [`PAID_297_RUNTIME_SPEC.md`](./PAID_297_RUNTIME_SPEC.md) — Business Growth Analysis Part 1 (the live paid_297 report).
+- [`BGA_COPILOT_RUNTIME_SPEC.md`](./BGA_COPILOT_RUNTIME_SPEC.md) — internal roadmap, 50-minute call, post-call final plan.
+- [`SERVICE_RECOMMENDATION_SPEC.md`](./SERVICE_RECOMMENDATION_SPEC.md) — service-match philosophy.
 
-- `free_tier_prompt.md` says Solomon receives *"five free-tier answers"*
-  — current production is **11 free-tier questions**
-  (`app/src/data/freeAssessmentQuestions.ts`).
-- `strategist_brief_prompt.md` still references *"Bridge to $297 Deep
-  Dive Audit"* — the public product name has been
-  **Business Growth Analysis** since
-  `docs/brand/PRODUCT_NAMING_AND_LADDER.md` retired "Deep Dive".
+## Product ladder
 
-These will stay stale until a future effort re-syncs this directory
-against the live `worker/src/index.js` prompts, or decides to delete
-it outright. Neither affects production.
+Business Health Check → $47 Full Diagnostic → included 30-minute strategist review → $297 Business Growth Analysis → Premium CFO Bundle Service / appropriate CFO By Design solutions.
+
+## Purpose of this directory
+
+These files are readable specifications of the intended runtime behavior.
+
+They exist to help developers, QA, strategists, and product owners understand:
+
+- what each tier is supposed to accomplish,
+- how value should increase through the funnel,
+- where each tier should stop,
+- and what the legitimate next step is.
+
+They are **NOT editable production prompts**.
+
+## Important
+
+- Do not document hard-coded line numbers here.
+- Do not treat version numbers written in this directory as authoritative. For current production versions, inspect the runtime constants in code.
+- Do not create standalone prompt Markdown files and assume Solomon will use them.
+- When a reference spec and production code disagree, production code is the current behavior and the discrepancy should be treated as documentation drift requiring review.
+
+## Naming
+
+Customer-facing:
+
+- Business Health Check
+- $47 Full Diagnostic
+- Business Growth Analysis
+- Premium CFO Bundle Service
+- CFO By Design
+- Solomon
+
+Internal technical names may remain unchanged unless intentionally migrated.
