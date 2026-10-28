@@ -5872,10 +5872,24 @@ async function finalizeSurveyWriteback({
       ? (alreadyPaid297_fn ? "swot_paid_297" : "swot_paid_297_pending")
       : tier === "paid_47" ? "swot_paid_47"
       : "swot_free_lead";
+  // 2026-10-28 (from Marisol's first successful paid_47 generation,
+  // contact DeubTUGSn9U9IL4layqU): the previous `tier.replace(/^paid_/, "")`
+  // stripped the `paid_` prefix and produced swot_report_ready_47 /
+  // swot_report_ready_297, mismatched with every HL workflow that
+  // triggers on swot_report_ready_paid_47 / swot_report_ready_paid_297
+  // (email-templates/README.md, docs/FUNNEL_TAXONOMY.md,
+  // docs/hl-automations/README.md, app/public/email-preview). Email 02
+  // (Full Diagnostic delivery) and Email 03 (BGA Part 1) never fired
+  // because the trigger tag the code emitted wasn't the tag the HL
+  // workflows watched for. Explicit canonical names below — no string
+  // transformation, since the code was wrong by exactly one strip and
+  // keeping the join template would hide that fact next time someone
+  // asks "is the tag the HL workflow is watching for the one we emit?".
   const reportReadyTag_fn =
-    tier === "paid_297" && !alreadyPaid297_fn
-      ? null
-      : `swot_report_ready_${tier.replace(/^paid_/, "")}`;
+    tier === "paid_297" && !alreadyPaid297_fn ? null
+    : tier === "paid_297" ? "swot_report_ready_paid_297"
+    : tier === "paid_47"  ? "swot_report_ready_paid_47"
+    :                       "swot_report_ready_free";
   const lifecycleTags_fn = [
     tierTag_fn,
     ...pathTags(agent.path),
