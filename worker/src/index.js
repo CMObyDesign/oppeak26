@@ -5471,9 +5471,36 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
 
   // Idempotency: skip if we already ran for this contact+tier moments ago
   // (double-submit or a GHL webhook retry) — avoids a duplicate report + email.
-  const idem = await reserveIdempotency(`${contact.id}_${tier}`, env);
+  //
+  // Replay escape hatch (2026-10-28): when a prior run was cancelled by
+  // the client-disconnect timeout (the pre-async-split failure mode) or
+  // crashed mid-run, the idempotency reservation stays live for 3
+  // minutes with no completion marker. Every retry within that window
+  // short-circuits with {deduped: true} and never generates the report
+  // — Liz hit this when resending the webhook from the HL workflow
+  // after the first run timed out. Pass `replay: true` in the body
+  // (or `?replay=1` on the URL) to force a fresh run, releasing the
+  // stale reservation first. HL's "Re-execute" step can be configured
+  // to carry this flag so a manual re-run always clears the guard.
+  const replayRequested = body?.replay === true
+    || body?.force === true
+    || requestUrl.searchParams.get("replay") === "1"
+    || requestUrl.searchParams.get("force") === "1";
+  const idemKey = `${contact.id}_${tier}`;
+  if (replayRequested) {
+    const staleIdemPath = `idem/${encodeURIComponent(idemKey)}.json`;
+    await releaseIdempotency(staleIdemPath, env).catch(() => {});
+    console.warn(`[from-ghl-survey] replay flag set — cleared idempotency for ${idemKey}`);
+  }
+  const idem = await reserveIdempotency(idemKey, env);
   if (idem.duplicate) {
-    return json({ success: true, deduped: true, contactId: contact.id, tier });
+    return json({
+      success: true,
+      deduped: true,
+      contactId: contact.id,
+      tier,
+      hint: "A prior run reserved this contact+tier within the last 3 minutes. If that run was cancelled mid-execution (client timeout, worker crash), pass `replay: true` in the body to force a fresh generation.",
+    });
   }
 
   // ────────────────────────────────────────────────────────────────────
