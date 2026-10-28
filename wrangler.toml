@@ -103,3 +103,44 @@ bucket_name = "solomon-reports"
 [[r2_buckets]]
 binding = "BGA_AUDIT"
 bucket_name = "bga-audit"
+
+# Queue — long-running Solomon generation. The /from-ghl-survey webhook
+# enqueues a message carrying the contact id + tier; the queue consumer
+# runs Solomon (Claude call + canonical write + GHL writeback) with the
+# full 15-minute invocation budget and automatic retries.
+#
+# Why this exists (Codex P1 on #154, 2026-10-28):
+#   HL's "Custom Webhook" workflow action has a HARD 60-second response
+#   timeout. The pre-queue async-split moved generation into
+#   ctx.waitUntil(), but Cloudflare caps waitUntil at 30 seconds after
+#   response send, so paid_47 and paid_297 generations (60-180s wall-clock
+#   for the Claude call alone) still got cancelled — just silently instead
+#   of visibly. Cloudflare's own docs point at Queues for exactly this:
+#     > If the work cannot finish within the waitUntil() time limit, send
+#     > messages to a Queue and process them in a separate consumer Worker.
+#     > Queues provide reliable delivery and automatic retries.
+#
+# Provision these BEFORE deploying this config, otherwise the Worker start
+# will fail validation:
+#   wrangler queues create solomon-generation
+#   wrangler queues create solomon-generation-dlq
+#
+# After the two queues exist, Workers Builds will pick up the config on
+# the next push. The handler also falls back to ctx.waitUntil() when
+# SOLOMON_QUEUE is undefined (e.g. local dev without --queues) so the
+# code stays runnable before the queues are provisioned.
+[[queues.producers]]
+binding = "SOLOMON_QUEUE"
+queue = "solomon-generation"
+
+[[queues.consumers]]
+queue = "solomon-generation"
+# One message per invocation — Solomon runs don't batch. Short timeout so
+# an idle queue doesn't wait on batching.
+max_batch_size = 1
+max_batch_timeout = 10
+# Three retries with Queues' default exponential backoff. On exhaustion the
+# message hits solomon-generation-dlq and the consumer applies
+# swot|deliveryfailed to the contact as a durable failure signal.
+max_retries = 3
+dead_letter_queue = "solomon-generation-dlq"
