@@ -3514,6 +3514,48 @@ ${couponRow}
 </html>`;
 }
 
+// Call Claude for a Solomon generation and parse the result as JSON,
+// with ONE regeneration attempt on parse failure. The regeneration
+// turn passes the model its own prior (malformed) response as
+// `priorAssistant` and a focused nudge as `followupUser` so the model
+// sees exactly what it emitted and the exact fix. This covers the
+// malformed-JSON failure mode Liz hit in production (position-6246
+// parse error reaching the client as a 500) without needing a code
+// change every time the model finds a new way to break JSON.
+//
+// Fail path: if the retry also fails to parse, throws the SECOND
+// parse error — the first attempt's error is already in writeQueueTrace
+// via the caller, and the retry's error is the one worth bubbling up
+// (it's what the model emitted after seeing its own mistake).
+async function callClaudeAndParseWithRetry({ env, contactId, prompt, rubric, callOpts, trace }) {
+  const raw = await callClaudeWithRubric(prompt, rubric, env, callOpts);
+  try {
+    return { raw, agent: parseAgentJson(raw) };
+  } catch (firstErr) {
+    const traceFn = typeof trace === "function" ? trace : (() => {});
+    try { await traceFn("agent_json_parse_failed", { attempt: 1, error: String(firstErr?.message || firstErr).slice(0, 300), rawBytes: raw?.length || 0 }); } catch (_) {}
+    const nudge =
+      "Your previous response could not be parsed as JSON. The parser said: " +
+      String(firstErr?.message || firstErr).slice(0, 300) +
+      ". Return ONLY a single JSON object matching the schema from your original instructions. " +
+      "Escape every double-quote inside a string value as \\\". Do not use literal newlines, tabs, or carriage returns inside string values — use \\n, \\t, \\r. " +
+      "Do not emit trailing commas before } or ]. No prose before or after the JSON. No code fences. The whole output must be valid JSON on its own.";
+    const retryRaw = await callClaudeWithRubric(prompt, rubric, env, {
+      ...(callOpts || {}),
+      priorAssistant: raw,
+      followupUser: nudge,
+    });
+    try {
+      const retryAgent = parseAgentJson(retryRaw);
+      try { await traceFn("agent_json_parse_recovered", { attempt: 2, rawBytes: retryRaw?.length || 0 }); } catch (_) {}
+      return { raw: retryRaw, agent: retryAgent };
+    } catch (secondErr) {
+      try { await traceFn("agent_json_parse_failed", { attempt: 2, error: String(secondErr?.message || secondErr).slice(0, 300), rawBytes: retryRaw?.length || 0 }); } catch (_) {}
+      throw secondErr;
+    }
+  }
+}
+
 // Tolerant JSON extraction — strips fences / preamble if the model adds any.
 // Also runs a conservative repair pass when strict JSON.parse fails: the
 // most common failure in production is that the model echoed quoted
@@ -3586,6 +3628,18 @@ function repairAgentJson(src) {
   for (let i = 0; i < src.length; i++) {
     const ch = src[i];
     if (!inStr) {
+      // 2026-10-29: strip trailing commas before `}` or `]`. Model
+      // output occasionally emits `, }` or `, ]` after the last
+      // property / array element; standard JSON.parse rejects those
+      // but the shape is otherwise valid. Walk the already-emitted
+      // output backwards past whitespace; if the previous
+      // non-whitespace char is a `,`, drop it before writing the
+      // closer.
+      if (ch === "}" || ch === "]") {
+        let j = out.length - 1;
+        while (j >= 0 && isWs(out[j])) j--;
+        if (j >= 0 && out[j] === ",") out.splice(j, 1);
+      }
       out.push(ch);
       if (ch === '"') inStr = true;
       continue;
@@ -3601,6 +3655,14 @@ function repairAgentJson(src) {
       escaped = true;
       continue;
     }
+    // 2026-10-29: a literal newline / tab / carriage return inside a
+    // JSON string literal is invalid (JSON requires `\n`/`\t`/`\r`
+    // escape sequences). Prose-heavy models occasionally break a long
+    // string across lines without escaping; escape the raw control
+    // character so the parser accepts the string.
+    if (ch === "\n") { out.push("\\n"); continue; }
+    if (ch === "\t") { out.push("\\t"); continue; }
+    if (ch === "\r") { out.push("\\r"); continue; }
     if (ch === '"') {
       // Look ahead past whitespace for the next non-space character.
       let j = i + 1;
@@ -5186,8 +5248,10 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
   let agent;
   const startedAt = Date.now();
   try {
-    const raw = await callClaudeWithRubric(prompt, rubric, env);
-    agent = parseAgentJson(raw);
+    const parsed = await callClaudeAndParseWithRetry({
+      env, contactId: contact?.contactId || null, prompt, rubric,
+    });
+    agent = parsed.agent;
   } catch (err) {
     return json({ success: false, error: err.message }, 500);
   }
@@ -6409,8 +6473,11 @@ async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
     try {
       let agent;
       try {
-        const raw = await callClaudeWithRubric(prompt, rubric, env);
-        agent = parseAgentJson(raw);
+        const parsed = await callClaudeAndParseWithRetry({
+          env, contactId, prompt, rubric,
+          trace: (stage, extra) => writeQueueTrace(env, contactId, stage, extra),
+        });
+        agent = parsed.agent;
       } catch (err) {
         await releaseIdempotency(idem2.path, env);
         console.error(`[from-ghl-survey:fallback] Solomon error for contact ${contactId} tier ${tier}:`, err?.message || err);
@@ -6643,8 +6710,17 @@ async function handleSolomonQueueMessage(message, env) {
 
     await writeQueueTrace(env, contactId, "claude_call_start", { tier, promptBytes: prompt.length });
     const claudeStartedAt = Date.now();
-    const raw = await callClaudeWithRubric(prompt, rubric, env);
-    let agent = parseAgentJson(raw);
+    // 2026-10-29: wrap Claude call + JSON parse so a malformed-JSON
+    // response (literal newline inside a string, unescaped quote,
+    // trailing comma, etc.) earns ONE regeneration nudge instead of
+    // 500-ing the free report to the customer. Parse failures land in
+    // the queue trace at agent_json_parse_failed / _recovered.
+    const parsed = await callClaudeAndParseWithRetry({
+      env, contactId, prompt, rubric,
+      trace: (stage, extra) => writeQueueTrace(env, contactId, stage, extra),
+    });
+    const raw = parsed.raw;
+    let agent = parsed.agent;
     await writeQueueTrace(env, contactId, "claude_call_done", { tier, elapsedMs: Date.now() - claudeStartedAt, agentPath: agent?.path || null });
 
     if (tier === "free") {
