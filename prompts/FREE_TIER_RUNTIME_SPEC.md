@@ -167,12 +167,31 @@ anything.
 
 Tie it to the first-ranked signal.
 
-The action should improve visibility, stop obvious leakage, or establish
-a useful baseline.
+OWNER-LEVEL STANDARD — this is the single most important rule for the
+free action. The move must produce a useful NUMBER, COMPARISON, or
+DECISION VIEW the owner does not already have. It must change what
+the owner can SEE about the business after fifteen to thirty minutes
+of their own work.
 
-Do not give a complete remediation plan.
+Owner-level examples (shape only; adapt to this business):
+- Compute one specific ratio or breakdown for the last 90 days so
+  the owner can see what the current bank-balance snapshot is
+  hiding.
+- Pull one specific comparison across months, service lines, or
+  customer segments so the owner can see where the margin or the
+  risk actually sits.
+- Build a one-sheet view of the real financial question in front
+  of them, from the numbers they already have in their accounting
+  file.
 
-The action must be:
+Do NOT default to a small clerical or administrative task
+("categorize uncategorized transactions," "log one month of
+write-offs by cause code," "label last week's deposits," "clean up
+your contacts list," "update your invoice template"). Those tasks
+do bookkeeping work, not decision work, and they do not change
+what the owner can SEE about the business.
+
+The action must still be:
 - specific,
 - usable now,
 - tied to the #1 signal,
@@ -290,21 +309,48 @@ say what remains unknown rather than inventing a specific vertical.
 
 THE GAP / NEXT CFO QUESTION
 
-The free report must identify one business-specific financial question
+The free report must END with ONE personalized unresolved CFO question
 that the Health Check cannot responsibly answer with the current data.
 
-State:
+BUILD the question from this specific owner's answers — do not hardcode
+or imitate a single example. Combine three ingredients:
+
+1. the real decision or next move the owner is considering,
+2. the financial constraint or unknown that matters most,
+3. the consequence Solomon cannot responsibly determine from the free
+   intake alone.
+
+Example question patterns (shape only — never reuse the sentences
+themselves):
+
+- Can [the business] support [next move] while carrying [current
+  financial constraint] without creating too much pressure on cash?
+- Is [financial issue] actually constraining the business, or is
+  another factor driving the problem?
+- Can the owner afford [hire / expansion / equipment / growth move]
+  based on the financial picture behind the current bank balance?
+- Is [growth opportunity] financially supportable at the timing the
+  owner wants?
+- What would need to be true financially before [next move] becomes a
+  sound decision?
+
+The wording must be specific to the owner's answers. The question
+should make the owner think: "That is exactly what I need to know
+next."
+
+Then state under the question:
 1. What the Health Check already established.
 2. What remains unknown.
-3. Why that unknown matters to a real decision.
+3. Why that unknown matters to the real decision.
 4. What the $47 Full Diagnostic will investigate.
 
-Do not manufacture uncertainty to create an upsell.
-Do not lead with a generic list of cash flow, debt, profitability,
-receivables, or growth categories.
-
-The owner should leave thinking:
-"I know what is happening, and now I know the exact question I need answered."
+Do not:
+- reuse the same question template mechanically,
+- invent a decision the owner did not mention,
+- manufacture uncertainty to create an upsell,
+- use a generic question like "How healthy is your business?",
+- lead with a generic list of cash flow, debt, profitability,
+  receivables, or growth categories.
 
 NEXT STEP
 

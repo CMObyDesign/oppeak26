@@ -196,28 +196,49 @@ describe("FREE REPORT RENDERING CONTRACT — fixture: shankar_dental_free_q1_q11
       APPROVED_TITLES.has(fixture.contextualInsight.title),
       `contextualInsight.title "${fixture.contextualInsight.title}" is not one of the four approved titles`,
     );
+    // 2026-10-29: the generic "Contextual Insight" heading was
+    // dropped per Liz; the signature label (The tension / What
+    // I'd watch / etc.) now stands on its own as the eyebrow.
+    // We assert title AND body appear and the card frame
+    // (`border-left:4px solid #92400e`) is present.
     const html = buildReportHtml(fixture);
-    assert.match(html, /Contextual Insight/);
+    assert.doesNotMatch(html, /Contextual Insight/,
+      "the generic 'Contextual Insight' heading must not render; the signature label is the eyebrow");
     assert.ok(html.includes(fixture.contextualInsight.title), "contextualInsight.title must appear in the rendered HTML");
     assert.ok(html.includes(fixture.contextualInsight.body), "contextualInsight.body must appear in the rendered HTML");
+    assert.match(html, /border-left:4px solid #92400e/,
+      "contextualInsight card frame must render (amber accent border)");
   });
 
   it("no blank contextualInsight shell: missing title OR body suppresses the card entirely", () => {
+    // 2026-10-29: without a "Contextual Insight" heading to look
+    // for, the card frame is the signal. The amber accent border
+    // (`#92400e`) belongs to this block alone, so its absence
+    // means the card didn't render; using the body text as a
+    // fallback probe handles the empty-title case.
+    const APPROVED_TITLES = ["The tension", "What I'd watch", "That number means", "The question I wouldn't ignore"];
+    const titleAppears = (html) => APPROVED_TITLES.some((t) => html.includes(t));
     // Missing title
     const noTitle = structuredClone(fixture);
-    noTitle.contextualInsight = { title: "", body: "something" };
-    assert.doesNotMatch(buildReportHtml(noTitle), /Contextual Insight/,
-      "Contextual Insight heading must not render when title is empty");
+    noTitle.contextualInsight = { title: "", body: "something unique xyz-123" };
+    const htmlNoTitle = buildReportHtml(noTitle);
+    assert.ok(!htmlNoTitle.includes("something unique xyz-123"),
+      "contextualInsight body must not render when title is empty");
     // Missing body
     const noBody = structuredClone(fixture);
     noBody.contextualInsight = { title: "The tension", body: "" };
-    assert.doesNotMatch(buildReportHtml(noBody), /Contextual Insight/,
-      "Contextual Insight heading must not render when body is empty");
-    // Entire field absent
+    const htmlNoBody = buildReportHtml(noBody);
+    // "The tension" could appear in other content, so check for the amber-frame
+    // card signature right before the title.
+    assert.doesNotMatch(htmlNoBody,
+      /border-left:4px solid #92400e;[^"]*"[^>]*>\s*<div[^>]*>\s*The tension/,
+      "contextualInsight card must not render when body is empty");
+    // Entire field absent — amber accent border is this block's signature.
     const noField = structuredClone(fixture);
     delete noField.contextualInsight;
-    assert.doesNotMatch(buildReportHtml(noField), /Contextual Insight/,
-      "Contextual Insight heading must not render when the field is absent");
+    const htmlNoField = buildReportHtml(noField);
+    assert.ok(!titleAppears(htmlNoField) || !/#92400e/.test(htmlNoField.split("The Gap")[0] || htmlNoField),
+      "contextualInsight card must not render when the field is absent");
   });
 
   it("contextualInsight is not verbatim-equal to a gap or opportunity", () => {
@@ -258,5 +279,24 @@ describe("FREE REPORT RENDERING CONTRACT — fixture: shankar_dental_free_q1_q11
     const html = buildReportHtml(fixture);
     const htmlEmDashCount = (html.match(/—/g) || []).length;
     assert.equal(htmlEmDashCount, 0, `rendered HTML contains ${htmlEmDashCount} em dash(es)`);
+  });
+
+  it("buildReportHtml strips em dashes at the boundary even when Solomon emits them", () => {
+    // Runtime guarantee: even if the model slips an em dash through
+    // (which Liz's 2026-10-29 live test caught several times), the
+    // renderer normalizes U+2014 to " - " and collapses the extra
+    // spacing. This test proves the sanitation path, not the prompt
+    // rule — the prompt rule is tested above against the fixture.
+    const dirty = structuredClone(fixture);
+    dirty.headline = "Decisions ride on cash — and that is costing you clarity";
+    dirty.opener = "You are growing—but the gauges have not kept up.";
+    dirty.gaps[0].title = "A/R aging — $9k past due";
+    const html = buildReportHtml(dirty);
+    assert.equal((html.match(/—/g) || []).length, 0,
+      "buildReportHtml must strip every em dash from customer-facing fields");
+    // And the rewrites preserve the sentence meaning.
+    assert.match(html, /Decisions ride on cash - and that is costing you clarity/);
+    assert.match(html, /You are growing - but the gauges have not kept up\./);
+    assert.match(html, /A\/R aging - \$9k past due/);
   });
 });
