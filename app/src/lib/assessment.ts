@@ -1,6 +1,30 @@
 
 const WORKER_URL = "https://swot-engine.cfobydesign.workers.dev";
 
+// Em-dash sanitizer at the React data-ingest boundary. Mirrors the
+// Worker-side stripEmDashes in buildReportHtml so both renderers
+// apply the same normalization. U+2014 becomes " - " and any
+// resulting double space is collapsed, uniformly for tight
+// ("word—word") and padded ("word — word") usage. Walks the raw
+// response and rewrites every string value in place; non-strings
+// pass through unchanged.
+function normalizeEmDashes<T>(value: T): T {
+  if (typeof value === "string") {
+    return value.replace(/\s*—\s*/g, " - ").replace(/ {2,}/g, " ") as unknown as T;
+  }
+  if (Array.isArray(value)) {
+    return value.map((v) => normalizeEmDashes(v)) as unknown as T;
+  }
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      out[k] = normalizeEmDashes(v);
+    }
+    return out as unknown as T;
+  }
+  return value;
+}
+
 export type AssessmentTier = "free" | "paid_47" | "paid_297";
 
 // --- Legacy paid47-v1 shapes (free tier still uses these too) --------------
@@ -143,6 +167,12 @@ export interface AgentReport {
   // will investigate. Personalized to this business; not a generic
   // category list.
   theGap?: {
+    // The ONE personalized unresolved CFO question built from this
+    // owner's answers (TIER_GUIDE "THE GAP / NEXT CFO QUESTION").
+    // Headline the owner reads; the four prose fields below support
+    // it. Optional for backward compatibility with pre-2026-10-29
+    // reports that only carried the four prose fields.
+    question?: string;
     known: string;
     unknown: string;
     whyItMatters: string;
@@ -259,7 +289,16 @@ export async function runAssessment(params: {
     });
     const data = await res.json();
     if (!data.success) throw new Error(data.error || "Assessment failed");
-    return data as AgentReport;
+    // 2026-10-29 em-dash runtime sanitation at the React data boundary
+    // (Codex P2 on #164). The Worker's /report HTML renderer already
+    // strips U+2014 at its own boundary, but the React results flow
+    // consumes the raw JSON directly, so without this a stray em dash
+    // the model emits still reaches the customer in JSX. Walking the
+    // response once here is cheaper than every component applying its
+    // own guard, and it covers deeply nested fields (gaps[], theGap,
+    // decisionOrder[], etc.) without the renderers needing to know
+    // which keys are customer-facing.
+    return normalizeEmDashes(data) as AgentReport;
   } catch (err: any) {
     if (err?.name === "AbortError") {
       throw new Error(

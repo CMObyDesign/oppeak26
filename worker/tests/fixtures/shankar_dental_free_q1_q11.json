@@ -42,6 +42,7 @@
     "desc": "Before you make any Oak Ridge decision, isolate the top two reasons claims are getting written off. Fifteen minutes of data collection, no new tools. The pattern it reveals changes which fix comes first."
   },
   "theGap": {
+    "question": "Can the current practice financially support the Oak Ridge buildout at your real margins, or does the Oak Ridge decision depend on numbers the bank-balance view cannot show you?",
     "known": "The Health Check established that your referral loop, hygiene retention, numbers-based decision process, and reported write-off rate are all genuine.",
     "unknown": "Whether the current practice can carry a 4th-location buildout at your margins without stretching cash past comfortable, and which service lines actually generate the margin that would fund it.",
     "whyItMatters": "The Oak Ridge decision is bigger than one bank-balance snapshot can hold. The right answer depends on gross billings, true service-line margin, operating runway, and lender readiness, numbers the free intake does not capture.",

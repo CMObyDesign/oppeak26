@@ -77,10 +77,15 @@ describe("Free-tier CTA — new framing + copy", () => {
     assert.doesNotMatch(html, /8[–\-]12 page/);
   });
 
-  it("button says 'Get My Full Diagnostic + Strategy Review — $47'", async () => {
+  it("button says 'Get My Full Diagnostic + Strategist Review — $47'", async () => {
+    // 2026-10-29 (Codex P2 on #164): the standalone /report page's
+    // CTA was renamed from "Strategy Review" to "Strategist Review"
+    // to match the TIER_GUIDE PRODUCT NAMING contract. "Strategy
+    // Review" (minus the -ist) is now rejected everywhere.
     const html = await render("free");
-    assert.match(html, /Get My Full Diagnostic \+ Strategy Review/);
+    assert.match(html, /Get My Full Diagnostic \+ Strategist Review/);
     assert.doesNotMatch(html, /Upgrade to Full Diagnostic/);
+    assert.doesNotMatch(html, /Full Diagnostic \+ Strategy Review/);
   });
 
   it("microcopy includes 'Includes your live strategist review' and drops defensive clause", async () => {
@@ -119,7 +124,7 @@ describe("Paid_47 CTA — included review is PRIMARY, Business Health Analysis i
     assert.ok(primary, "paid_47 must have a primary button");
     assert.ok(primary[0].includes(`href="${BOOKING_LINK_47}"`),
       `paid_47 primary should link to BOOKING_LINK_47 (${BOOKING_LINK_47}), got: ${primary[0]}`);
-    assert.match(primary[0], /Book My Included Strategy Review/);
+    assert.match(primary[0], /Book My Included Strategist Review/);
   });
 
   it("the Business Growth Analysis link is a secondary, subordinated below a divider", async () => {
@@ -179,12 +184,17 @@ describe("Paid_297 CTA — terminal booking surface (Business Growth Analysis re
 // --- Per-tier page headers --------------------------------------
 
 describe("Per-tier page header — product ladder reads intentionally", () => {
-  it("free tier uses 'YOUR BUSINESS HEALTH REPORT · READY' / 'assessment is back'", async () => {
+  it("free tier uses 'YOUR BUSINESS HEALTH CHECK · READY' / 'assessment is back'", async () => {
+    // 2026-10-29 (Codex P2 on #164): the free-tier eyebrow was
+    // renamed from "BUSINESS HEALTH REPORT" to "BUSINESS HEALTH
+    // CHECK" to match the TIER_GUIDE PRODUCT NAMING contract.
     const html = await render("free");
-    assert.match(html, /◆ YOUR BUSINESS HEALTH REPORT · READY/);
+    assert.match(html, /◆ YOUR BUSINESS HEALTH CHECK · READY/);
     assert.match(html, /your <em>assessment<\/em> is back/);
     // Free tier is deliberately NOT called a "diagnostic" in the header.
     assert.doesNotMatch(html.match(/<section class="hello">[\s\S]*?<\/section>/)[0], /your <em>diagnostic<\/em>/);
+    // And it is not called the old "REPORT" eyebrow anymore.
+    assert.doesNotMatch(html, /YOUR BUSINESS HEALTH REPORT · READY/);
   });
 
   it("paid_47 uses 'YOUR FULL DIAGNOSTIC · READY' / 'full financial picture'", async () => {
@@ -204,6 +214,7 @@ describe("Per-tier page header — product ladder reads intentionally", () => {
   it("pending state still shows the generating eyebrow regardless of tier", async () => {
     const html = await render("free", { isPending: true });
     assert.match(html, /SOLOMON IS DIAGNOSING · GENERATING YOUR REPORT/);
+    assert.doesNotMatch(html, /BUSINESS HEALTH CHECK · READY/);
     assert.doesNotMatch(html, /BUSINESS HEALTH REPORT · READY/);
   });
 });

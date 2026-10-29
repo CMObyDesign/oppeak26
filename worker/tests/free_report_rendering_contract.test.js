@@ -41,7 +41,7 @@ function customerFacingText(agent) {
   if (agent.contextualInsight) parts.push(agent.contextualInsight.title, agent.contextualInsight.body);
   if (agent.oneMove) parts.push(agent.oneMove.title, agent.oneMove.desc);
   if (agent.theGap) {
-    parts.push(agent.theGap.known, agent.theGap.unknown, agent.theGap.whyItMatters, agent.theGap.whatPaidWillInvestigate);
+    parts.push(agent.theGap.question, agent.theGap.known, agent.theGap.unknown, agent.theGap.whyItMatters, agent.theGap.whatPaidWillInvestigate);
   }
   for (const g of agent.gaps || []) parts.push(g.title, g.impact);
   for (const o of agent.opportunities || []) parts.push(o.title, o.desc, o.impact);
@@ -279,6 +279,36 @@ describe("FREE REPORT RENDERING CONTRACT — fixture: shankar_dental_free_q1_q11
     const html = buildReportHtml(fixture);
     const htmlEmDashCount = (html.match(/—/g) || []).length;
     assert.equal(htmlEmDashCount, 0, `rendered HTML contains ${htmlEmDashCount} em dash(es)`);
+  });
+
+  it("theGap carries a personalized CFO question and renders it ABOVE the four prose fields", () => {
+    // Codex P1 on #164: the free report must END with ONE
+    // personalized unresolved CFO question. The schema now exposes
+    // theGap.question for exactly that; the renderer must put it on
+    // top of the known/unknown/why/paid support fields so the
+    // reader sees the question first, then the backing.
+    assert.ok(fixture.theGap, "fixture must carry theGap");
+    assert.ok(fixture.theGap.question && String(fixture.theGap.question).trim(),
+      "theGap.question must be non-empty when a personalized CFO question is supported");
+    const html = buildReportHtml(fixture);
+    const idxQuestion = html.indexOf(fixture.theGap.question);
+    const idxKnown = html.indexOf("What we know:");
+    assert.ok(idxQuestion >= 0, "theGap.question must appear in rendered HTML");
+    assert.ok(idxKnown >= 0, "'What we know:' label must appear in rendered HTML");
+    assert.ok(idxQuestion < idxKnown,
+      "theGap.question must render BEFORE the 'What we know:' line, not after it");
+  });
+
+  it("theGap renders the four prose fields even without a question (backward compat)", () => {
+    // Historical reports (pre-2026-10-29) carry only the four prose
+    // fields. Dropping the question field must not break those: the
+    // card still renders, just without a headline question.
+    const legacy = structuredClone(fixture);
+    delete legacy.theGap.question;
+    const html = buildReportHtml(legacy);
+    assert.match(html, /The Gap/);
+    assert.match(html, /What we know:/);
+    assert.match(html, /What the Full Diagnostic investigates:/);
   });
 
   it("buildReportHtml strips em dashes at the boundary even when Solomon emits them", () => {

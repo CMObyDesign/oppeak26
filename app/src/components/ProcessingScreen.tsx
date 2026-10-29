@@ -64,13 +64,21 @@ export const ProcessingScreen = ({ onComplete }: { onComplete: () => void }) => 
   const currentLine = STATUS_LINES[lineIdx];
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center p-4 pt-48 md:pt-64 relative overflow-hidden">
-      <div className="relative z-10 text-center space-y-10 w-full max-w-xl">
-        <div className="space-y-4">
+    // 2026-10-29 height fix: the previous `min-h-screen ... pt-48
+    // md:pt-64` combined a tall minimum height with an additional 12-16
+    // rem of top padding, pushing the content well below the fold and
+    // forcing the page taller than the viewport. The parent layout
+    // already handles outer padding; this screen just needs to center
+    // its content inside a viewport-height box with a modest horizontal
+    // pad. `min-h-[80vh]` keeps the content centered without reserving
+    // extra scroll length on long viewports.
+    <div className="min-h-[80vh] flex flex-col items-center justify-center px-4 py-16 relative overflow-hidden">
+      <div className="relative z-10 text-center space-y-8 w-full max-w-xl">
+        <div className="space-y-3">
           <motion.h3
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="font-display text-4xl text-foreground font-bold"
+            className="font-display text-3xl md:text-4xl text-foreground font-bold"
           >
             Reviewing your Business Health Check
           </motion.h3>
@@ -106,14 +114,16 @@ export const ProcessingScreen = ({ onComplete }: { onComplete: () => void }) => 
           </div>
         </div>
 
-        <p className="text-sm text-muted-foreground font-body pt-4 max-w-sm mx-auto">
+        <p className="text-sm text-muted-foreground font-body max-w-sm mx-auto">
           This may take about a minute. Keep this page open while we finish your results.
         </p>
       </div>
 
-      {/* Background SWOT Grid Animation */}
+      {/* Background SWOT Grid Animation — constrained to the viewport
+          so the fixed 800x800 pattern can't force the page taller than
+          its content on tall viewports. */}
       <div className="absolute inset-0 pointer-events-none opacity-[0.03] overflow-hidden flex items-center justify-center">
-        <div className="grid grid-cols-2 gap-8 w-[800px] h-[800px]">
+        <div className="grid grid-cols-2 gap-8 w-[min(800px,80vmin)] h-[min(800px,80vmin)]">
           <motion.div
             animate={{ opacity: [0.3, 1, 0.3] }}
             transition={{ duration: 2, repeat: Infinity }}

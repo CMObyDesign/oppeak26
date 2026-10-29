@@ -741,8 +741,15 @@ ever conflating them:
                            rehab trigger. May be a DEBT_RESTRUCTURE_OPP ONLY if other
                            answers establish the debt is heavy, stretched, or carrying
                            high monthly debt service relative to revenue.
-    * \`tax_balance\`      → outstanding tax balance or payment plan. REHAB trigger +
-                           TAX_RESOLUTION_OPP.
+    * \`tax_balance\`      → outstanding tax balance or payment plan. A payment plan
+                           alone is NOT distress and NOT a rehab trigger — fires
+                           TAX_RESOLUTION_OPP only. An outstanding balance with
+                           no payment plan, or evidence the plan is in default,
+                           IS a rehab trigger. When the free intake does not
+                           distinguish the two, surface it as a visibility gap
+                           and do not describe the business as distressed on
+                           tax_balance alone. See the longer per-slug Solomon
+                           mapping below for the fuller rule.
     * \`unfiled_taxes\`    → one or more unfiled business tax returns. REHAB trigger +
                            TAX_RESOLUTION_OPP.
     * \`lien_or_judgment\` → active tax lien, judgment, or legal action. REHAB trigger +
@@ -1316,28 +1323,47 @@ Include ONE concrete action the owner can take now without purchasing
 anything.
 
 OWNER-LEVEL STANDARD — this is the single most important rule for the
-free action. The move must produce a useful NUMBER, COMPARISON, or
-DECISION VIEW the owner does not already have. It must change what
-the owner can SEE about the business after fifteen to thirty minutes
-of their own work.
+free action. The free action must not feel like a small clerical task.
+It must be an owner-level action that creates:
 
-Owner-level examples (shape only; adapt to this business):
-- Compute [one specific ratio or breakdown] for the last 90 days
-  so the owner can see what the current bank-balance snapshot is
-  hiding.
-- Pull [one specific comparison across months, service lines, or
-  customer segments] so the owner can see where the margin or the
-  risk actually sits.
-- Build a one-sheet view of [the real financial question in front
-  of them] with the numbers they already have in their accounting
-  file.
+- ONE useful number,
+- ONE useful comparison,
+- OR ONE clearer decision view.
 
-Do NOT default to a small clerical or administrative task
+The action should help the owner see the business differently before
+purchasing anything. A good free action may:
+
+- quantify a known leak,
+- put two or three relevant numbers side by side,
+- establish a baseline,
+- identify what is competing for cash,
+- or clarify what needs to be known before a major decision.
+
+The action should still STOP before full diagnosis, affordability
+analysis, forecasting, or a complete remediation plan.
+
+Shape only, generated from THIS owner's strongest signal and real
+next decision — not hardcoded, not reused verbatim:
+
+Weaker (clerical, do not emit):
+  "Audit three projects for missed change orders."
+
+Stronger (owner-level, decision-shaping):
+  "Put the next growth decision on one page by listing the current
+  monthly obligation, the cost of the planned move, and the amount
+  of cash or revenue currently tied up in the issue Solomon
+  identified."
+
+The goal is for the owner to think: "That is something meaningful I
+can do today, and now I understand why the next analysis matters."
+
+Do NOT default to small clerical or administrative tasks
 ("categorize uncategorized transactions," "log one month of
 write-offs by cause code," "label last week's deposits," "clean up
-your contacts list," "update your invoice template"). Those tasks
-do bookkeeping work, not decision work, and they do not change
-what the owner can SEE about the business.
+your contacts list," "update your invoice template," "audit three
+projects for missed change orders"). Those tasks do bookkeeping or
+data-entry work, not decision work, and they do not change what the
+owner can SEE about the business.
 
 The action must still be:
 - specific (one named step, not a category),
@@ -1965,6 +1991,7 @@ Return ONLY valid JSON — no markdown code fences, no text before or after — 
   "contextualInsight": { "title": "short label — one of 'The tension' | 'What I'd watch' | 'That number means' | 'The question I wouldn't ignore' (choose the fit; do not force one)", "body": "one or two sentences that connect 1-2 specific answers in a way the owner may not have noticed themselves. Must be concrete to this business; must not restate a gap or opportunity verbatim; must not complete the deeper diagnosis — that is the $47 Full Diagnostic's job. Omit the field entirely when no meaningful connection is supported." },
   "oneMove": { "title": "short imperative — the One Move You Can Make Now", "desc": "one or two sentences; specific, usable now, tied to the #1 signal, valuable without purchasing, not a complete remediation plan" },
   "theGap": {
+    "question": "the ONE personalized unresolved CFO question built from this owner's answers (see TIER_GUIDE 'THE GAP / NEXT CFO QUESTION' — shape only, never a hardcoded template). This is the headline the owner reads; the four fields below support it.",
     "known": "one sentence stating what the Health Check already established",
     "unknown": "one sentence stating what remains unknown",
     "whyItMatters": "one sentence stating why that unknown matters to a real decision in front of the owner",
@@ -2993,17 +3020,23 @@ function buildReportHtml(agent) {
   let theGapBlock = "";
   if (agent.theGap && typeof agent.theGap === "object") {
     const g = agent.theGap;
+    // The question is the headline (new 2026-10-29 field, Codex P1
+    // on #164). The four prose fields below support it. All five
+    // are optional; render whichever ones the model supplied.
+    const questionLine = g.question
+      ? `<div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:16px;line-height:1.5;margin-bottom:10px;">${e(g.question)}</div>`
+      : "";
     const lines = [];
     if (g.known) lines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:6px;line-height:1.55;"><strong style="color:#1a1a1a;">What we know:</strong> ${e(g.known)}</div>`);
     if (g.unknown) lines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:4px;line-height:1.55;"><strong style="color:#1a1a1a;">What's unknown:</strong> ${e(g.unknown)}</div>`);
     if (g.whyItMatters) lines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:4px;line-height:1.55;"><strong style="color:#1a1a1a;">Why it matters:</strong> ${e(g.whyItMatters)}</div>`);
     if (g.whatPaidWillInvestigate) lines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:4px;line-height:1.55;"><strong style="color:#1a1a1a;">What the Full Diagnostic investigates:</strong> ${e(g.whatPaidWillInvestigate)}</div>`);
-    if (lines.length) {
+    if (questionLine || lines.length) {
       theGapBlock = `
 <h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">The Gap</h2>
 <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">
   <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid #c4a647;border-radius:4px;">
-    ${lines.join("")}
+    ${questionLine}${lines.join("")}
   </td></tr>
 </table>`;
     }
@@ -3049,8 +3082,8 @@ ${context}
 ${snapshotBlock}
 <h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Critical Gaps Identified</h2>
 <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">${gaps}</table>
-<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Your Highest-Impact Opportunities</h2>
 ${strengthBlock}
+<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Your Highest-Impact Opportunities</h2>
 <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">${opps}</table>
 ${contextualInsightBlock}
 ${oneMoveBlock}
@@ -3087,7 +3120,7 @@ async function buildReportPage(reportBody, tierLabel, contactName, tier, env, co
   // "Full Diagnostic" tier doesn't sound like merely "more of the same."
   const firstName = (contactName || "").split(" ")[0] || contactName || "there";
   const PAGE_HEADER = {
-    free:     { eyebrow: "◆ YOUR BUSINESS HEALTH REPORT · READY",
+    free:     { eyebrow: "◆ YOUR BUSINESS HEALTH CHECK · READY",
                 hello:   `${e(firstName)}, your <em>assessment</em> is back.` },
     paid_47:  { eyebrow: "◆ YOUR FULL DIAGNOSTIC · READY",
                 hello:   `${e(firstName)}, your <em>full financial picture</em> is ready.` },
@@ -3231,7 +3264,7 @@ async function buildReportPage(reportBody, tierLabel, contactName, tier, env, co
         <p class="sub" style="font-size:14px;color:var(--ink-dim);margin-top:-16px;">Full financial diagnostic · prioritized findings · financial tools · live 30-minute strategist review</p>
 ${couponRow}
         <a class="btn btn-primary" id="upgrade-cta" target="_top" href="${paymentLink47}" data-payment-href="${paymentLink47}" data-beta-href="${upgrade47Href}">
-          <span id="upgrade-label">Get My Full Diagnostic + Strategy Review — $47</span>
+          <span id="upgrade-label">Get My Full Diagnostic + Strategist Review — $47</span>
           <span class="arrow">→</span>
         </a>
         <p class="micro" id="upgrade-micro">One-time payment · No subscription · Includes your live strategist review</p>
@@ -3256,7 +3289,7 @@ ${couponRow}
         <p class="sub">Your CFO by Design strategist will walk through the diagnostic with you, clarify the most important findings, and help you identify the first financial move worth addressing.</p>
 
         <a class="btn btn-primary" target="_top" href="${bookingLink47}" style="margin:12px 0 8px;">
-          <span>Book My Included Strategy Review</span>
+          <span>Book My Included Strategist Review</span>
           <span class="arrow">→</span>
         </a>
         <p class="micro">30 minutes · Included with your Full Diagnostic</p>
