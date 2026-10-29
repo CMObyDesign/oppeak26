@@ -124,6 +124,23 @@ export interface AgentReport {
   // so an empty object never produces an empty card.
   oneMove?: { title: string; desc?: string };
 
+  // Free-tier Strength — the owner-recognizable asset or working
+  // capability. OPTIONAL at the type level, and when omitted, the
+  // Strength card does not render. Never show an empty card.
+  strength?: { title: string; desc?: string };
+
+  // Free-tier "The Gap" — the next unresolved CFO question, structured
+  // as what the Health Check already established / what remains unknown
+  // / why it matters to a real decision / what the $47 Full Diagnostic
+  // will investigate. Personalized to this business; not a generic
+  // category list.
+  theGap?: {
+    known: string;
+    unknown: string;
+    whyItMatters: string;
+    whatPaidWillInvestigate: string;
+  };
+
   // --- paid47-v2 additions (all optional; absent on free + v1) -----------
   // Version tags present only on reports generated under the enriched
   // contract. Renderers check `reportSchemaVersion === "paid47-v2"`

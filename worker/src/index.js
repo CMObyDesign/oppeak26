@@ -1630,7 +1630,14 @@ Return ONLY valid JSON — no markdown code fences, no text before or after — 
   "opportunities": [
     { "title": "short", "desc": "one sentence", "impact": "short tag, e.g. Unlock $250K+" }
   ],
+  "strength": { "title": "short — the owner-recognizable asset or working capability", "desc": "one or two sentences grounded in Q6/Q7-style evidence. Omit the field entirely when no meaningful strength is supported — never emit an empty title or desc." },
   "oneMove": { "title": "short imperative — the One Move You Can Make Now", "desc": "one or two sentences; specific, usable now, tied to the #1 signal, valuable without purchasing, not a complete remediation plan" },
+  "theGap": {
+    "known": "one sentence stating what the Health Check already established",
+    "unknown": "one sentence stating what remains unknown",
+    "whyItMatters": "one sentence stating why that unknown matters to a real decision in front of the owner",
+    "whatPaidWillInvestigate": "one sentence stating what the $47 Full Diagnostic will investigate"
+  },
   "nextStepHeadline": "short",
   "nextStepBody": "2-3 sentences leading to a strategy call",
   "opportunityFlags": ["MERCHANT_PROCESSING_OPP"],
@@ -2578,6 +2585,47 @@ function buildReportHtml(agent) {
 <ul style="margin:0;padding-left:20px;">${items}</ul>`;
   }
 
+  // Strength block — free-tier card showing the owner's working
+  // capability. Guarded by a non-empty title check so a response
+  // without a supported strength never renders an empty card (free-
+  // tier contract: never show an empty Strength card).
+  let strengthBlock = "";
+  if (agent.strength && agent.strength.title && String(agent.strength.title).trim()) {
+    const s = agent.strength;
+    const sDesc = s.desc && String(s.desc).trim() ? e(s.desc) : "";
+    strengthBlock = `
+<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">What's Already Working</h2>
+<table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">
+  <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid #92400e;border-radius:4px;">
+    <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:16px;">${e(s.title)}</div>
+    ${sDesc ? `<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:6px;line-height:1.55;">${sDesc}</div>` : ""}
+  </td></tr>
+</table>`;
+  }
+
+  // The Gap — free-tier required block when theGap is emitted.
+  // Four-part structure: known / unknown / why it matters / what the
+  // paid tier will investigate. Guard on at least one field being
+  // non-empty so a partial gap doesn't render as a blank card.
+  let theGapBlock = "";
+  if (agent.theGap && typeof agent.theGap === "object") {
+    const g = agent.theGap;
+    const lines = [];
+    if (g.known) lines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:6px;line-height:1.55;"><strong style="color:#1a1a1a;">What we know:</strong> ${e(g.known)}</div>`);
+    if (g.unknown) lines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:4px;line-height:1.55;"><strong style="color:#1a1a1a;">What's unknown:</strong> ${e(g.unknown)}</div>`);
+    if (g.whyItMatters) lines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:4px;line-height:1.55;"><strong style="color:#1a1a1a;">Why it matters:</strong> ${e(g.whyItMatters)}</div>`);
+    if (g.whatPaidWillInvestigate) lines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:4px;line-height:1.55;"><strong style="color:#1a1a1a;">What the Full Diagnostic investigates:</strong> ${e(g.whatPaidWillInvestigate)}</div>`);
+    if (lines.length) {
+      theGapBlock = `
+<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">The Gap</h2>
+<table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">
+  <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid #c4a647;border-radius:4px;">
+    ${lines.join("")}
+  </td></tr>
+</table>`;
+    }
+  }
+
   // One Move You Can Make Now — free-tier required block when a
   // first-ranked signal exists. Rendered on BOTH tiers when the model
   // emits it (the paid tier's richer decisionOrder covers the same
@@ -2619,8 +2667,10 @@ ${snapshotBlock}
 <h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Critical Gaps Identified</h2>
 <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">${gaps}</table>
 <h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Your Highest-Impact Opportunities</h2>
+${strengthBlock}
 <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">${opps}</table>
 ${oneMoveBlock}
+${theGapBlock}
 ${connectionsBlock}
 ${decisionBlock}
 ${questionsBlock}

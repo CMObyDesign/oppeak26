@@ -281,7 +281,11 @@ rehab
 
 ## Free Report Customer Experience
 
-The rendered free report should ideally contain:
+```
+FREE REPORT RENDERING CONTRACT
+
+When supported by report data, the customer experience must render:
+```
 
 ### Business Health Check
 A strong problem-first badge or headline.
@@ -301,6 +305,25 @@ Suggested categories:
 
 Do not use unexplained SWOT percentages.
 
+```
+Strength:
+never show an empty card.
+
+Snapshot:
+short summary only.
+
+What Deserves Your Attention:
+up to 2-3 findings.
+Two findings is valid.
+Multiple findings may share the same severity.
+
+One Move You Can Make Now:
+render when generated.
+
+The Gap:
+always personalized to the next unresolved CFO question.
+```
+
 ### What Deserves Your Attention
 Up to 2-3 findings in decision order. Severity may still exist. Priority order is separate from severity.
 
@@ -311,9 +334,7 @@ Up to 2 evidence-backed opportunities.
 The free concrete action.
 
 ### The Gap
-Explain:
-
-> "You can see the signals. The Full Diagnostic goes deeper into what is driving them, how they connect, and what deserves attention first."
+A business-specific unresolved CFO question — not a generic category list. See the TIER_GUIDE "THE GAP / NEXT CFO QUESTION" block for the four-part structure (known / unknown / why it matters / what paid will investigate).
 
 ### CTA
 $47 Full Diagnostic.
