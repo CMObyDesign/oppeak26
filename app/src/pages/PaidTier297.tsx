@@ -270,7 +270,7 @@ const PaidTier297 = () => {
           )}
           {screen === "analyzing" && (
             <motion.div key="analyzing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.5 }}>
-              <ProcessingScreen onComplete={() => setTimerDone(true)} />
+              <ProcessingScreen onComplete={() => setTimerDone(true)} tier="paid_297" />
             </motion.div>
           )}
           {screen === "results" && (

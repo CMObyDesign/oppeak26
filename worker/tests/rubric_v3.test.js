@@ -217,8 +217,18 @@ describe("Rubric v3 — TIER_GUIDE content", () => {
     // Core promises the block replaces older, overbroad language with:
     // economic-mechanism rule, honest uncertainty allowance, severity vs
     // action order split, no em dashes, allowed classification.
-    assert.match(TIER_GUIDE.free, /Tie each opportunity to an economic mechanism/);
-    assert.match(TIER_GUIDE.free, /revenue capture, margin, cash timing, capacity, concentration, recurring\s+revenue, cost, or decision quality/);
+    // 2026-10-29: OPPORTUNITIES rewrote the mechanism language from a
+    // free-form phrase list to a named-mechanism set (Revenue Capture,
+    // Recurring Revenue, Margin Protection, Cash Timing, Reduced
+    // Concentration, Capacity Utilization, Geographic Revenue Expansion,
+    // Decision Quality). Both the lead-in sentence and the named set
+    // are asserted below.
+    assert.match(TIER_GUIDE.free, /Tie each opportunity to an ECONOMIC MECHANISM/);
+    assert.match(TIER_GUIDE.free, /Revenue Capture/);
+    assert.match(TIER_GUIDE.free, /Recurring Revenue/);
+    assert.match(TIER_GUIDE.free, /Margin Protection/);
+    assert.match(TIER_GUIDE.free, /Reduced Concentration/);
+    assert.match(TIER_GUIDE.free, /A status statement is NOT an economic mechanism/);
     assert.match(TIER_GUIDE.free, /Severity and action order are different/);
     assert.match(TIER_GUIDE.free, /A strength is evidence, not flattery/);
     assert.match(TIER_GUIDE.free, /Managed debt in good standing is not distress/);
@@ -232,6 +242,38 @@ describe("Rubric v3 — TIER_GUIDE content", () => {
     // line from the previous block must stay out — replaced by the
     // economic-mechanism rule above.
     assert.doesNotMatch(TIER_GUIDE.free, /Tie opportunities to real money, capacity, risk, or growth potential/);
+
+    // 2026-10-29 additions:
+    //
+    // (a) ONE MOVE — FINAL SELF-CHECK: the model must ask the
+    //     verbatim self-check before returning oneMove and rewrite
+    //     when the answer is NO.
+    assert.match(TIER_GUIDE.free, /^ONE MOVE — FINAL SELF-CHECK \(REQUIRED\)$/m);
+    assert.match(
+      TIER_GUIDE.free,
+      /Does\s+this\s+action\s+create\s+a\s+decision-useful\s+NUMBER,\s+COMPARISON,\s+or\s+DECISION\s+VIEW/,
+    );
+
+    // (b) OWNER-SUSPECTED PROBLEMS STAY HYPOTHESES — hedged
+    //     language only; no upgraded confirmed-leakage verdict
+    //     unless other evidence proves it.
+    assert.match(TIER_GUIDE.free, /^OWNER-SUSPECTED PROBLEMS STAY HYPOTHESES$/m);
+    assert.match(TIER_GUIDE.free, /you\s+suspect\s+rigging\s+may\s+be\s+underpriced/);
+    assert.match(TIER_GUIDE.free, /unless\s+other\s+evidence\s+proves\s+it/);
+
+    // (c) UNSUPPLIED CAUSAL DETAILS — do not invent causal order
+    //     the intake did not establish.
+    assert.match(TIER_GUIDE.free, /^UNSUPPLIED CAUSAL DETAILS$/m);
+    assert.match(TIER_GUIDE.free, /did\s+not\s+say\s+which\s+came\s+first/);
+
+    // (d) Q5 four-state nuance — "in-between" is a MIXED state,
+    //     not the bank-balance-only state.
+    assert.match(TIER_GUIDE.free, /four\s+Q5\s+answers\s+map\s+to\s+four\s+DISTINCT\s+states/);
+    assert.match(TIER_GUIDE.free, /This\s+is\s+NOT\s+"a\s+bank-balance\s+decision\s+basis\."/);
+
+    // (e) OPPORTUNITIES — status statements are NOT economic
+    //     mechanisms; mechanism tags are the named set.
+    assert.match(TIER_GUIDE.free, /"Demand\s+established,\s+financials\s+unknown"\s+\(that\s+is\s+a\s+status\)/);
   });
 
   it("server-side intake-completeness gate requires all 11 Q1-Q11 on the free tier", () => {
@@ -304,6 +346,29 @@ describe("Rubric v3 — TIER_GUIDE content", () => {
     // Hard regression bar: the discarded "synthesize the complete
     // picture" one-liner must stay out.
     assert.doesNotMatch(TIER_GUIDE.paid_47, /go beyond identifying signals and synthesize the complete picture/);
+
+    // 2026-10-29: AVERAGE SALE / PROJECT VALUE DISCIPLINE block —
+    // locks the discipline Liz asked for. Contextual evidence only;
+    // never profit, margin, cash, or LTV; never ROI without
+    // supporting margin/cost data; never invented when absent;
+    // never a finding solely because the field exists.
+    assert.match(TIER_GUIDE.paid_47, /^AVERAGE SALE \/ PROJECT VALUE DISCIPLINE$/m);
+    assert.match(TIER_GUIDE.paid_47, /`average_sale_project_value`/);
+    assert.match(TIER_GUIDE.paid_47, /is\s+NOT\s+profit/);
+    assert.match(TIER_GUIDE.paid_47, /NOT\s+contribution\s+margin/);
+    assert.match(TIER_GUIDE.paid_47, /NOT\s+cash\s+collected/);
+    assert.match(TIER_GUIDE.paid_47, /NOT\s+customer\s+lifetime\s+value/);
+    assert.match(TIER_GUIDE.paid_47, /do\s+not\s+invent\s+an\s+average/);
+    assert.match(TIER_GUIDE.paid_47, /Do\s+not\s+create\s+a\s+finding\s+solely\s+because\s+the\s+field\s+exists/);
+    assert.match(TIER_GUIDE.paid_47, /Do\s+not\s+force\s+it\s+into\s+every\s+report/);
+
+    // 2026-10-29: SUPPORTABILITY LANGUAGE block — paid_47 investigates
+    // affordability but does not pronounce a conclusive negative
+    // verdict absent the evidence to prove it.
+    assert.match(TIER_GUIDE.paid_47, /^SUPPORTABILITY LANGUAGE$/m);
+    assert.match(TIER_GUIDE.paid_47, /supportability\s+is\s+not\s+yet\s+established/);
+    assert.match(TIER_GUIDE.paid_47, /has\s+not\s+yet\s+been\s+shown\s+to\s+be\s+financially\s+supportable/);
+    assert.match(TIER_GUIDE.paid_47, /"the\s+current\s+capital\s+structure\s+doesn't\s+support\s+it"/);
   });
 
   it("paid_297 is named Business Growth Analysis (BGA), not Deep Dive, and emphasizes 90-day growth planning", () => {

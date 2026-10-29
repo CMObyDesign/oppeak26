@@ -70,6 +70,26 @@ describe("deriveMetrics — debt passthroughs", () => {
     assert.equal(get(metrics, "ar_30_plus_amount").value, 18000);
     assert.equal(get(metrics, "ar_60_plus_amount").value, 6500);
   });
+
+  // 2026-10-29: Average Sale / Project Value — paid_47 contextual
+  // dollar passthrough so the prompt can anchor "how many average
+  // sales does X dollars represent" type comparisons on the owner's
+  // real figure. No ratio math is emitted from this value here; see
+  // TIER_GUIDE.paid_47 "AVERAGE SALE / PROJECT VALUE DISCIPLINE".
+  it("emits average_sale_project_value_amount when present", () => {
+    const m = get(
+      deriveMetrics({ average_sale_project_value: 25000 }),
+      "average_sale_project_value_amount",
+    );
+    assert.ok(m, "average_sale_project_value_amount must be emitted when the fact is present");
+    assert.equal(m.value, 25000);
+    assert.equal(m.unit, "dollars");
+  });
+
+  it("does NOT emit average_sale_project_value_amount when the fact is absent", () => {
+    const m = get(deriveMetrics({}), "average_sale_project_value_amount");
+    assert.equal(m, null, "no field, no passthrough — the TIER_GUIDE instructs Solomon not to invent an average");
+  });
 });
 
 // --- A/R age ratios ------------------------------------------------------

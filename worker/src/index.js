@@ -713,7 +713,11 @@ similar businesses. If an answer doesn't explicitly establish the trigger, leave
   payments (retail, restaurant, e-commerce, service business charging cards) AND the answers
   indicate the merchant cost/value/coverage has not been reviewed. Do NOT fire for B2B agencies,
   consultancies, or service businesses billing via subscription, invoice, ACH, or wire - they
-  have no merchant exposure. "Vendor costs not reviewed" alone is NOT a trigger.
+  have no merchant exposure. "Vendor costs not reviewed" alone is NOT a trigger. If the owner
+  explicitly answers the merchant-processing question with "not applicable," "we do not accept
+  card payments," or any equivalent (normalized bucket: not_applicable), DO NOT fire this flag
+  under any circumstances — a business with no card volume cannot have a merchant-processing
+  cost opportunity.
 
 - DEBT_RESTRUCTURE_OPP: Fire ONLY when there is EXPLICIT, current, non-zero corporate debt
   AND the debt is described as heavy, stretched, unmanaged, or carrying high monthly debt
@@ -1252,6 +1256,38 @@ FINDINGS
   own finding.
 - Do not force every intake answer into the report.
 
+OWNER-SUSPECTED PROBLEMS STAY HYPOTHESES
+
+When the owner says they SUSPECT something ("I think we underprice
+rigging," "we might be losing on claim write-offs," "I'm not sure if
+we're pricing lifts right"), surface it as a hypothesis — never as a
+confirmed loss or confirmed leakage. The free Health Check has no
+numbers to prove the suspicion either way.
+
+Allowed:
+- "you suspect rigging may be underpriced"
+- "rigging is a pricing area worth quantifying"
+- "the owner is unsure whether lift-rental hours are priced
+  accurately — the free intake does not confirm either way"
+
+Not allowed (unless other evidence proves it):
+- "you are billing less than the work costs"
+- "rigging is a loss on most jobs"
+- "underpricing is costing the business X% of margin"
+
+Apply the same rule to EVERY owner-suspected leak, write-off, or
+pricing concern.
+
+UNSUPPLIED CAUSAL DETAILS
+
+Do not add details or causal sequences the intake did not actually
+establish. Example: if the owner said "property managers specify us by
+name," do NOT embellish into "they asked you to quote before you
+marketed to them" — the intake did not say which came first.
+
+Strength is still recognizable without inventing the backstory. Keep
+the recognition grounded in exactly what the owner wrote.
+
 STRENGTH
 
 Identify at least ONE genuine strength, asset, or working capability when
@@ -1273,25 +1309,60 @@ Identify up to 2 meaningful opportunities backed by the intake.
 
 Solomon may connect multiple answers when they point to a coherent pattern.
 
-Tie each opportunity to an economic mechanism:
-revenue capture, margin, cash timing, capacity, concentration, recurring
-revenue, cost, or decision quality.
+Tie each opportunity to an ECONOMIC MECHANISM — a short, named lever
+that describes HOW the opportunity creates value. Pick ONE from this
+set (or an equivalently specific mechanism supported by the intake):
+
+- Revenue Capture
+- Recurring Revenue
+- Margin Protection
+- Cash Timing
+- Reduced Concentration
+- Capacity Utilization
+- Geographic Revenue Expansion
+- Decision Quality
+
+A status statement is NOT an economic mechanism. Reject:
+- "Demand established, financials unknown" (that is a status)
+- "Opportunity exists" (empty)
+- "Could be bigger" (not a mechanism)
+
+The tag must describe the LEVER the opportunity pulls, not the
+state the opportunity is in.
 
 Use an actual dollar amount or percentage only when the intake or
 deterministic metrics provide it.
 
-Never invent the financial result of a recommendation.
+Never invent the financial result of a recommendation. Do not
+manufacture a positive economic outcome.
 
 FINANCIAL VISIBILITY / DECISION BASIS
 
-Miguel's bank-balance question is a core diagnostic lens.
+Miguel's bank-balance question is a core diagnostic lens. The four
+Q5 answers map to four DISTINCT states — do not collapse them:
 
-If the owner relies on bank balance, is somewhere in between, or is
-unsure, connect that answer to the actual business decision in front of
-them and explain what the bank balance alone cannot show. Use the
-owner's actual answer; do not infer stale books, missing KPIs, poor cash
-flow, or inaccurate financials unless the intake separately establishes
-those facts.
+- "numbers" / current financials
+  → numbers-based decision process. May support a strength when
+    other answers back it up.
+- "in-between" / mixed
+  → MIXED decision basis / PARTIAL financial visibility. The owner
+    uses some financial information AND the bank balance still
+    influences decisions. This is NOT "a bank-balance decision
+    basis." Describe it with language like "you are using some
+    financial information, but the bank balance still influences
+    decisions." Do not treat "in-between" as if it were
+    bank-balance-only.
+- "bank-balance" / primarily bank balance
+  → primarily bank-balance driven. Connect to the actual decision
+    in front of the owner and explain what the bank balance alone
+    cannot show.
+- "not-sure" / unknown
+  → visibility gap / uncertainty. Treat as an open information
+    question, not a confirmed deficit.
+
+For every Q5 answer, use the OWNER'S actual words; do not infer
+stale books, missing KPIs, poor cash flow, or inaccurate financials
+unless the intake separately establishes those facts.
 
 If the owner consistently uses current financial information, recognize
 that as a genuine strength when supported — do not manufacture a
@@ -1374,6 +1445,36 @@ The action must still be:
 
 The free action is required when a supported first-ranked signal exists;
 the renderer surfaces it as "One Move You Can Make Now."
+
+ONE MOVE — FINAL SELF-CHECK (REQUIRED)
+
+Before you return oneMove, ask yourself this question verbatim:
+
+"Does this action create a decision-useful NUMBER, COMPARISON, or
+DECISION VIEW the owner does not already have?"
+
+If the honest answer is NO, rewrite the move. A tactical audit step
+may be PART of the action, but the action must CULMINATE in an
+owner-level view tied to the real decision the owner is weighing.
+
+Shapes that FAIL the self-check (rewrite):
+- "Pull the last 10 invoices and total the shortfall." (ends in a
+  shortfall number without a decision view)
+- "Audit three recent jobs for missed change orders." (audit only;
+  no owner-level view)
+- "Log one month of write-offs by cause code." (categorization only)
+- "Categorize last quarter's uncategorized transactions." (data
+  entry; no number, comparison, or decision view)
+
+Shapes that PASS the self-check (keep):
+- An audit step followed by placing the resulting number next to
+  the real decision in front of the owner.
+- A side-by-side comparison the owner can read in one glance.
+- A one-page decision view that lists the current obligation, the
+  cost of the move, and the number the move depends on.
+
+Do not hardcode any example. The move must be generated from THIS
+owner's strongest signal and real next decision.
 
 INDUSTRY CATEGORY vs INDUSTRY / VERTICAL
 
@@ -1753,6 +1854,64 @@ unknown debt. Total corporate debt and monthly debt service go in
 financialSnapshot[] with sourceType "customer_answer" or
 "deterministic_fact". Do not use debt existence alone as evidence of
 distress.
+
+AVERAGE SALE / PROJECT VALUE DISCIPLINE
+
+When the FACTS include \`average_sale_project_value\` (dollars) from the
+owner's intake, use it ONLY as contextual evidence for:
+- revenue-opportunity sizing (how many average sales a dollar
+  opportunity represents),
+- how many sales or projects may be required to support a hire or
+  growth move,
+- customer concentration economics,
+- capacity decisions,
+- sales-pipeline value,
+- growth economics.
+
+Average sale value is NOT profit. It is NOT contribution margin. It
+is NOT cash collected. It is NOT customer lifetime value.
+
+Do NOT use it to estimate ROI, payback, or affordability without
+supporting margin and cost data. A gross-dollar comparison is
+allowed because it is deterministic division ("a $100,000
+opportunity is roughly four $25,000 projects"); a profit claim on
+top of that comparison is not.
+
+If the owner did not supply the value, answered "varies
+significantly," or the field is otherwise absent, do not invent an
+average. Do not create a finding solely because the field exists;
+treat its presence as supporting context, not a diagnostic trigger.
+
+The value may appear in financialSnapshot[] when it is materially
+useful to the owner's decision, with sourceType "customer_answer".
+Do not force it into every report.
+
+SUPPORTABILITY LANGUAGE
+
+When the Full Diagnostic has NOT established affordability — balance
+sheet, operating runway, cash timing, and growth-capital posture are
+not all in hand — do not deliver a conclusive negative affordability
+verdict on a next move. The paid_47 investigates; it does not
+foreclose.
+
+Do NOT say:
+- "the current capital structure doesn't support it"
+- "the business can't afford [the move]"
+- "the second crew is not financially viable right now"
+
+DO say:
+- "supportability is not yet established"
+- "the current information is not enough to confirm the move is
+  financially supportable"
+- "this move has not yet been shown to be financially supportable"
+- "whether [the move] is financially supportable is exactly what the
+  strategist review will test"
+
+Make a conclusive negative affordability call ONLY when the evidence
+in FACTS / DERIVED METRICS actually proves it (e.g. operating runway
+below the capital outlay AND no credit access AND no near-term A/R
+flowing). In that case, cite the deterministic numbers that drove
+the call.
 
 FULL DIAGNOSTIC BOUNDARY
 
@@ -2725,6 +2884,7 @@ const QUESTION_KEY_LABELS = Object.freeze({
   has_documented_budget: "Documented budget",
   debt_status: "Debt status",
   merchant_processing_last_review: "Merchant-processing review",
+  average_sale_project_value: "Average sale / project value",
   financial_decision_basis: "Decision basis",
   active_debt_summary: "Active debt",
   business_type: "Business type",
@@ -2741,6 +2901,7 @@ const DERIVED_METRIC_LABELS = Object.freeze({
   monthly_debt_service_amount: "Monthly debt service",
   ar_30_plus_amount: "A/R 30+ amount",
   ar_60_plus_amount: "A/R 60+ amount",
+  average_sale_project_value_amount: "Average sale / project value",
   ar_30_plus_months_of_debt_service: "Months of debt service in 30+ A/R",
   ar_60_plus_months_of_debt_service: "Months of debt service in 60+ A/R",
   lead_to_booking_rate: "Lead → booking rate",
@@ -3264,7 +3425,7 @@ async function buildReportPage(reportBody, tierLabel, contactName, tier, env, co
         <p class="sub" style="font-size:14px;color:var(--ink-dim);margin-top:-16px;">Full financial diagnostic · prioritized findings · financial tools · live 30-minute strategist review</p>
 ${couponRow}
         <a class="btn btn-primary" id="upgrade-cta" target="_top" href="${paymentLink47}" data-payment-href="${paymentLink47}" data-beta-href="${upgrade47Href}">
-          <span id="upgrade-label">Get My Full Diagnostic + Strategist Review — $47</span>
+          <span id="upgrade-label">Get My Full Diagnostic + Strategist Review for $47</span>
           <span class="arrow">→</span>
         </a>
         <p class="micro" id="upgrade-micro">One-time payment · No subscription · Includes your live strategist review</p>

@@ -41,8 +41,16 @@ const LINE_ROTATE_MS = 6000;
 // if it does, it holds at 92% until the response arrives.
 const BAR_FILL_MS = 60000;
 
-export const ProcessingScreen = ({ onComplete }: { onComplete: () => void }) => {
+export const ProcessingScreen = ({ onComplete, tier }: { onComplete: () => void; tier?: string }) => {
   const [lineIdx, setLineIdx] = useState(0);
+  // 2026-10-29: paid generation runs 2-3+ minutes in practice
+  // (streaming + larger prompt). Keep the free line as-is; soften
+  // the paid line so the "about a minute" promise is not broken on
+  // every paid run. Polling behavior is unchanged.
+  const waitCopy =
+    tier === "paid_47" || tier === "paid_297"
+      ? "This may take a few minutes. Keep this page open while we finish your results."
+      : "This may take about a minute. Keep this page open while we finish your results.";
 
   // Fire onComplete once the minimum visible window has elapsed so the
   // parent can transition the moment the worker response arrives.
@@ -115,7 +123,7 @@ export const ProcessingScreen = ({ onComplete }: { onComplete: () => void }) => 
         </div>
 
         <p className="text-sm text-muted-foreground font-body max-w-sm mx-auto">
-          This may take about a minute. Keep this page open while we finish your results.
+          {waitCopy}
         </p>
       </div>
 
