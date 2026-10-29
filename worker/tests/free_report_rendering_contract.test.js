@@ -41,7 +41,7 @@ function customerFacingText(agent) {
   if (agent.contextualInsight) parts.push(agent.contextualInsight.title, agent.contextualInsight.body);
   if (agent.oneMove) parts.push(agent.oneMove.title, agent.oneMove.desc);
   if (agent.theGap) {
-    parts.push(agent.theGap.known, agent.theGap.unknown, agent.theGap.whyItMatters, agent.theGap.whatPaidWillInvestigate);
+    parts.push(agent.theGap.question, agent.theGap.known, agent.theGap.unknown, agent.theGap.whyItMatters, agent.theGap.whatPaidWillInvestigate);
   }
   for (const g of agent.gaps || []) parts.push(g.title, g.impact);
   for (const o of agent.opportunities || []) parts.push(o.title, o.desc, o.impact);
@@ -112,6 +112,38 @@ describe("FREE REPORT RENDERING CONTRACT — fixture: shankar_dental_free_q1_q11
     const html = buildReportHtml(fixture);
     assert.match(html, /One Move You Can Make Now/);
     assert.ok(html.includes(fixture.oneMove.title), "oneMove.title must appear in the rendered HTML");
+  });
+
+  it("One Move meets the owner-level standard (not a clerical task)", () => {
+    // Codex P2 on #165: the previous fixture used "Log one month of
+    // insurance claim write-offs by cause code" — the exact shape of
+    // clerical task the TIER_GUIDE.free ACTION block now prohibits.
+    // The non-empty gate accepted it, so a regression toward the
+    // behavior this change is intended to prevent went undetected.
+    // Lock the owner-level standard here: the fixture's One Move
+    // must not match any of the explicitly forbidden clerical
+    // patterns Solomon is instructed never to emit.
+    const CLERICAL_BLOCKLIST = [
+      /\bcategorize .* transactions?\b/i,
+      /\blog .* month .* (write[-\s]?offs?|deposits|invoices?)\b/i,
+      /\blabel (last|this|the)? ?(week'?s|month'?s|day'?s)? deposits\b/i,
+      /\bclean up your (contacts?|email|invoice|list)\b/i,
+      /\bupdate your (invoice|email|contacts?) template\b/i,
+      /\baudit (two|three|four|a few) projects? for missed change orders?\b/i,
+    ];
+    const combined = `${fixture.oneMove.title} ${fixture.oneMove.desc || ""}`;
+    for (const pat of CLERICAL_BLOCKLIST) {
+      assert.doesNotMatch(combined, pat,
+        `oneMove reads as a clerical task (matched ${pat}); TIER_GUIDE.free ACTION requires an owner-level action that creates a number, comparison, or decision view`);
+    }
+    // And an affirmative decision-signal check: the action should
+    // reference something that produces a number, a comparison, or a
+    // one-page decision view. Any one of these verbs/nouns is enough
+    // to pass; the blocklist above does the heavy lifting of
+    // rejecting clerical shapes.
+    const DECISION_SIGNAL = /\b(side by side|one page|one[-\s]?sheet|baseline|compare|list|quantif|margin|cost of|runway|cash tied up|monthly debt service|share of|ratio|per[-\s](service|customer|month))\b/i;
+    assert.match(combined, DECISION_SIGNAL,
+      "oneMove must reference a number, comparison, or decision view (e.g. list side by side, baseline, quantify, margin, ratio, share of…) per TIER_GUIDE.free OWNER-LEVEL STANDARD");
   });
 
   it("The Gap contains a personalized unresolved CFO question", () => {
@@ -279,6 +311,36 @@ describe("FREE REPORT RENDERING CONTRACT — fixture: shankar_dental_free_q1_q11
     const html = buildReportHtml(fixture);
     const htmlEmDashCount = (html.match(/—/g) || []).length;
     assert.equal(htmlEmDashCount, 0, `rendered HTML contains ${htmlEmDashCount} em dash(es)`);
+  });
+
+  it("theGap carries a personalized CFO question and renders it ABOVE the four prose fields", () => {
+    // Codex P1 on #164: the free report must END with ONE
+    // personalized unresolved CFO question. The schema now exposes
+    // theGap.question for exactly that; the renderer must put it on
+    // top of the known/unknown/why/paid support fields so the
+    // reader sees the question first, then the backing.
+    assert.ok(fixture.theGap, "fixture must carry theGap");
+    assert.ok(fixture.theGap.question && String(fixture.theGap.question).trim(),
+      "theGap.question must be non-empty when a personalized CFO question is supported");
+    const html = buildReportHtml(fixture);
+    const idxQuestion = html.indexOf(fixture.theGap.question);
+    const idxKnown = html.indexOf("What we know:");
+    assert.ok(idxQuestion >= 0, "theGap.question must appear in rendered HTML");
+    assert.ok(idxKnown >= 0, "'What we know:' label must appear in rendered HTML");
+    assert.ok(idxQuestion < idxKnown,
+      "theGap.question must render BEFORE the 'What we know:' line, not after it");
+  });
+
+  it("theGap renders the four prose fields even without a question (backward compat)", () => {
+    // Historical reports (pre-2026-10-29) carry only the four prose
+    // fields. Dropping the question field must not break those: the
+    // card still renders, just without a headline question.
+    const legacy = structuredClone(fixture);
+    delete legacy.theGap.question;
+    const html = buildReportHtml(legacy);
+    assert.match(html, /The Gap/);
+    assert.match(html, /What we know:/);
+    assert.match(html, /What the Full Diagnostic investigates:/);
   });
 
   it("buildReportHtml strips em dashes at the boundary even when Solomon emits them", () => {

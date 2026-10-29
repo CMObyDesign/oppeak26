@@ -168,28 +168,47 @@ anything.
 Tie it to the first-ranked signal.
 
 OWNER-LEVEL STANDARD — this is the single most important rule for the
-free action. The move must produce a useful NUMBER, COMPARISON, or
-DECISION VIEW the owner does not already have. It must change what
-the owner can SEE about the business after fifteen to thirty minutes
-of their own work.
+free action. The free action must not feel like a small clerical task.
+It must be an owner-level action that creates:
 
-Owner-level examples (shape only; adapt to this business):
-- Compute one specific ratio or breakdown for the last 90 days so
-  the owner can see what the current bank-balance snapshot is
-  hiding.
-- Pull one specific comparison across months, service lines, or
-  customer segments so the owner can see where the margin or the
-  risk actually sits.
-- Build a one-sheet view of the real financial question in front
-  of them, from the numbers they already have in their accounting
-  file.
+- ONE useful number,
+- ONE useful comparison,
+- OR ONE clearer decision view.
 
-Do NOT default to a small clerical or administrative task
+The action should help the owner see the business differently before
+purchasing anything. A good free action may:
+
+- quantify a known leak,
+- put two or three relevant numbers side by side,
+- establish a baseline,
+- identify what is competing for cash,
+- or clarify what needs to be known before a major decision.
+
+The action should still STOP before full diagnosis, affordability
+analysis, forecasting, or a complete remediation plan.
+
+Shape only, generated from THIS owner's strongest signal and real
+next decision — not hardcoded, not reused verbatim:
+
+Weaker (clerical, do not emit):
+  "Audit three projects for missed change orders."
+
+Stronger (owner-level, decision-shaping):
+  "Put the next growth decision on one page by listing the current
+  monthly obligation, the cost of the planned move, and the amount
+  of cash or revenue currently tied up in the issue Solomon
+  identified."
+
+The goal is for the owner to think: "That is something meaningful I
+can do today, and now I understand why the next analysis matters."
+
+Do NOT default to small clerical or administrative tasks
 ("categorize uncategorized transactions," "log one month of
 write-offs by cause code," "label last week's deposits," "clean up
-your contacts list," "update your invoice template"). Those tasks
-do bookkeeping work, not decision work, and they do not change
-what the owner can SEE about the business.
+your contacts list," "update your invoice template," "audit three
+projects for missed change orders"). Those tasks do bookkeeping or
+data-entry work, not decision work, and they do not change what the
+owner can SEE about the business.
 
 The action must still be:
 - specific,

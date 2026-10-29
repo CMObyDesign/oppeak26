@@ -380,33 +380,34 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
       </div>
 
       {/* Contextual Insight — free-tier memorable connection the owner
-          may not have made themselves. 2026-10-29 scope correction:
-          the generic "Contextual Insight" heading is dropped; the
-          signature label (The tension / What I'd watch / etc.) stands
-          on its own as the eyebrow. Only renders when title AND body
-          are both non-empty. Historical reports without the field
-          still render through this component. */}
+          may not have made themselves. 2026-10-29 visual rhythm:
+          lowered weight (no card frame, py-8 not py-12, no horizontal
+          line) so it reads as a quiet aside between the main findings
+          and the One Move. The signature label stays as a small
+          eyebrow in accent gold; the body is one centered sentence.
+          Only renders when title AND body are both non-empty. */}
       {report.contextualInsight && report.contextualInsight.title && report.contextualInsight.body && (
-        <div className="space-y-6 py-12 border-t border-white/5">
-          <Card className="p-6 glass-card border-white/5 max-w-2xl mx-auto border-l-4 border-l-accent">
-            <div className="text-xs font-bold uppercase tracking-[0.2em] text-accent mb-2">{report.contextualInsight.title}</div>
-            <p className="text-foreground leading-relaxed">{report.contextualInsight.body}</p>
-          </Card>
+        <div className="py-8 text-center max-w-2xl mx-auto">
+          <div className="text-[11px] font-bold uppercase tracking-[0.25em] text-accent mb-2">{report.contextualInsight.title}</div>
+          <p className="text-muted-foreground leading-relaxed italic">{report.contextualInsight.body}</p>
         </div>
       )}
 
       {/* One Move You Can Make Now — free-tier concrete action tied to
-          the #1 signal. Only rendered when the model emits a non-empty
-          title, so an empty object never produces an empty card. Paid
-          tiers typically omit this (decisionOrder[] covers the same
-          job). */}
+          the #1 signal. 2026-10-29 visual rhythm: elevated with a
+          gold accent left border, a slightly larger card, and a
+          subtle primary-tinted background so this reads as the one
+          owner-level action, not just another card in the stream.
+          Only rendered when the model emits a non-empty title, so
+          an empty object never produces an empty card. Paid tiers
+          typically omit this (decisionOrder[] covers the same job). */}
       {report.oneMove && report.oneMove.title && (
-        <div className="space-y-6 py-12 border-t border-white/5">
+        <div className="space-y-5 py-10 border-t border-white/5">
           <h3 className="font-display text-3xl font-bold text-center">One Move You Can Make Now</h3>
-          <Card className="p-6 glass-card border-white/5 max-w-2xl mx-auto">
-            <h4 className="font-display text-lg font-bold mb-2">{report.oneMove.title}</h4>
+          <Card className="p-8 glass-card border-white/5 border-l-4 border-l-primary bg-primary/[0.03] max-w-2xl mx-auto">
+            <h4 className="font-display text-xl font-bold mb-3 leading-snug">{report.oneMove.title}</h4>
             {report.oneMove.desc && (
-              <p className="text-muted-foreground leading-relaxed">{report.oneMove.desc}</p>
+              <p className="text-foreground/85 leading-relaxed">{report.oneMove.desc}</p>
             )}
           </Card>
         </div>
@@ -471,90 +472,95 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
         </div>
       )}
 
-      {/* The Gap — free-tier closing CFO question. 2026-10-29:
-          the dynamic personalized block that replaces the hardcoded
-          generic sales block removed above. Only renders on the
-          free tier (paid_47 has Questions to Clarify + Order of
-          Attention instead) and only when at least one of the
-          four prose fields is non-empty, so a partial response
-          never produces a blank card. Four-part structure mirrors
-          the Worker /report page: known / unknown / why it
-          matters / what the Full Diagnostic investigates. The
-          question itself is the model's own prose at the top of
-          the known field in TIER_GUIDE-shaped builds; here we
-          surface the four fields plainly under one eyebrow. */}
-      {report.tier === "free" && report.theGap && (
-        report.theGap.known ||
-        report.theGap.unknown ||
-        report.theGap.whyItMatters ||
-        report.theGap.whatPaidWillInvestigate
-      ) && (
-        <div className="space-y-6 py-12 border-t border-white/5">
-          <h3 className="font-display text-3xl font-bold text-center">The Gap</h3>
-          <Card className="p-6 glass-card border-white/5 max-w-2xl mx-auto border-l-4 border-l-primary space-y-3">
-            {report.theGap.known && (
-              <div className="text-foreground leading-relaxed">
-                <span className="font-bold">What we know:</span>{" "}
-                <span className="text-muted-foreground">{report.theGap.known}</span>
-              </div>
-            )}
-            {report.theGap.unknown && (
-              <div className="text-foreground leading-relaxed">
-                <span className="font-bold">What's unknown:</span>{" "}
-                <span className="text-muted-foreground">{report.theGap.unknown}</span>
-              </div>
-            )}
-            {report.theGap.whyItMatters && (
-              <div className="text-foreground leading-relaxed">
-                <span className="font-bold">Why it matters:</span>{" "}
-                <span className="text-muted-foreground">{report.theGap.whyItMatters}</span>
-              </div>
-            )}
-            {report.theGap.whatPaidWillInvestigate && (
-              <div className="text-foreground leading-relaxed">
-                <span className="font-bold">What the Full Diagnostic investigates:</span>{" "}
-                <span className="text-muted-foreground">{report.theGap.whatPaidWillInvestigate}</span>
-              </div>
-            )}
-          </Card>
-        </div>
-      )}
-
-      {/* What You Get Section — components sold plainly, no invented
-          dollar values. The old "$150 / $197 / $39 / $59 / was $484"
-          framing read like an internet-marketing bundle, which the brand
-          doc says not to do unless each item is independently sold at
-          those prices. Standardized 30-minute strategist review (not
-          20-minute) across the whole funnel. */}
+      {/* The Gap → What You Get — on the free tier these two sections
+          are intentionally fused into one visual flow so the
+          personalized CFO question lands and transitions directly
+          into the $47 Full Diagnostic offer. Both share one outer
+          border-y frame; the horizontal rule between them is
+          dropped. The Gap only renders when at least one of its
+          four prose fields is non-empty. */}
       {report.tier === "free" && (
-        <div className="max-w-4xl mx-auto space-y-12 py-16 border-y border-white/5">
-          <div className="text-center space-y-4">
-            <h3 className="font-display text-4xl font-bold">What You Get</h3>
-            <p className="text-muted-foreground uppercase tracking-widest text-sm">The $47 Full Diagnostic</p>
-          </div>
-
-          <div className="grid gap-4">
-            {[
-              { title: "Full Financial Diagnostic across cash flow, debt, profitability, receivables, financial visibility, and growth capacity", icon: BarChart3 },
-              { title: "Prioritized findings — what deserves attention first, and why", icon: Target },
-              { title: "Break-Even Calculator — the one number most owners cannot name", icon: Calculator },
-              { title: "12-Month Cash-Flow Forecast — so low-cash months never surprise you", icon: Calendar },
-              { title: "KPI Dashboard tools — three dashboards that put your whole business on one screen", icon: Activity },
-              { title: "30-minute live strategist review with a CFO By Design strategist to walk the findings", icon: Users },
-            ].map((item, i) => (
-              <div key={i} className="flex items-center gap-4 p-6 rounded-2xl bg-secondary/20 border border-white/5 group hover:border-primary/30 transition-all">
-                <div className="p-3 rounded-xl bg-primary/10 text-primary shrink-0">
-                  <item.icon className="h-6 w-6" />
+        <div className="max-w-4xl mx-auto border-y border-white/5">
+          {report.theGap && (
+            report.theGap.question ||
+            report.theGap.known ||
+            report.theGap.unknown ||
+            report.theGap.whyItMatters ||
+            report.theGap.whatPaidWillInvestigate
+          ) && (
+            <div className="space-y-5 pt-12 pb-6">
+              <h3 className="font-display text-3xl font-bold text-center">The Gap</h3>
+              <Card className="p-6 glass-card border-white/5 max-w-2xl mx-auto border-l-4 border-l-primary space-y-4">
+                {/* The CFO question — the headline the owner reads.
+                    Set apart with display face + stronger color so it
+                    doesn't look like a fifth label row. */}
+                {report.theGap.question && (
+                  <p className="font-display text-xl font-bold text-foreground leading-snug">
+                    {report.theGap.question}
+                  </p>
+                )}
+                <div className="space-y-3">
+                  {report.theGap.known && (
+                    <div className="text-foreground leading-relaxed">
+                      <span className="font-bold">What we know:</span>{" "}
+                      <span className="text-muted-foreground">{report.theGap.known}</span>
+                    </div>
+                  )}
+                  {report.theGap.unknown && (
+                    <div className="text-foreground leading-relaxed">
+                      <span className="font-bold">What's unknown:</span>{" "}
+                      <span className="text-muted-foreground">{report.theGap.unknown}</span>
+                    </div>
+                  )}
+                  {report.theGap.whyItMatters && (
+                    <div className="text-foreground leading-relaxed">
+                      <span className="font-bold">Why it matters:</span>{" "}
+                      <span className="text-muted-foreground">{report.theGap.whyItMatters}</span>
+                    </div>
+                  )}
+                  {report.theGap.whatPaidWillInvestigate && (
+                    <div className="text-foreground leading-relaxed">
+                      <span className="font-bold">What the Full Diagnostic investigates:</span>{" "}
+                      <span className="text-muted-foreground">{report.theGap.whatPaidWillInvestigate}</span>
+                    </div>
+                  )}
                 </div>
-                <span className="text-lg font-medium">{item.title}</span>
-              </div>
-            ))}
-          </div>
+              </Card>
+            </div>
+          )}
 
-          <div className="text-center pt-8">
-            <div className="inline-flex flex-col items-center">
-              <span className="text-5xl font-display font-bold text-foreground">$47 one time</span>
-              <span className="text-xs text-muted-foreground uppercase tracking-widest mt-2 font-mono">No subscription · Includes your live strategist review</span>
+          {/* What You Get — tightened against The Gap above (no
+              horizontal rule between the two) so the personalized
+              question flows directly into the $47 ladder. */}
+          <div className="space-y-10 pt-6 pb-14">
+            <div className="text-center space-y-3">
+              <h3 className="font-display text-4xl font-bold">What You Get</h3>
+              <p className="text-muted-foreground uppercase tracking-widest text-sm">The $47 Full Diagnostic</p>
+            </div>
+
+            <div className="grid gap-4">
+              {[
+                { title: "Full Financial Diagnostic across cash flow, debt, profitability, receivables, financial visibility, and growth capacity", icon: BarChart3 },
+                { title: "Prioritized findings: what deserves attention first, and why", icon: Target },
+                { title: "Break-Even Calculator: the one number most owners cannot name", icon: Calculator },
+                { title: "12-Month Cash-Flow Forecast so low-cash months never surprise you", icon: Calendar },
+                { title: "KPI Dashboard tools: three dashboards that put your whole business on one screen", icon: Activity },
+                { title: "30-minute live strategist review with a CFO By Design strategist to walk the findings", icon: Users },
+              ].map((item, i) => (
+                <div key={i} className="flex items-center gap-4 p-6 rounded-2xl bg-secondary/20 border border-white/5 group hover:border-primary/30 transition-all">
+                  <div className="p-3 rounded-xl bg-primary/10 text-primary shrink-0">
+                    <item.icon className="h-6 w-6" />
+                  </div>
+                  <span className="text-lg font-medium">{item.title}</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="text-center pt-6">
+              <div className="inline-flex flex-col items-center">
+                <span className="text-5xl font-display font-bold text-foreground">$47 one time</span>
+                <span className="text-xs text-muted-foreground uppercase tracking-widest mt-2 font-mono">No subscription · Includes your live strategist review</span>
+              </div>
             </div>
           </div>
         </div>

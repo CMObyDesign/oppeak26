@@ -143,3 +143,58 @@ describe("repairAgentJson — unit", () => {
     assert.equal(parsed.a, 'say "hi"');
   });
 });
+
+describe("parseAgentJson — 2026-10-29 production hardening", () => {
+  it("repairs a literal newline inside a string value", () => {
+    // Prose-heavy models sometimes break a long string across lines
+    // without escaping. Strict JSON.parse rejects a raw U+000A inside
+    // a string literal; repair escapes it to `\n`.
+    const src = '{"opener":"first line\nsecond line"}';
+    const out = parseAgentJson(src);
+    assert.equal(out.opener, "first line\nsecond line");
+  });
+
+  it("repairs a literal tab inside a string value", () => {
+    const src = '{"opener":"a\tb"}';
+    const out = parseAgentJson(src);
+    assert.equal(out.opener, "a\tb");
+  });
+
+  it("repairs a literal carriage return inside a string value", () => {
+    const src = '{"opener":"a\rb"}';
+    const out = parseAgentJson(src);
+    assert.equal(out.opener, "a\rb");
+  });
+
+  it("strips a trailing comma before }", () => {
+    const src = '{"a":1,"b":2,}';
+    const out = parseAgentJson(src);
+    assert.deepEqual(out, { a: 1, b: 2 });
+  });
+
+  it("strips a trailing comma before ]", () => {
+    const src = '{"gaps":[{"title":"x"},{"title":"y"},]}';
+    const out = parseAgentJson(src);
+    assert.equal(out.gaps.length, 2);
+    assert.equal(out.gaps[1].title, "y");
+  });
+
+  it("strips a trailing comma with whitespace before }", () => {
+    const src = '{"a":1,\n  }';
+    const out = parseAgentJson(src);
+    assert.deepEqual(out, { a: 1 });
+  });
+
+  it("handles the combined failure mode: unescaped newline + trailing comma", () => {
+    const src = '{"a":"first\nsecond","b":2,}';
+    const out = parseAgentJson(src);
+    assert.equal(out.a, "first\nsecond");
+    assert.equal(out.b, 2);
+  });
+
+  it("leaves a comma that is a real separator alone (not a trailing comma)", () => {
+    const src = '{"a":1,"b":2}';
+    const out = parseAgentJson(src);
+    assert.deepEqual(out, { a: 1, b: 2 });
+  });
+});
