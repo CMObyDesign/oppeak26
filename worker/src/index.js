@@ -1123,23 +1123,79 @@ like generic financial advice.
 SECTION ROLE / NON-REPETITION
 
 Each section of the rendered free report has a different job:
-- Financial Health Snapshot: summarize the signal briefly.
-- What Deserves Your Attention: explain what the evidence says, why it
-  matters, and what decision it affects.
-- Highest-Impact Opportunities: explain the leverage, why it is
-  credible, and the economic mechanism.
+- Financial Health Snapshot: SHORT SUMMARY only — a one-liner tag per
+  slot, not a full paragraph. 10-20 words per slot is a good ceiling.
+- What Deserves Your Attention: deeper diagnosis — explain what the
+  evidence says, why it matters, and what decision it affects.
+- Highest-Impact Opportunities: leverage + economic mechanism — explain
+  why it is credible and the specific lever (revenue capture, margin,
+  cash timing, concentration, recurring revenue, cost, decision
+  quality). Not just a restated summary.
 - Contextual Insight: a memorable connection the owner may not have
-  made themselves — one of "The tension," "What I'd watch," "That
+  made themselves — titled "The tension," "What I'd watch," "That
   number means," or "The question I wouldn't ignore." Connects 1-2
   answers in a way distinct from the Attention/Opportunity cards.
 - The Gap: the one personalized unresolved CFO question that becomes
   the bridge to the $47 Full Diagnostic.
 
-Do not reuse the same paragraph verbatim across sections. The Snapshot
-summarizes; the detailed sections add meaning; the Contextual Insight
-connects; The Gap is unresolved. If the same evidence belongs in two
-places, write a short tag for the Snapshot and the full explanation for
-the detailed section.
+HARD RULE — NO VERBATIM REPETITION:
+
+The same underlying issue MAY appear in more than one section, but the
+PARAGRAPH MUST BE DIFFERENT. If the Snapshot's "Needs Attention" tag
+reads one way, the full "What Deserves Your Attention" card must say
+something more. Same for Snapshot "Watch" vs the second gap, and
+Snapshot "Opportunity" vs "Highest-Impact Opportunities."
+
+The Snapshot is a scan-friendly label. The detailed section adds the
+diagnosis the owner cannot see from the Snapshot alone. Reusing the
+same sentences across both is a bug — a reader notices immediately and
+loses trust.
+
+Q9 "20% MORE PROFIT" DISCIPLINE
+
+Q9 asks what MORE profit would unlock. It establishes the owner's
+priorities and intent, not a measurable target. Do NOT treat 20% as
+achievable, recoverable, or already in the business. Do NOT claim a
+specific finding (change-order leakage, cost cuts, pricing moves) will
+"get the owner to 20%." The arithmetic is not supported by the free
+intake.
+
+Good: "Quantify the change-order leakage so you know how much profit
+and cash may currently be getting missed."
+
+Bad: "Whether recovering it gets you to the 20% margin improvement you
+described."
+
+FREE-TIER SUPPORTABILITY DISCIPLINE
+
+The free Health Check may identify an opportunity, a demand signal, or
+a credible growth avenue. It may NOT conclude that the business can
+financially support any expansion, hire, or capital move. Use:
+
+- "credible expansion opportunity"
+- "real demand signal in [city]"
+- "worth testing"
+
+Not:
+
+- "well-positioned to expand"
+- "the constraint is not demand or model fit" (unless model fit is
+  separately established — the free intake usually cannot do this)
+- "ready to add [person/location/line]"
+
+PROFITABILITY LANGUAGE DISCIPLINE
+
+The free intake does not establish current profitability. Do NOT
+reference "current profitability," "margin health," "today's margins,"
+or similar as if they are known.
+
+Good: "whether the debt burden, cash capacity, and existing operation
+can support..."
+
+Bad: "whether the debt picture and current profitability can support..."
+
+If profitability feels like the right frame, name what remains unknown
+and route the question to the $47 Full Diagnostic.
 
 CONTEXTUAL INSIGHT
 
@@ -1155,6 +1211,21 @@ be one of:
 The body is one or two sentences. It must be concrete to this business
 and must NOT restate a gap or opportunity verbatim. It must NOT complete
 the deeper diagnosis — that is the $47 Full Diagnostic's job.
+
+HARD RULES on what the insight may claim:
+
+- Must not assert anything the free intake has not established. "You may
+  not need to wait for market conditions or debt resolution to unlock
+  hiring capacity" is overreach — the Health Check cannot know that.
+- Must not imply debt needs "resolution" merely because it is managed or
+  stretched. Managed debt is not distress.
+- Must stay in the role of SETTING UP a conversation, not FINISHING it.
+
+Good: "The tension: You said more profit would let you hire before
+expanding into Savannah, and you also identified change orders as your
+biggest revenue leak. Those answers belong in the same conversation.
+Before assuming more sales or more borrowing are required, quantify how
+much current work is being under-billed or billed late."
 
 Omit the contextualInsight field entirely when no meaningful connection
 is supported. Never emit an empty title or body.
@@ -1273,21 +1344,65 @@ say what remains unknown rather than inventing a specific vertical.
 
 THE GAP / NEXT CFO QUESTION
 
-The free report must identify ONE business-specific financial question
+The free report must END with ONE personalized unresolved CFO question
 that the Health Check cannot responsibly answer with the current data.
 
-State:
-1. What the Health Check already established.
-2. What remains unknown.
-3. Why that unknown matters to a real decision.
-4. What the $47 Full Diagnostic will investigate.
+BUILD the question from this specific owner's answers — do not hardcode
+or imitate a single example. Combine three ingredients:
 
-Do not manufacture uncertainty to create an upsell. Do not lead with a
-generic list of cash flow, debt, profitability, receivables, or growth
-categories.
+1. the real decision or next move the owner is considering (from their
+   answers — a planned hire, expansion, equipment buy, growth move,
+   capital raise, etc.);
+2. the financial constraint or unknown that matters most (from their
+   answers — current debt load, cash position, concentration risk,
+   revenue leak, visibility gap, etc.);
+3. the consequence Solomon cannot responsibly determine from the free
+   intake alone (whether the move is supportable, whether a signal is
+   actually the constraint, whether timing works, etc.).
 
-The owner should leave thinking: "I know what is happening, and now I
-know the exact question I need answered."
+Example patterns (shape only — never reuse the sentences themselves):
+
+- "Can [the business] support [next move] while carrying [current
+  financial constraint] without creating too much pressure on cash?"
+- "Is [financial issue] actually constraining the business, or is
+  another factor driving the problem?"
+- "Can the owner afford [hire / expansion / equipment / growth move]
+  based on the financial picture behind the current bank balance?"
+- "Is [growth opportunity] financially supportable at the timing the
+  owner wants?"
+- "What would need to be true financially before [next move] becomes a
+  sound decision?"
+
+The wording MUST be specific to the owner's answers. The question
+should make the owner think: "That is exactly what I need to know
+next."
+
+Then state in this order under the question:
+1. What the Health Check already established (one sentence — specific
+   to this business).
+2. What remains unknown (one sentence — concrete, not categorical).
+3. Why that unknown matters to the real decision in front of the owner.
+4. What the $47 Full Diagnostic will investigate (one sentence — the
+   specific questions, not a category list).
+
+HARD RULES:
+
+- Do NOT reuse the same question template mechanically. Build the
+  question fresh each time from this owner's actual decision and
+  constraint.
+- Do NOT invent a decision the owner did not mention. If the intake
+  does not name a next move, root the question in a tension the owner
+  did name (concentration risk, leak, visibility, etc.).
+- Do NOT open or lead with any generic list of cash flow, debt,
+  profitability, receivables, visibility, or growth-capacity
+  categories. The owner should feel the question is about THEIR
+  situation.
+- Do NOT manufacture uncertainty to create an upsell.
+- Do NOT use a generic question like "How healthy is your business?"
+- The question must be answerable with the data the $47 Full
+  Diagnostic actually collects (debt detail, A/R aging, cash flow,
+  close cadence, margin by segment, etc.). Do not promise answers the
+  paid tier cannot deliver.
 
 BOUNDARY
 
@@ -1316,6 +1431,19 @@ STYLE
 - No unsupported crisis language.
 - No digital presence / GBP / reviews / SEO as a free-tier primary finding.
 - Do not weaken a supported conclusion just to sound safer.
+
+PRODUCT NAMING (enforced in every customer-facing string)
+
+- "Business Health Check" — never "Business Health Report" or
+  "Business Health Analysis."
+- "$47 Full Diagnostic" — never "Full Diagnosis," "$47 report," or
+  "$47 diagnostic report."
+- "30-minute strategist review" or "included strategist review" —
+  never "strategy session," "consultation," or "Deep Dive."
+- "$297 Business Growth Analysis" — never "Business Growth Plan" or
+  "BGA report" in customer-facing copy.
+- "Solomon" (the engine) and "Miguel" (the strategist) remain their
+  own names. Never fuse into one entity.
 
 FREE HEALTH CHECK COMPLETENESS CONTRACT
 
@@ -2788,12 +2916,17 @@ function buildReportHtml(agent) {
     String(agent.contextualInsight.body).trim()
   ) {
     const ci = agent.contextualInsight;
+    // 2026-10-29 scope correction: remove the generic "Contextual
+    // Insight" eyebrow and let the signature label stand on its own
+    // ("The tension," "What I'd watch," "That number means," "The
+    // question I wouldn't ignore"). The signature title is already
+    // the memorable framing; a generic header above it just creates
+    // noise and feels bureaucratic.
     contextualInsightBlock = `
-<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Contextual Insight</h2>
-<table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">
+<table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;margin-top:32px;">
   <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid #92400e;border-radius:4px;">
-    <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:16px;">${e(ci.title)}</div>
-    <div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:6px;line-height:1.55;">${e(ci.body)}</div>
+    <div style="font-family:Arial,sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;color:#92400e;font-weight:700;margin-bottom:6px;">${e(ci.title)}</div>
+    <div style="font-family:Georgia,serif;color:#1a1a1a;font-size:15px;line-height:1.6;">${e(ci.body)}</div>
   </td></tr>
 </table>`;
   }

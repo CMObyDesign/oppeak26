@@ -3,7 +3,7 @@ export const ASSESSMENT_COMPLETED_KEY = "cfo_assessment_completed_at";
 export const OFFERS = {
   DIAGNOSTIC_47: {
     durationHours: 48,
-    label: "$47 Full Diagnosis",
+    label: "$47 Full Diagnostic",
   },
   ACTION_BONUS_50: {
     durationHours: 24,

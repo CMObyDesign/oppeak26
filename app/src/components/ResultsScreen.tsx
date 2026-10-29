@@ -188,7 +188,7 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
       {/* Header */}
       <div className="text-center space-y-6">
         <p className="text-xs md:text-sm font-bold text-accent uppercase tracking-[0.3em]">
-          YOUR BUSINESS HEALTH REPORT
+          YOUR BUSINESS HEALTH CHECK
         </p>
 
         <div className="flex justify-center">
@@ -211,29 +211,14 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
         </div>
       </div>
 
-      {/* The Gap Section — pitch for the Full Diagnostic. Scoped to
-          the FREE tier (2026-10-19 fix). Before this gate it rendered
-          on every tier, so paid_47 and paid_297 customers saw a sales
-          pitch for a product they already bought right above their
-          own findings. The copy explicitly says "The Full Diagnostic
-          goes deeper…" which is only true for a reader who hasn't
-          bought it yet. */}
-      {report.tier === "free" && (
-        <div className="max-w-3xl mx-auto space-y-8">
-          <div className="p-8 rounded-2xl border border-primary/20 bg-primary/5 space-y-6">
-            <div className="flex items-center gap-3">
-              <Activity className="h-6 w-6 text-primary" />
-              <h3 className="font-display text-2xl font-bold uppercase tracking-wider">The Gap</h3>
-            </div>
-            <p className="text-lg text-muted-foreground leading-relaxed">
-              Your Business Health Check identified the signals. The Full Diagnostic goes deeper into the numbers behind them, including cash flow, debt, profitability, receivables, financial visibility, and growth capacity.
-            </p>
-            <p className="text-base text-foreground font-medium italic leading-relaxed">
-              The goal is not more information. It is knowing what deserves attention first and why.
-            </p>
-          </div>
-        </div>
-      )}
+      {/* 2026-10-29: removed the hardcoded generic Gap sales block
+          that lived here. It opened with the exact "cash flow, debt,
+          profitability, receivables, financial visibility, and growth
+          capacity" category list the TIER_GUIDE forbids — AND it
+          duplicated whatever Solomon writes into report.theGap below,
+          creating the "double Gap" bug Liz flagged. The dynamic
+          personalized theGap block (rendered later in this component)
+          is the single source for the free-tier Gap section now. */}
 
       {/* The Story Section — locked founder-voice copy from Miguel (2026-10-17).
           This section is founder/high-trust content; it stays in first-person
@@ -291,9 +276,13 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
             <p className="text-foreground font-medium italic">
               The report shows you what we're seeing. The CFO By Design team helps you decide what to do with it.
             </p>
-            <p className="text-sm text-muted-foreground/80 pt-2">
-              Built on Miguel Hernandez's financial framework. Delivered by the CFO By Design team.
-            </p>
+            {/* 2026-10-29: removed the duplicate "Built on Miguel
+                Hernandez's financial framework. Delivered by the CFO
+                By Design team." signature line. The byline above
+                already attributes everything to Miguel; the
+                first-person narration ("I've sat across from…")
+                carries it through the Story block. The repeat
+                signature was reading like a second slug. */}
           </div>
         </div>
       </div>
@@ -391,16 +380,17 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
       </div>
 
       {/* Contextual Insight — free-tier memorable connection the owner
-          may not have made themselves. Only renders when title AND
-          body are both non-empty; empty-shell guard mirrors the
-          Worker's buildReportHtml. Historical reports without the
-          field still render through this component. */}
+          may not have made themselves. 2026-10-29 scope correction:
+          the generic "Contextual Insight" heading is dropped; the
+          signature label (The tension / What I'd watch / etc.) stands
+          on its own as the eyebrow. Only renders when title AND body
+          are both non-empty. Historical reports without the field
+          still render through this component. */}
       {report.contextualInsight && report.contextualInsight.title && report.contextualInsight.body && (
         <div className="space-y-6 py-12 border-t border-white/5">
-          <h3 className="font-display text-3xl font-bold text-center">Contextual Insight</h3>
-          <Card className="p-6 glass-card border-white/5 max-w-2xl mx-auto">
-            <h4 className="font-display text-lg font-bold mb-2">{report.contextualInsight.title}</h4>
-            <p className="text-muted-foreground leading-relaxed">{report.contextualInsight.body}</p>
+          <Card className="p-6 glass-card border-white/5 max-w-2xl mx-auto border-l-4 border-l-accent">
+            <div className="text-xs font-bold uppercase tracking-[0.2em] text-accent mb-2">{report.contextualInsight.title}</div>
+            <p className="text-foreground leading-relaxed">{report.contextualInsight.body}</p>
           </Card>
         </div>
       )}
@@ -478,6 +468,55 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
               </Card>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* The Gap — free-tier closing CFO question. 2026-10-29:
+          the dynamic personalized block that replaces the hardcoded
+          generic sales block removed above. Only renders on the
+          free tier (paid_47 has Questions to Clarify + Order of
+          Attention instead) and only when at least one of the
+          four prose fields is non-empty, so a partial response
+          never produces a blank card. Four-part structure mirrors
+          the Worker /report page: known / unknown / why it
+          matters / what the Full Diagnostic investigates. The
+          question itself is the model's own prose at the top of
+          the known field in TIER_GUIDE-shaped builds; here we
+          surface the four fields plainly under one eyebrow. */}
+      {report.tier === "free" && report.theGap && (
+        report.theGap.known ||
+        report.theGap.unknown ||
+        report.theGap.whyItMatters ||
+        report.theGap.whatPaidWillInvestigate
+      ) && (
+        <div className="space-y-6 py-12 border-t border-white/5">
+          <h3 className="font-display text-3xl font-bold text-center">The Gap</h3>
+          <Card className="p-6 glass-card border-white/5 max-w-2xl mx-auto border-l-4 border-l-primary space-y-3">
+            {report.theGap.known && (
+              <div className="text-foreground leading-relaxed">
+                <span className="font-bold">What we know:</span>{" "}
+                <span className="text-muted-foreground">{report.theGap.known}</span>
+              </div>
+            )}
+            {report.theGap.unknown && (
+              <div className="text-foreground leading-relaxed">
+                <span className="font-bold">What's unknown:</span>{" "}
+                <span className="text-muted-foreground">{report.theGap.unknown}</span>
+              </div>
+            )}
+            {report.theGap.whyItMatters && (
+              <div className="text-foreground leading-relaxed">
+                <span className="font-bold">Why it matters:</span>{" "}
+                <span className="text-muted-foreground">{report.theGap.whyItMatters}</span>
+              </div>
+            )}
+            {report.theGap.whatPaidWillInvestigate && (
+              <div className="text-foreground leading-relaxed">
+                <span className="font-bold">What the Full Diagnostic investigates:</span>{" "}
+                <span className="text-muted-foreground">{report.theGap.whatPaidWillInvestigate}</span>
+              </div>
+            )}
+          </Card>
         </div>
       )}
 
@@ -579,10 +618,16 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
                 className="w-full h-20 text-xl font-bold rounded-xl shadow-glow-gold transition-all hover:-translate-y-1 active:translate-y-0 bg-primary hover:bg-primary/90 text-primary-foreground relative overflow-hidden group"
               >
                 <div className="relative z-10 flex flex-col items-center">
-                  <span>Get My Full Diagnosis + Strategy Session — $47</span>
+                  <span>Get My Full Diagnostic + Strategist Review — $47</span>
+                  {/* 2026-10-29: removed the "(24h only)" sublabel.
+                      The countdown above runs 48h on the Diagnostic
+                      offer; adding "24h only" here read as a direct
+                      contradiction. The Action Taker Bonus is
+                      included inside the $47 — we don't need two
+                      competing clocks on the same card. */}
                   {!getRemainingTime(OFFERS.ACTION_BONUS_50.durationHours).isExpired && (
                     <span className="text-[10px] uppercase tracking-widest text-primary-foreground/80 mt-1 font-mono">
-                      ⚡ Includes $50 Action Taker Bonus (24h only)
+                      ⚡ Includes $50 Action Taker Bonus
                     </span>
                   )}
                 </div>
@@ -676,7 +721,7 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
               }}
               className="w-full h-20 text-xl font-bold rounded-xl shadow-glow-gold transition-all hover:-translate-y-1 active:translate-y-0 bg-primary hover:bg-primary/90 text-primary-foreground"
             >
-              Book my {report.tier === "paid_297" ? "50-minute Deep Dive Session" : "30-minute Strategy Session"} →
+              Book my {report.tier === "paid_297" ? "50-minute Deep Dive Session" : "30-minute Strategist Review"} →
             </Button>
           )}
 
@@ -696,7 +741,7 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
       )}
 
       <footer className="mt-20 py-12 border-t border-border/50 text-center">
-        <p className="text-xs text-muted-foreground uppercase tracking-[0.4em]">Built on Miguel Hernandez&apos;s financial framework · CFO By Design</p>
+        <p className="text-xs text-muted-foreground uppercase tracking-[0.4em]">Your integrated money partner · CFO By Design</p>
       </footer>
     </div>
   );
