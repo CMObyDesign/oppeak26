@@ -87,15 +87,28 @@ export const FREE_ASSESSMENT_SECTIONS: AssessmentSection[] = [
         // tax distress or debt-service pressure — see the big
         // DEBT SUBTYPE DISCIPLINE block in worker/src/index.js and
         // normDebtSummary() in normalize.js.
-        title: "Debt / Tax Lien / Judgment Status",
-        text: "Which best describes your business's current debt, tax, and legal standing?",
+        title: "Debt / Tax / Legal Status",
+        text: "Which best describes your business's current debt, tax, and legal status?",
+        // Eight-state option set (2026-10-29 — Liz-approved). Distinguishes
+        // managed vs stretched debt separately from tax-only, lien-only,
+        // and the two overlapping states (debt + lien, unfiled vs
+        // outstanding balance). The normalizer in worker/src/normalize.js
+        // classifies each slug into subtypes + judgments_or_liens
+        // signals; see DEBT / TAX / LEGAL STATUS MAPPING in
+        // ASSESSMENT_RUBRIC for the per-slug Solomon directive.
+        //
+        // Legacy slugs (yes/no/not-sure + the previous six-state set)
+        // remain accepted by the normalizer for historical submissions
+        // but are no longer offered as new-form options.
         options: [
-          { value: "none",             label: "No business debt, taxes current, no legal actions against the business" },
-          { value: "managed_debt",     label: "Business loans or credit I'm actively managing in good standing (current, not stretched)" },
-          { value: "tax_balance",      label: "Outstanding tax balance or payment plan with the IRS or state" },
-          { value: "unfiled_taxes",    label: "One or more years of business tax returns unfiled" },
-          { value: "lien_or_judgment", label: "Active tax lien, judgment, or legal action against the business" },
-          { value: "not_sure",         label: "Not sure" },
+          { value: "none",                    label: "No active business debt, tax liens, or judgments" },
+          { value: "managed_debt",            label: "Business debt only — current and manageable" },
+          { value: "managed_debt_stretched",  label: "Business debt only — stretched or actively being reworked" },
+          { value: "lien_or_judgment",        label: "Active tax lien or judgment" },
+          { value: "debt_and_lien",           label: "Both business debt and an active tax lien or judgment" },
+          { value: "unfiled_taxes",           label: "One or more business tax returns are currently unfiled" },
+          { value: "tax_balance",             label: "Outstanding tax balance or payment plan, but no active lien or judgment" },
+          { value: "not_sure",                label: "Not sure" },
         ],
         required: true,
       },

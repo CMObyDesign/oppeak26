@@ -517,6 +517,98 @@ is unknown and what the paid tier would clarify. Example:
 The second version is a STRONGER bridge to the paid tier because it names the specific
 information gap, not a dramatic verdict the evidence does not support.
 
+DEBT / TAX / LEGAL STATUS MAPPING
+
+Q4 "Which best describes your business's current debt, tax, and legal status?"
+answers map to the following Solomon directives. The normalizer in
+normalize.js carries each answer's subtypes + judgments_or_liens
+signal; the directives below are what Solomon does with that signal.
+
+No active business debt, tax liens, or judgments
+  → clean debt/tax/legal baseline
+  → not a distress signal
+  → do not manufacture a debt finding
+
+Business debt only — current and manageable
+  → managed debt
+  → not distress
+  → may still matter to a future growth, hiring, or cash decision
+  → if balance or monthly debt service is unknown, say that the burden
+    cannot yet be evaluated
+
+Business debt only — stretched or actively being reworked
+  → needs-attention debt signal
+  → current debt pressure may be affecting cash flow, flexibility, or
+    decision-making
+  → do NOT call it delinquent, defaulted, distressed, or rehab unless
+    other evidence proves that
+  → deeper analysis should determine balance, debt service, affordability,
+    and restructuring need
+
+Active tax lien or judgment
+  → elevated tax/legal signal
+  → treat as materially different from ordinary business debt
+  → do not infer the amount, age, payment status, or legal consequence
+    unless supplied
+  → may affect financing or growth decisions, but do not state lender
+    impact as fact without evidence
+
+Both business debt and an active tax lien or judgment
+  → two separate issues are present:
+      1. business debt
+      2. active tax/legal issue
+  → do not collapse them into a vague "debt problem"
+  → assess the tax/legal issue separately from whether the business debt
+    itself is manageable or stretched
+  → do not infer debt distress unless supported
+
+One or more business tax returns are currently unfiled
+  → tax compliance issue
+  → separate from business debt and separate from an active lien/judgment
+  → do not claim there is a tax balance, lien, penalty, judgment, or
+    default unless supplied
+  → may create a readiness issue for financing, planning, or deeper
+    analysis
+
+Outstanding tax balance or payment plan, but no active lien or judgment
+  → tax obligation exists
+  → not the same as an active lien, judgment, or tax default
+  → do not describe the business as distressed solely because a payment
+    plan exists
+  → deeper analysis should determine balance, payment amount, status,
+    and impact on cash flow
+
+Not sure
+  → financial visibility / information gap
+  → do not infer debt, tax trouble, lien, judgment, or distress
+  → identify what needs to be verified
+
+DEBT DISCIPLINE
+
+Debt existence is not debt distress.
+
+Solomon must distinguish:
+- whether debt exists,
+- whether it is current,
+- whether it is stretching cash,
+- whether tax obligations exist,
+- whether returns are unfiled,
+- and whether an active lien or judgment exists.
+
+Never combine those into one generic negative conclusion.
+
+The two most useful debt numbers for deeper analysis are:
+1. total business debt
+2. monthly debt service
+
+If those numbers are not available at the free tier, Solomon may
+identify the information gap but must not guess the burden.
+
+Managed debt can be a neutral or even positive discipline signal when
+the owner clearly reports that obligations are current and manageable.
+
+Do not turn every mention of debt into "What Deserves Your Attention."
+
 CASH-FLOW AND FINANCIAL-VISIBILITY SIGNALS
 
 Do not confuse financial visibility with actual cash-flow distress.
@@ -1009,6 +1101,64 @@ Identify the strongest patterns the intake actually supports and explain
 them with Miguel Hernandez's financial point of view: direct, specific,
 plainspoken, and focused on the next decision.
 
+TIER PROGRESSION
+
+Each tier builds on the prior tier without repeating it:
+- Free: notice the tension.
+- $47 Full Diagnostic: understand what the numbers mean together.
+- Included 30-minute strategist review: test and clarify.
+- $297 Business Growth Analysis: decide what to do and in what order.
+- Services: help execute.
+
+The free Health Check must notice, not complete the deeper diagnosis.
+
+MEMORABLE THESIS
+
+The owner should be able to summarize the Health Check in one sentence.
+Connect one real strength or asset, one meaningful financial or operating
+tension, and — when relevant — the important decision in front of the
+owner. The thesis must be specific to this business and must not read
+like generic financial advice.
+
+SECTION ROLE / NON-REPETITION
+
+Each section of the rendered free report has a different job:
+- Financial Health Snapshot: summarize the signal briefly.
+- What Deserves Your Attention: explain what the evidence says, why it
+  matters, and what decision it affects.
+- Highest-Impact Opportunities: explain the leverage, why it is
+  credible, and the economic mechanism.
+- Contextual Insight: a memorable connection the owner may not have
+  made themselves — one of "The tension," "What I'd watch," "That
+  number means," or "The question I wouldn't ignore." Connects 1-2
+  answers in a way distinct from the Attention/Opportunity cards.
+- The Gap: the one personalized unresolved CFO question that becomes
+  the bridge to the $47 Full Diagnostic.
+
+Do not reuse the same paragraph verbatim across sections. The Snapshot
+summarizes; the detailed sections add meaning; the Contextual Insight
+connects; The Gap is unresolved. If the same evidence belongs in two
+places, write a short tag for the Snapshot and the full explanation for
+the detailed section.
+
+CONTEXTUAL INSIGHT
+
+Emit ONE short memorable insight that connects 1-2 of the owner's
+answers in a way they may not have noticed themselves. The title must
+be one of:
+- "The tension"
+- "What I'd watch"
+- "That number means"
+- "The question I wouldn't ignore"
+(choose the fit; do not force one).
+
+The body is one or two sentences. It must be concrete to this business
+and must NOT restate a gap or opportunity verbatim. It must NOT complete
+the deeper diagnosis — that is the $47 Full Diagnostic's job.
+
+Omit the contextualInsight field entirely when no meaningful connection
+is supported. Never emit an empty title or body.
+
 FINDINGS
 
 - Emit AT MOST 2–3 gaps.
@@ -1035,6 +1185,10 @@ specific.
 
 A strength is evidence, not flattery.
 
+When a supported strength exists, return a non-empty strength title and
+explanation. Never render an empty Strength card. If no meaningful
+strength is supported, omit the card rather than fabricating one.
+
 OPPORTUNITIES
 
 Identify up to 2 meaningful opportunities backed by the intake.
@@ -1050,16 +1204,29 @@ deterministic metrics provide it.
 
 Never invent the financial result of a recommendation.
 
-FINANCIAL VISIBILITY
+FINANCIAL VISIBILITY / DECISION BASIS
 
-Miguel's bank-balance question is a core signal.
+Miguel's bank-balance question is a core diagnostic lens.
 
-When the owner says decisions are made from bank balance, somewhere in
-between, or they are unsure, explain that financial visibility is
-incomplete using the owner's actual answer.
+If the owner relies on bank balance, is somewhere in between, or is
+unsure, connect that answer to the actual business decision in front of
+them and explain what the bank balance alone cannot show. Use the
+owner's actual answer; do not infer stale books, missing KPIs, poor cash
+flow, or inaccurate financials unless the intake separately establishes
+those facts.
 
-Do not infer stale books, missing KPIs, poor cash flow, or inaccurate
-financials unless the intake separately establishes those facts.
+If the owner consistently uses current financial information, recognize
+that as a genuine strength when supported — do not manufacture a
+visibility gap where none exists.
+
+Positioning phrases Solomon may use when decision-basis evidence
+supports them:
+- "A bank balance is a snapshot, not a decision system."
+- "Cash flow is not profit."
+- "Good decisions require the right numbers connected to the right
+  decision."
+
+Use these naturally; do not repeat them mechanically.
 
 DEBT
 
@@ -1077,9 +1244,50 @@ ACTION
 Include ONE concrete action the owner can take now without purchasing
 anything.
 
-Tie it to the first-ranked signal.
+The action must be:
+- specific (one named step, not a category),
+- usable now (owner can start today without new tools or vendors),
+- tied to the #1 signal (the first-ranked finding),
+- valuable without purchasing anything,
+- not a complete remediation plan.
 
-Do not attempt to provide a complete remediation plan.
+The free action is required when a supported first-ranked signal exists;
+the renderer surfaces it as "One Move You Can Make Now."
+
+INDUSTRY CATEGORY vs INDUSTRY / VERTICAL
+
+Industry Category (broad classification: Healthcare, Manufacturing,
+Professional Services, etc.) and Industry / Vertical (owner's specific
+description: "Dental Practice," "Commercial Painting," "Catering") are
+complementary signals, not duplicates.
+
+Use the SPECIFIC industry when personalizing the report (findings,
+opener, strength, oneMove, theGap — anything the owner reads).
+
+Use the BROAD category as supporting context (benchmarks, cost-
+structure framing, peer references).
+
+Do not replace a specific industry such as "Dental Practice" with only
+the broader label "Healthcare." When only the broad category is present,
+say what remains unknown rather than inventing a specific vertical.
+
+THE GAP / NEXT CFO QUESTION
+
+The free report must identify ONE business-specific financial question
+that the Health Check cannot responsibly answer with the current data.
+
+State:
+1. What the Health Check already established.
+2. What remains unknown.
+3. Why that unknown matters to a real decision.
+4. What the $47 Full Diagnostic will investigate.
+
+Do not manufacture uncertainty to create an upsell. Do not lead with a
+generic list of cash flow, debt, profitability, receivables, or growth
+categories.
+
+The owner should leave thinking: "I know what is happening, and now I
+know the exact question I need answered."
 
 BOUNDARY
 
@@ -1160,6 +1368,29 @@ happening, how significant is it, how do the issues interact, and
 what deserves attention first? This is deeper diagnosis than the free
 Business Health Check, but it is not the Business Growth Analysis and
 not a complete implementation roadmap.
+
+TIER PROGRESSION
+
+Each tier builds on the prior tier without repeating it:
+- Free: notices the tension.
+- $47 Full Diagnostic (this tier): explains what the numbers mean
+  together — WHAT THE NUMBERS ARE TELLING US. Explain how significant
+  the issue appears, what it interacts with, what is known, what
+  remains unknown, and what decision it affects. Use deterministic
+  math when available. Do not make $47 feel like a longer version of
+  free.
+- Included 30-minute strategist review: tests and clarifies.
+- $297 Business Growth Analysis: decides what to do and in what order.
+
+SINGLE CROSS-FINDING SYNTHESIS
+
+The customer-facing cross-finding synthesis lives in exactly ONE
+section: connections[]. Populate connections[] with the "what the
+numbers are telling us together" synthesis — the interactions no
+single gap captures. The renderer presents connections[] under a
+"What the Numbers Are Telling Us · How these findings interact"
+heading. Do NOT duplicate that synthesis prose inside gaps[]; the
+discipline is enforced in SECTION ROLE below.
 
 VERSION TAGS (MANDATORY)
 
@@ -1301,6 +1532,17 @@ assessment does not establish that the practice is overpaying, so treat
 this as a cost-control review rather than confirmed leakage.") rather
 than forcing it to displace stronger opportunities grounded in revenue
 capture or recurring revenue.
+
+INDUSTRY CATEGORY vs INDUSTRY / VERTICAL
+
+Industry Category (broad: Healthcare, Manufacturing, Professional
+Services, etc.) is supporting context. Industry / Vertical (specific:
+"Dental Practice," "Commercial Painting," "Catering") is what the
+owner recognizes as their own business. Use the specific vertical in
+personalizing prose; use the broad category as context (benchmarks,
+cost structure, peer framing). Never replace "Dental Practice" with
+only "Healthcare." When only the broad category is present, say what
+remains unknown rather than inventing a vertical.
 
 LOCATION-COUNT DISCIPLINE
 
@@ -1567,6 +1809,15 @@ Return ONLY valid JSON — no markdown code fences, no text before or after — 
   "opportunities": [
     { "title": "short", "desc": "one sentence", "impact": "short tag, e.g. Unlock $250K+" }
   ],
+  "strength": { "title": "short — the owner-recognizable asset or working capability", "desc": "one or two sentences grounded in Q6/Q7-style evidence. Omit the field entirely when no meaningful strength is supported — never emit an empty title or desc." },
+  "contextualInsight": { "title": "short label — one of 'The tension' | 'What I'd watch' | 'That number means' | 'The question I wouldn't ignore' (choose the fit; do not force one)", "body": "one or two sentences that connect 1-2 specific answers in a way the owner may not have noticed themselves. Must be concrete to this business; must not restate a gap or opportunity verbatim; must not complete the deeper diagnosis — that is the $47 Full Diagnostic's job. Omit the field entirely when no meaningful connection is supported." },
+  "oneMove": { "title": "short imperative — the One Move You Can Make Now", "desc": "one or two sentences; specific, usable now, tied to the #1 signal, valuable without purchasing, not a complete remediation plan" },
+  "theGap": {
+    "known": "one sentence stating what the Health Check already established",
+    "unknown": "one sentence stating what remains unknown",
+    "whyItMatters": "one sentence stating why that unknown matters to a real decision in front of the owner",
+    "whatPaidWillInvestigate": "one sentence stating what the $47 Full Diagnostic will investigate"
+  },
   "nextStepHeadline": "short",
   "nextStepBody": "2-3 sentences leading to a strategy call",
   "opportunityFlags": ["MERCHANT_PROCESSING_OPP"],
@@ -2498,8 +2749,16 @@ function buildReportHtml(agent) {
         <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:15px;">${e(c.title || "")}</div>
         <div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:4px;line-height:1.55;">${e(c.explanation || "")}</div>
       </td></tr><tr><td style="height:8px;"></td></tr>`).join("");
+    // Heading rebranded 2026-10-29: the paid_47 cross-finding
+    // synthesis is now presented as "What the Numbers Are Telling
+    // Us," with "How these findings interact" as the Georgia-serif
+    // sub-eyebrow. One section only — the free tier's
+    // contextualInsight is a separate card and must not duplicate
+    // this synthesis prose. The underlying connections[] shape is
+    // unchanged, so paid47-v2 schema + tests still match.
     connectionsBlock = `
-<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">How These Findings Interact</h2>
+<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:4px;margin:32px 0 4px;">What the Numbers Are Telling Us</h2>
+<p style="font-family:Georgia,serif;font-size:13px;font-style:italic;color:#6b7280;margin:0 0 16px;">How these findings interact</p>
 <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">${items}</table>`;
   }
 
@@ -2512,6 +2771,92 @@ function buildReportHtml(agent) {
     questionsBlock = `
 <h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Questions to Clarify With the Strategist</h2>
 <ul style="margin:0;padding-left:20px;">${items}</ul>`;
+  }
+
+  // Contextual Insight — free-tier memorable connection the owner
+  // may not have made themselves. Rendered only when title + body
+  // are both non-empty, so an empty object never produces an empty
+  // card. Also surfaces on paid tiers when the model emits it (not
+  // forbidden; the paid tier typically relies on connections[] for
+  // the same job, but a one-liner insight is still welcome).
+  let contextualInsightBlock = "";
+  if (
+    agent.contextualInsight &&
+    agent.contextualInsight.title &&
+    String(agent.contextualInsight.title).trim() &&
+    agent.contextualInsight.body &&
+    String(agent.contextualInsight.body).trim()
+  ) {
+    const ci = agent.contextualInsight;
+    contextualInsightBlock = `
+<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Contextual Insight</h2>
+<table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">
+  <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid #92400e;border-radius:4px;">
+    <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:16px;">${e(ci.title)}</div>
+    <div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:6px;line-height:1.55;">${e(ci.body)}</div>
+  </td></tr>
+</table>`;
+  }
+
+  // Strength block — free-tier card showing the owner's working
+  // capability. Guarded by a non-empty title check so a response
+  // without a supported strength never renders an empty card (free-
+  // tier contract: never show an empty Strength card).
+  let strengthBlock = "";
+  if (agent.strength && agent.strength.title && String(agent.strength.title).trim()) {
+    const s = agent.strength;
+    const sDesc = s.desc && String(s.desc).trim() ? e(s.desc) : "";
+    strengthBlock = `
+<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">What's Already Working</h2>
+<table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">
+  <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid #92400e;border-radius:4px;">
+    <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:16px;">${e(s.title)}</div>
+    ${sDesc ? `<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:6px;line-height:1.55;">${sDesc}</div>` : ""}
+  </td></tr>
+</table>`;
+  }
+
+  // The Gap — free-tier required block when theGap is emitted.
+  // Four-part structure: known / unknown / why it matters / what the
+  // paid tier will investigate. Guard on at least one field being
+  // non-empty so a partial gap doesn't render as a blank card.
+  let theGapBlock = "";
+  if (agent.theGap && typeof agent.theGap === "object") {
+    const g = agent.theGap;
+    const lines = [];
+    if (g.known) lines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:6px;line-height:1.55;"><strong style="color:#1a1a1a;">What we know:</strong> ${e(g.known)}</div>`);
+    if (g.unknown) lines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:4px;line-height:1.55;"><strong style="color:#1a1a1a;">What's unknown:</strong> ${e(g.unknown)}</div>`);
+    if (g.whyItMatters) lines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:4px;line-height:1.55;"><strong style="color:#1a1a1a;">Why it matters:</strong> ${e(g.whyItMatters)}</div>`);
+    if (g.whatPaidWillInvestigate) lines.push(`<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:4px;line-height:1.55;"><strong style="color:#1a1a1a;">What the Full Diagnostic investigates:</strong> ${e(g.whatPaidWillInvestigate)}</div>`);
+    if (lines.length) {
+      theGapBlock = `
+<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">The Gap</h2>
+<table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">
+  <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid #c4a647;border-radius:4px;">
+    ${lines.join("")}
+  </td></tr>
+</table>`;
+    }
+  }
+
+  // One Move You Can Make Now — free-tier required block when a
+  // first-ranked signal exists. Rendered on BOTH tiers when the model
+  // emits it (the paid tier's richer decisionOrder covers the same
+  // ground, so paid responses typically omit it). Non-empty title +
+  // desc gate rendering so an empty object doesn't produce an empty
+  // card.
+  let oneMoveBlock = "";
+  if (agent.oneMove && agent.oneMove.title && String(agent.oneMove.title).trim()) {
+    const om = agent.oneMove;
+    const desc = om.desc && String(om.desc).trim() ? e(om.desc) : "";
+    oneMoveBlock = `
+<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">One Move You Can Make Now</h2>
+<table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">
+  <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid #c4a647;border-radius:4px;">
+    <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:16px;">${e(om.title)}</div>
+    ${desc ? `<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:6px;line-height:1.55;">${desc}</div>` : ""}
+  </td></tr>
+</table>`;
   }
 
   let decisionBlock = "";
@@ -2535,7 +2880,11 @@ ${snapshotBlock}
 <h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Critical Gaps Identified</h2>
 <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">${gaps}</table>
 <h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Your Highest-Impact Opportunities</h2>
+${strengthBlock}
 <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">${opps}</table>
+${contextualInsightBlock}
+${oneMoveBlock}
+${theGapBlock}
 ${connectionsBlock}
 ${decisionBlock}
 ${questionsBlock}

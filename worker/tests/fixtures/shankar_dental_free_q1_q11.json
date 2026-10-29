@@ -1,0 +1,54 @@
+{
+  "_notice": "CURRENT-CONTRACT FIXTURE — Produced from ONLY the 11 answers the current Free Business Health Check actually collects (Q1-Q11, see app/src/data/freeAssessmentQuestions.ts). Nothing in this fixture references financial numbers the free form does not ask for (debt totals, A/R aging, monthly debt service, etc.). This is the fixture the semantic-regression test suite reads to lock in the FREE REPORT RENDERING CONTRACT (strength non-empty, snapshot non-duplicative, 2 findings is valid, HIGH+HIGH is valid, oneMove renders, theGap carries a personalized unresolved CFO question, Q5-driven strength vs visibility finding, no em dashes). Rename or replace this fixture if the free intake adds Q12+.",
+  "path": "growth",
+  "badge": "GROWTH READY",
+  "headline": "You have the hygiene retention and multi-office referral loop every dental practice wants. The question is whether a 4th-location decision rests on numbers you can actually see.",
+  "opener": "Priya, your practice shows up on exactly the signals a healthy dental business runs on: patients leave with the next visit scheduled, four pediatric offices and an OB-GYN clinic send you pre-sold referrals, and you make decisions off actual numbers instead of the bank balance. That is unusual. The one open question is whether the Oak Ridge expansion is a decision you can make from a monthly P&L alone.",
+  "context": "You can see the signals. The question is which number the next decision rests on.",
+  "strength": {
+    "title": "Pre-sold referral loop with built-in retention",
+    "desc": "Four pediatric offices and an OB-GYN clinic send new patients already sold on your practice, and every patient leaves with the next visit scheduled. That combination is a durable moat other practices do not have."
+  },
+  "contextualInsight": {
+    "title": "The tension",
+    "body": "You decide from the actual numbers and your referral engine is pre-sold, so what makes Oak Ridge hard is not visibility, it is size. The question is whether the current practice can carry a buildout at your margins without stretching cash past comfortable."
+  },
+  "gaps": [
+    {
+      "title": "A 4th-location decision needs more than the bank balance",
+      "impact": "You said decisions already come from the numbers, which is a strength. The Oak Ridge expansion is a different scale of decision: equipment, staffing, lease, and a ramp period that will not show up in this month's cash position. The Health Check cannot establish whether that move is affordable from the free intake alone.",
+      "priority": "HIGH"
+    },
+    {
+      "title": "Insurance claim rework is quietly costing margin",
+      "impact": "You named roughly 4% of billings written off every quarter because of a code or missed documentation. That is revenue you already earned leaking out at the back end. The specific dollar magnitude depends on gross billings the free Health Check does not capture.",
+      "priority": "HIGH"
+    }
+  ],
+  "opportunities": [
+    {
+      "title": "Launch the CEREC same-day crown as a stated offer",
+      "desc": "You own the machine, you have a referral loop, and patients are driving to Nashville for exactly this. Making it an explicit offer closes a loop you are already positioned for.",
+      "impact": "REVENUE CAPTURE"
+    },
+    {
+      "title": "Formalize an in-house hygiene membership for uninsured patients",
+      "desc": "Hygiene retention is already a strength. A monthly membership makes that retention recurring revenue and reduces insurance-aging exposure on the same stream.",
+      "impact": "RECURRING REVENUE"
+    }
+  ],
+  "oneMove": {
+    "title": "Log one month of insurance claim write-offs by cause code",
+    "desc": "Before you make any Oak Ridge decision, isolate the top two reasons claims are getting written off. Fifteen minutes of data collection, no new tools. The pattern it reveals changes which fix comes first."
+  },
+  "theGap": {
+    "known": "The Health Check established that your referral loop, hygiene retention, numbers-based decision process, and reported write-off rate are all genuine.",
+    "unknown": "Whether the current practice can carry a 4th-location buildout at your margins without stretching cash past comfortable, and which service lines actually generate the margin that would fund it.",
+    "whyItMatters": "The Oak Ridge decision is bigger than one bank-balance snapshot can hold. The right answer depends on gross billings, true service-line margin, operating runway, and lender readiness, numbers the free intake does not capture.",
+    "whatPaidWillInvestigate": "The $47 Full Diagnostic quantifies the write-off impact in dollars, maps margin by service line, states the capital and runway Oak Ridge actually requires, and produces the lender-ready story your current banking relationship has never asked for."
+  },
+  "nextStepHeadline": "Ready to see the specific numbers that answer the Oak Ridge question?",
+  "nextStepBody": "The $47 Full Diagnostic takes the signals the Health Check surfaced and quantifies them against the decision in front of you. Thirty minutes with Miguel's team is included.",
+  "opportunityFlags": [],
+  "strategistBrief": "Priya scored growth. Strong referral loop (4 pediatric offices + OB-GYN) + numbers-based decision process + Q8-reported insurance claim rework ~4% of billings. Oak Ridge expansion is the real decision. Open probe: gross billings, service-line margin, operating runway (she said 6 weeks of cash in another context, but free intake did not capture it), and lender posture — her bank has never offered a path to raise LOC ceiling. Do not pitch BGA; strategist review on paid_47 is the right next step."
+}

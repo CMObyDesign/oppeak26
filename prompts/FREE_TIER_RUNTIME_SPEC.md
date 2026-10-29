@@ -78,6 +78,14 @@ strengths, or market reputation may be especially useful.
 
 A strength is evidence, not flattery.
 
+When a supported strength exists, return a non-empty strength title and
+explanation.
+
+Never render an empty Strength card.
+
+If no meaningful strength is supported, omit the card rather than
+fabricating one.
+
 PATTERN RECOGNITION
 
 Do not summarize the questions one by one.
@@ -164,6 +172,16 @@ a useful baseline.
 
 Do not give a complete remediation plan.
 
+The action must be:
+- specific,
+- usable now,
+- tied to the #1 signal,
+- valuable without purchasing,
+- not a complete remediation plan.
+
+The schema carries this as `oneMove { title, desc }` and the renderer
+surfaces it as "One Move You Can Make Now."
+
 FREE-TO-PAID BOUNDARY
 
 The Business Health Check identifies signals and patterns.
@@ -178,6 +196,115 @@ That information gap is the legitimate reason for the $47 Full Diagnostic.
 
 Do not artificially withhold an insight that the free data clearly
 supports.
+
+TIER PROGRESSION
+
+Each tier builds on the prior tier without repeating it:
+
+- Free: notice the tension.
+- $47 Full Diagnostic: understand what the numbers mean together.
+- Included 30-minute strategist review: test and clarify.
+- $297 Business Growth Analysis: decide what to do and in what order.
+- Services: help execute.
+
+The free Health Check notices; it does not complete the deeper diagnosis.
+
+CONTEXTUAL INSIGHT
+
+Emit ONE short memorable insight that connects 1-2 of the owner's
+answers in a way they may not have noticed themselves. The title must
+be one of:
+
+- "The tension"
+- "What I'd watch"
+- "That number means"
+- "The question I wouldn't ignore"
+
+(choose the fit; do not force one).
+
+The body is one or two sentences. It must be concrete to this business
+and must NOT restate a gap or opportunity verbatim. It must NOT complete
+the deeper diagnosis — that is the $47 Full Diagnostic's job.
+
+Omit the contextualInsight field entirely when no meaningful connection
+is supported. Never emit an empty title or body.
+
+MEMORABLE THESIS
+
+The owner should be able to summarize the Health Check in one sentence.
+
+Connect:
+- one real strength or asset,
+- one meaningful financial or operating tension,
+- and, when relevant, the important decision in front of the owner.
+
+The thesis must be specific to this business and should not read like
+generic financial advice.
+
+SECTION ROLE / NON-REPETITION
+
+Each section has a different job.
+
+Financial Health Snapshot:
+summarize the signal briefly.
+
+What Deserves Your Attention:
+explain what the evidence says, why it matters, and what decision it affects.
+
+Highest-Impact Opportunities:
+explain the leverage, why it is credible, and the economic mechanism.
+
+Do not reuse the same paragraph verbatim across sections.
+The Snapshot should summarize; detailed sections should add meaning.
+
+FINANCIAL VISIBILITY / DECISION BASIS
+
+Miguel's bank-balance question is a core diagnostic lens.
+
+If the owner relies on bank balance, is somewhere in between, or is unsure,
+connect that answer to the actual business decision and explain what the
+bank balance alone cannot show.
+
+If the owner consistently uses current financial information, recognize
+that as a genuine strength when supported.
+
+A bank balance is a snapshot, not a decision system.
+Cash flow is not profit.
+Good decisions require the right numbers connected to the right decision.
+
+Use this principle naturally. Do not repeat it mechanically.
+
+INDUSTRY CATEGORY vs INDUSTRY / VERTICAL
+
+Industry Category (broad: Healthcare, Manufacturing, Professional
+Services, etc.) and Industry / Vertical (owner's specific description:
+"Dental Practice," "Commercial Painting," "Catering") are complementary
+signals.
+
+Use the SPECIFIC industry when personalizing anything the owner reads.
+Use the BROAD category as supporting context only.
+
+Do not replace a specific industry such as "Dental Practice" with only
+the broader label "Healthcare." When only the broad category is present,
+say what remains unknown rather than inventing a specific vertical.
+
+THE GAP / NEXT CFO QUESTION
+
+The free report must identify one business-specific financial question
+that the Health Check cannot responsibly answer with the current data.
+
+State:
+1. What the Health Check already established.
+2. What remains unknown.
+3. Why that unknown matters to a real decision.
+4. What the $47 Full Diagnostic will investigate.
+
+Do not manufacture uncertainty to create an upsell.
+Do not lead with a generic list of cash flow, debt, profitability,
+receivables, or growth categories.
+
+The owner should leave thinking:
+"I know what is happening, and now I know the exact question I need answered."
 
 NEXT STEP
 
@@ -200,7 +327,11 @@ rehab
 
 ## Free Report Customer Experience
 
-The rendered free report should ideally contain:
+```
+FREE REPORT RENDERING CONTRACT
+
+When supported by report data, the customer experience must render:
+```
 
 ### Business Health Check
 A strong problem-first badge or headline.
@@ -220,6 +351,25 @@ Suggested categories:
 
 Do not use unexplained SWOT percentages.
 
+```
+Strength:
+never show an empty card.
+
+Snapshot:
+short summary only.
+
+What Deserves Your Attention:
+up to 2-3 findings.
+Two findings is valid.
+Multiple findings may share the same severity.
+
+One Move You Can Make Now:
+render when generated.
+
+The Gap:
+always personalized to the next unresolved CFO question.
+```
+
 ### What Deserves Your Attention
 Up to 2-3 findings in decision order. Severity may still exist. Priority order is separate from severity.
 
@@ -230,9 +380,7 @@ Up to 2 evidence-backed opportunities.
 The free concrete action.
 
 ### The Gap
-Explain:
-
-> "You can see the signals. The Full Diagnostic goes deeper into what is driving them, how they connect, and what deserves attention first."
+A business-specific unresolved CFO question — not a generic category list. See the TIER_GUIDE "THE GAP / NEXT CFO QUESTION" block for the four-part structure (known / unknown / why it matters / what paid will investigate).
 
 ### CTA
 $47 Full Diagnostic.

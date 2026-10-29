@@ -54,7 +54,7 @@ describe("debt subtype discipline", () => {
     // brief is allowed to contain the terms when it is explicitly *denying*
     // them ("no judgments or liens"), so we scan only the customer-visible
     // fields.
-    const good = loadFixture("liz_free_good.json");
+    const good = loadFixture("liz_free_v1_legacy.json");
     const customerFacing = [
       good.headline,
       good.opener,

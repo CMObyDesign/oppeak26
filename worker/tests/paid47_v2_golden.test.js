@@ -116,7 +116,8 @@ describe("paid47-v2 renderer parity + payload size", () => {
   it("renders the v2 sections (Financial Snapshot, Connections, Decision Order, Questions To Clarify)", () => {
     const html = buildReportHtml(golden);
     assert.match(html, /Financial Snapshot/);
-    assert.match(html, /How These Findings Interact/);
+    assert.match(html, /What the Numbers Are Telling Us/);
+    assert.match(html, /How these findings interact/);
     assert.match(html, /Order of Attention/);
     assert.match(html, /Questions to Clarify With the Strategist/);
     // Gap cards carry the enriched prose lines.
@@ -169,7 +170,7 @@ describe("paid47-v1 backward compatibility", () => {
   it("does NOT render v2-only sections for a v1 response", () => {
     const html = buildReportHtml(v1Agent);
     assert.doesNotMatch(html, /Financial Snapshot/);
-    assert.doesNotMatch(html, /How These Findings Interact/);
+    assert.doesNotMatch(html, /What the Numbers Are Telling Us/);
     assert.doesNotMatch(html, /Order of Attention/);
     assert.doesNotMatch(html, /Questions to Clarify With the Strategist/);
     // But the shared v1 sections still appear.

@@ -306,31 +306,29 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
         </div>
         {/* Codex P2 on #135: derive snapshot slots from the actual
             report instead of letting all customers see the same
-            generic fallback copy. The report has no explicit
-            "strength" field, so that slot stays on its fallback until
-            Solomon's output grows one.
-
-            2026-10-28: Previously fed `report.context` into the
-            strength slot. `report.context` is Solomon's one-sentence
-            PERSPECTIVE/framing ("one sentence of perspective" per the
-            rubric) — often naming the biggest risk, not a strength.
-            That put IRS-risk sentences under the "What's already
-            working" label. Dropped until Solomon grows a real
-            strength field; the generic fallback is accurate instead
-            of actively misleading. */}
+            generic fallback copy.
+            2026-10-29: Strength now populated from the top-level
+            `strength` field Solomon grew (free-tier rendering
+            contract — never show an empty card; the slot falls back
+            when the field is absent). Replaces the previous
+            `report.context` misuse that put risk framing in the
+            strength slot. */}
         <SwotQuadrant
           items={{
+            strength: report.strength && report.strength.title
+              ? { heading: report.strength.title, body: report.strength.desc || "" }
+              : undefined,
             needsAttention: (() => {
-              const top = report.gaps.find((g) => g.priority === "CRITICAL")
-                       || report.gaps.find((g) => g.priority === "HIGH")
+              const top = (report.gaps as any[]).find((g) => g.priority === "CRITICAL")
+                       || (report.gaps as any[]).find((g) => g.priority === "HIGH")
                        || report.gaps[0];
               return top ? { heading: top.title, body: top.impact } : undefined;
             })(),
             opportunity: report.opportunities[0]
-              ? { heading: report.opportunities[0].title, body: report.opportunities[0].desc }
+              ? { heading: report.opportunities[0].title, body: (report.opportunities[0] as any).desc }
               : undefined,
             watch: (() => {
-              const w = report.gaps.find((g) => g.priority === "MEDIUM")
+              const w = (report.gaps as any[]).find((g) => g.priority === "MEDIUM")
                      || report.gaps[1];
               return w ? { heading: w.title, body: w.impact } : undefined;
             })(),
@@ -392,12 +390,47 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
         </div>
       </div>
 
+      {/* Contextual Insight — free-tier memorable connection the owner
+          may not have made themselves. Only renders when title AND
+          body are both non-empty; empty-shell guard mirrors the
+          Worker's buildReportHtml. Historical reports without the
+          field still render through this component. */}
+      {report.contextualInsight && report.contextualInsight.title && report.contextualInsight.body && (
+        <div className="space-y-6 py-12 border-t border-white/5">
+          <h3 className="font-display text-3xl font-bold text-center">Contextual Insight</h3>
+          <Card className="p-6 glass-card border-white/5 max-w-2xl mx-auto">
+            <h4 className="font-display text-lg font-bold mb-2">{report.contextualInsight.title}</h4>
+            <p className="text-muted-foreground leading-relaxed">{report.contextualInsight.body}</p>
+          </Card>
+        </div>
+      )}
+
+      {/* One Move You Can Make Now — free-tier concrete action tied to
+          the #1 signal. Only rendered when the model emits a non-empty
+          title, so an empty object never produces an empty card. Paid
+          tiers typically omit this (decisionOrder[] covers the same
+          job). */}
+      {report.oneMove && report.oneMove.title && (
+        <div className="space-y-6 py-12 border-t border-white/5">
+          <h3 className="font-display text-3xl font-bold text-center">One Move You Can Make Now</h3>
+          <Card className="p-6 glass-card border-white/5 max-w-2xl mx-auto">
+            <h4 className="font-display text-lg font-bold mb-2">{report.oneMove.title}</h4>
+            {report.oneMove.desc && (
+              <p className="text-muted-foreground leading-relaxed">{report.oneMove.desc}</p>
+            )}
+          </Card>
+        </div>
+      )}
+
       {/* paid47-v2 Connections — cross-finding synthesis. Keyed by
           finding ids on the Worker side; here we just render the
           strategist's prose explanation. */}
       {isPaid47V2 && Array.isArray(report.connections) && report.connections.length > 0 && (
         <div className="space-y-6 py-12 border-t border-white/5">
-          <h3 className="font-display text-3xl font-bold text-center">How These Findings Interact</h3>
+          <div className="text-center">
+            <h3 className="font-display text-3xl font-bold">What the Numbers Are Telling Us</h3>
+            <p className="text-sm text-muted-foreground italic mt-1">How these findings interact</p>
+          </div>
           <div className="grid gap-4">
             {report.connections!.map((c, i) => (
               <Card key={i} className="p-6 glass-card border-white/5">

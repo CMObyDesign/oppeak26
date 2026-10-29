@@ -117,6 +117,38 @@ export interface AgentReport {
   opportunityFlags: string[];
   bookingLink: string | null;
 
+  // Free-tier "One Move You Can Make Now" — a single concrete action
+  // tied to the first-ranked signal. Optional at the type level because
+  // historical reports (and paid tiers that lean on decisionOrder[])
+  // may omit it. The renderer surfaces it only when title is non-empty
+  // so an empty object never produces an empty card.
+  oneMove?: { title: string; desc?: string };
+
+  // Free-tier Strength — the owner-recognizable asset or working
+  // capability. OPTIONAL at the type level, and when omitted, the
+  // Strength card does not render. Never show an empty card.
+  strength?: { title: string; desc?: string };
+
+  // Free-tier Contextual Insight — the memorable connection the
+  // owner may not have made themselves. Title must be one of
+  // "The tension" / "What I'd watch" / "That number means" /
+  // "The question I wouldn't ignore". Optional; the renderer skips
+  // the card when either title or body is empty (never render a
+  // blank shell). Historical reports without the field still render.
+  contextualInsight?: { title: string; body: string };
+
+  // Free-tier "The Gap" — the next unresolved CFO question, structured
+  // as what the Health Check already established / what remains unknown
+  // / why it matters to a real decision / what the $47 Full Diagnostic
+  // will investigate. Personalized to this business; not a generic
+  // category list.
+  theGap?: {
+    known: string;
+    unknown: string;
+    whyItMatters: string;
+    whatPaidWillInvestigate: string;
+  };
+
   // --- paid47-v2 additions (all optional; absent on free + v1) -----------
   // Version tags present only on reports generated under the enriched
   // contract. Renderers check `reportSchemaVersion === "paid47-v2"`

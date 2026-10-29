@@ -194,22 +194,30 @@ function normFinancialDecisionBasis(raw) {
 // judgments_or_liens where it is unambiguous) and let the paid-tier
 // debt detail disambiguate the specific category.
 const Q4_SLUG_CLASSIFICATION = Object.freeze({
-  // New six-state slugs.
-  none:             { subtypes: [],                              judgments_or_liens: false     },
-  managed_debt:     { subtypes: ["managed_debt"],                judgments_or_liens: false     },
-  tax_balance:      { subtypes: ["tax_debt"],                    judgments_or_liens: false     },
-  unfiled_taxes:    { subtypes: ["unfiled_taxes"],               judgments_or_liens: false     },
-  // The slug encompasses tax lien / civil judgment / other legal
-  // action — commit only to the compound judgments_or_liens signal,
-  // leave the specific subtype empty so Solomon doesn't invent a tax
-  // balance or court judgment the customer never stated.
-  lien_or_judgment: { subtypes: [],                              judgments_or_liens: true      },
-  not_sure:         { subtypes: [],                              judgments_or_liens: "unknown" },
+  // Eight-state slugs (2026-10-29 approved).
+  none:                    { subtypes: [],                                       judgments_or_liens: false     },
+  managed_debt:            { subtypes: ["managed_debt"],                         judgments_or_liens: false     },
+  // Owner reports debt is stretched or being reworked — this is
+  // explicit stress on the debt itself, not a lien/judgment. Carry
+  // both the managed_debt + stretched_debt subtypes so Solomon can
+  // say "debt is under pressure" without conflating with lien.
+  managed_debt_stretched:  { subtypes: ["managed_debt", "stretched_debt"],       judgments_or_liens: false     },
+  tax_balance:             { subtypes: ["tax_debt"],                             judgments_or_liens: false     },
+  unfiled_taxes:           { subtypes: ["unfiled_taxes"],                        judgments_or_liens: false     },
+  // Lien-only or judgment-only; carries no explicit business-debt
+  // subtype. Solomon must NOT infer business debt from a lien slug.
+  lien_or_judgment:        { subtypes: [],                                       judgments_or_liens: true      },
+  // Explicit "BOTH debt and lien/judgment" — carries managed_debt
+  // AND judgments_or_liens. Not managed_debt_stretched; the owner
+  // did not say the debt is stretched, only that both situations
+  // are present. Solomon must assess them SEPARATELY.
+  debt_and_lien:           { subtypes: ["managed_debt"],                         judgments_or_liens: true      },
+  not_sure:                { subtypes: [],                                       judgments_or_liens: "unknown" },
   // Legacy three-value slugs — bare values stored on historical
   // submissions. Classified conservatively.
-  no:               { subtypes: [],                              judgments_or_liens: false     },
-  yes:              { subtypes: [],                              judgments_or_liens: "unknown" },
-  "not-sure":       { subtypes: [],                              judgments_or_liens: "unknown" },
+  no:                      { subtypes: [],                                       judgments_or_liens: false     },
+  yes:                     { subtypes: [],                                       judgments_or_liens: "unknown" },
+  "not-sure":              { subtypes: [],                                       judgments_or_liens: "unknown" },
 });
 
 // Full option-label text for the six-state Q4 set. HL's SINGLE_OPTIONS
@@ -220,6 +228,26 @@ const Q4_SLUG_CLASSIFICATION = Object.freeze({
 // matcher below (which would, for example, see "legal actions" in the
 // "none" label and wrongly add a "judgment" subtype).
 const Q4_LABEL_CLASSIFICATION = Object.freeze({
+  // 2026-10-29 eight-state label set — matches
+  // app/src/data/freeAssessmentQuestions.ts Q4 options.
+  "no active business debt, tax liens, or judgments":
+    Q4_SLUG_CLASSIFICATION.none,
+  "business debt only — current and manageable":
+    Q4_SLUG_CLASSIFICATION.managed_debt,
+  "business debt only — stretched or actively being reworked":
+    Q4_SLUG_CLASSIFICATION.managed_debt_stretched,
+  "active tax lien or judgment":
+    Q4_SLUG_CLASSIFICATION.lien_or_judgment,
+  "both business debt and an active tax lien or judgment":
+    Q4_SLUG_CLASSIFICATION.debt_and_lien,
+  "one or more business tax returns are currently unfiled":
+    Q4_SLUG_CLASSIFICATION.unfiled_taxes,
+  "outstanding tax balance or payment plan, but no active lien or judgment":
+    Q4_SLUG_CLASSIFICATION.tax_balance,
+  "not sure": Q4_SLUG_CLASSIFICATION.not_sure,
+  // Legacy six-state label set (pre-2026-10-29). Still accepted so
+  // historical D1 rows + any in-flight HL submissions mapped to the
+  // old labels normalize correctly.
   "no business debt, taxes current, no legal actions against the business":
     Q4_SLUG_CLASSIFICATION.none,
   "business loans or credit i'm actively managing in good standing (current, not stretched)":
@@ -230,7 +258,6 @@ const Q4_LABEL_CLASSIFICATION = Object.freeze({
     Q4_SLUG_CLASSIFICATION.unfiled_taxes,
   "active tax lien, judgment, or legal action against the business":
     Q4_SLUG_CLASSIFICATION.lien_or_judgment,
-  "not sure": Q4_SLUG_CLASSIFICATION.not_sure,
 });
 
 function normDebtSummary(raw) {
