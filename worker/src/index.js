@@ -4226,9 +4226,10 @@ async function handleReport(contactId, env, requestUrl) {
           // minutes and lost Priya Shankar's finished report (2026-10-28:
           // the server had the report by ~5 min, the browser had stopped
           // observing at ~3.5 min, manual refresh picked it up in 10s).
-          // The new behavior: never give up on its own — soften the copy,
-          // keep polling at the same cadence, show the report when it
-          // actually lands.
+          // The new behavior: soften the copy at 3 min while polling
+          // continues, then only at the hard cap (set to cover the
+          // queue's full retry lifecycle) switch to an honest "we
+          // stopped checking" state the customer can act on.
           var softenedCopy = false;
           function showSoftWaitCopy() {
             if (softenedCopy) return;
@@ -4245,36 +4246,63 @@ async function handleReport(contactId, env, requestUrl) {
                 'and we will dig in.</p>';
           }
 
+          // Honest end-of-polling state. Only shown at the hard cap, when
+          // the page has genuinely stopped checking. Replaces the lying
+          // "the page will update as soon as it is ready" copy with a
+          // concrete recovery action (refresh / email support).
+          function showStoppedCheckingCopy() {
+            var wrap = document.getElementById('analyzing');
+            if (!wrap) return;
+            wrap.innerHTML =
+              '<h3 style="font-family:Georgia,serif;font-size:22px;color:#1a1a1a;margin:0 0 10px;">We have stopped checking this page automatically.</h3>' +
+              '<p style="color:#6b7280;font-size:15px;max-width:460px;margin:0 auto 6px;">' +
+                'Your report may still be in progress. ' +
+                '<a href="javascript:window.location.reload()" style="color:#92400e;text-decoration:underline;">Refresh this page</a> ' +
+                'to check again, or email ' +
+                '<a href="mailto:support@cfobydesign.com" style="color:#92400e;">support@cfobydesign.com</a> ' +
+                'and we will dig in. If your report finished, it is also saved to your account and emailed when ready.</p>';
+          }
+
           var elapsed = 0;
           // Soft-wait threshold: switch the copy to "still working" but
           // keep polling. Was the terminal timeout before PR fixing
           // Priya's stuck-page bug.
           var SOFT_WAIT_SECONDS = 180; // 3 min — soften copy, do not stop
-          // Hard cap on polling in a single page view. Streaming Claude
-          // calls complete in ~2-5 min on paid_47; a page that has been
-          // open for 10 minutes without the report appearing is almost
-          // certainly a terminal failure the operator should see via
-          // swot|deliveryfailed, not something the browser can recover.
-          var MAX_SECONDS = 600; // 10 min
+          // Hard cap on polling in a single page view. The queue
+          // consumer's wrangler.toml budget is 15 minutes per invocation
+          // and max_retries=2 (3 attempts total). Worst-case lifecycle
+          // including Queues backoff between retries can approach
+          // 25-30 minutes before swot|deliveryfailed is applied. We
+          // cover the FULL lifecycle so a report that lands on retry 2
+          // or 3 still auto-swaps for the customer (Codex finding on PR
+          // #162). The /status GET is lightweight; 30 minutes of 4-sec
+          // polling is ~450 cheap requests, negligible load.
+          var MAX_SECONDS = 1800; // 30 min — covers full queue retry lifecycle
           var POLL_INTERVAL_MS = 4000;
           var pollTimer;
+
+          function tick() {
+            elapsed += POLL_INTERVAL_MS / 1000;
+            if (elapsed >= SOFT_WAIT_SECONDS) showSoftWaitCopy();
+            if (elapsed >= MAX_SECONDS) {
+              // Hard cap reached — stop polling AND tell the customer we
+              // stopped so the UI doesn't lie about watching.
+              showStoppedCheckingCopy();
+              return false;
+            }
+            return true;
+          }
 
           function poll() {
             fetch(pollUrl, { cache: 'no-store', headers: { 'Accept': 'application/json' } })
               .then(function (r) { return r.ok ? r.json() : { ready: false }; })
               .then(function (data) {
                 if (data && data.ready) { showReady(); return; }
-                elapsed += POLL_INTERVAL_MS / 1000;
-                if (elapsed >= SOFT_WAIT_SECONDS) showSoftWaitCopy();
-                if (elapsed >= MAX_SECONDS) return;  // give up polling, leave soft-wait copy
-                pollTimer = setTimeout(poll, POLL_INTERVAL_MS);
+                if (tick()) pollTimer = setTimeout(poll, POLL_INTERVAL_MS);
               })
               .catch(function () {
                 // Network hiccup — keep trying under the hard cap.
-                elapsed += POLL_INTERVAL_MS / 1000;
-                if (elapsed >= SOFT_WAIT_SECONDS) showSoftWaitCopy();
-                if (elapsed >= MAX_SECONDS) return;
-                pollTimer = setTimeout(poll, POLL_INTERVAL_MS);
+                if (tick()) pollTimer = setTimeout(poll, POLL_INTERVAL_MS);
               });
           }
           // Kick off — 2s delay to let the initial UI settle before the first poll.
