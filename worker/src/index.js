@@ -1101,6 +1101,17 @@ Identify the strongest patterns the intake actually supports and explain
 them with Miguel Hernandez's financial point of view: direct, specific,
 plainspoken, and focused on the next decision.
 
+TIER PROGRESSION
+
+Each tier builds on the prior tier without repeating it:
+- Free: notice the tension.
+- $47 Full Diagnostic: understand what the numbers mean together.
+- Included 30-minute strategist review: test and clarify.
+- $297 Business Growth Analysis: decide what to do and in what order.
+- Services: help execute.
+
+The free Health Check must notice, not complete the deeper diagnosis.
+
 MEMORABLE THESIS
 
 The owner should be able to summarize the Health Check in one sentence.
@@ -1117,11 +1128,36 @@ Each section of the rendered free report has a different job:
   matters, and what decision it affects.
 - Highest-Impact Opportunities: explain the leverage, why it is
   credible, and the economic mechanism.
+- Contextual Insight: a memorable connection the owner may not have
+  made themselves — one of "The tension," "What I'd watch," "That
+  number means," or "The question I wouldn't ignore." Connects 1-2
+  answers in a way distinct from the Attention/Opportunity cards.
+- The Gap: the one personalized unresolved CFO question that becomes
+  the bridge to the $47 Full Diagnostic.
 
 Do not reuse the same paragraph verbatim across sections. The Snapshot
-summarizes; the detailed sections add meaning. If the same evidence
-belongs in two places, write a short tag for the Snapshot and the full
-explanation for the detailed section.
+summarizes; the detailed sections add meaning; the Contextual Insight
+connects; The Gap is unresolved. If the same evidence belongs in two
+places, write a short tag for the Snapshot and the full explanation for
+the detailed section.
+
+CONTEXTUAL INSIGHT
+
+Emit ONE short memorable insight that connects 1-2 of the owner's
+answers in a way they may not have noticed themselves. The title must
+be one of:
+- "The tension"
+- "What I'd watch"
+- "That number means"
+- "The question I wouldn't ignore"
+(choose the fit; do not force one).
+
+The body is one or two sentences. It must be concrete to this business
+and must NOT restate a gap or opportunity verbatim. It must NOT complete
+the deeper diagnosis — that is the $47 Full Diagnostic's job.
+
+Omit the contextualInsight field entirely when no meaningful connection
+is supported. Never emit an empty title or body.
 
 FINDINGS
 
@@ -1332,6 +1368,29 @@ happening, how significant is it, how do the issues interact, and
 what deserves attention first? This is deeper diagnosis than the free
 Business Health Check, but it is not the Business Growth Analysis and
 not a complete implementation roadmap.
+
+TIER PROGRESSION
+
+Each tier builds on the prior tier without repeating it:
+- Free: notices the tension.
+- $47 Full Diagnostic (this tier): explains what the numbers mean
+  together — WHAT THE NUMBERS ARE TELLING US. Explain how significant
+  the issue appears, what it interacts with, what is known, what
+  remains unknown, and what decision it affects. Use deterministic
+  math when available. Do not make $47 feel like a longer version of
+  free.
+- Included 30-minute strategist review: tests and clarifies.
+- $297 Business Growth Analysis: decides what to do and in what order.
+
+SINGLE CROSS-FINDING SYNTHESIS
+
+The customer-facing cross-finding synthesis lives in exactly ONE
+section: connections[]. Populate connections[] with the "what the
+numbers are telling us together" synthesis — the interactions no
+single gap captures. The renderer presents connections[] under a
+"What the Numbers Are Telling Us · How these findings interact"
+heading. Do NOT duplicate that synthesis prose inside gaps[]; the
+discipline is enforced in SECTION ROLE below.
 
 VERSION TAGS (MANDATORY)
 
@@ -1751,6 +1810,7 @@ Return ONLY valid JSON — no markdown code fences, no text before or after — 
     { "title": "short", "desc": "one sentence", "impact": "short tag, e.g. Unlock $250K+" }
   ],
   "strength": { "title": "short — the owner-recognizable asset or working capability", "desc": "one or two sentences grounded in Q6/Q7-style evidence. Omit the field entirely when no meaningful strength is supported — never emit an empty title or desc." },
+  "contextualInsight": { "title": "short label — one of 'The tension' | 'What I'd watch' | 'That number means' | 'The question I wouldn't ignore' (choose the fit; do not force one)", "body": "one or two sentences that connect 1-2 specific answers in a way the owner may not have noticed themselves. Must be concrete to this business; must not restate a gap or opportunity verbatim; must not complete the deeper diagnosis — that is the $47 Full Diagnostic's job. Omit the field entirely when no meaningful connection is supported." },
   "oneMove": { "title": "short imperative — the One Move You Can Make Now", "desc": "one or two sentences; specific, usable now, tied to the #1 signal, valuable without purchasing, not a complete remediation plan" },
   "theGap": {
     "known": "one sentence stating what the Health Check already established",
@@ -2689,8 +2749,16 @@ function buildReportHtml(agent) {
         <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:15px;">${e(c.title || "")}</div>
         <div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:4px;line-height:1.55;">${e(c.explanation || "")}</div>
       </td></tr><tr><td style="height:8px;"></td></tr>`).join("");
+    // Heading rebranded 2026-10-29: the paid_47 cross-finding
+    // synthesis is now presented as "What the Numbers Are Telling
+    // Us," with "How these findings interact" as the Georgia-serif
+    // sub-eyebrow. One section only — the free tier's
+    // contextualInsight is a separate card and must not duplicate
+    // this synthesis prose. The underlying connections[] shape is
+    // unchanged, so paid47-v2 schema + tests still match.
     connectionsBlock = `
-<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">How These Findings Interact</h2>
+<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:4px;margin:32px 0 4px;">What the Numbers Are Telling Us</h2>
+<p style="font-family:Georgia,serif;font-size:13px;font-style:italic;color:#6b7280;margin:0 0 16px;">How these findings interact</p>
 <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">${items}</table>`;
   }
 
@@ -2703,6 +2771,31 @@ function buildReportHtml(agent) {
     questionsBlock = `
 <h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Questions to Clarify With the Strategist</h2>
 <ul style="margin:0;padding-left:20px;">${items}</ul>`;
+  }
+
+  // Contextual Insight — free-tier memorable connection the owner
+  // may not have made themselves. Rendered only when title + body
+  // are both non-empty, so an empty object never produces an empty
+  // card. Also surfaces on paid tiers when the model emits it (not
+  // forbidden; the paid tier typically relies on connections[] for
+  // the same job, but a one-liner insight is still welcome).
+  let contextualInsightBlock = "";
+  if (
+    agent.contextualInsight &&
+    agent.contextualInsight.title &&
+    String(agent.contextualInsight.title).trim() &&
+    agent.contextualInsight.body &&
+    String(agent.contextualInsight.body).trim()
+  ) {
+    const ci = agent.contextualInsight;
+    contextualInsightBlock = `
+<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Contextual Insight</h2>
+<table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">
+  <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid #92400e;border-radius:4px;">
+    <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:16px;">${e(ci.title)}</div>
+    <div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:6px;line-height:1.55;">${e(ci.body)}</div>
+  </td></tr>
+</table>`;
   }
 
   // Strength block — free-tier card showing the owner's working
@@ -2789,6 +2882,7 @@ ${snapshotBlock}
 <h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Your Highest-Impact Opportunities</h2>
 ${strengthBlock}
 <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">${opps}</table>
+${contextualInsightBlock}
 ${oneMoveBlock}
 ${theGapBlock}
 ${connectionsBlock}

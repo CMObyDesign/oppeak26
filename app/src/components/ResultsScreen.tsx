@@ -390,6 +390,21 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
         </div>
       </div>
 
+      {/* Contextual Insight — free-tier memorable connection the owner
+          may not have made themselves. Only renders when title AND
+          body are both non-empty; empty-shell guard mirrors the
+          Worker's buildReportHtml. Historical reports without the
+          field still render through this component. */}
+      {report.contextualInsight && report.contextualInsight.title && report.contextualInsight.body && (
+        <div className="space-y-6 py-12 border-t border-white/5">
+          <h3 className="font-display text-3xl font-bold text-center">Contextual Insight</h3>
+          <Card className="p-6 glass-card border-white/5 max-w-2xl mx-auto">
+            <h4 className="font-display text-lg font-bold mb-2">{report.contextualInsight.title}</h4>
+            <p className="text-muted-foreground leading-relaxed">{report.contextualInsight.body}</p>
+          </Card>
+        </div>
+      )}
+
       {/* One Move You Can Make Now — free-tier concrete action tied to
           the #1 signal. Only rendered when the model emits a non-empty
           title, so an empty object never produces an empty card. Paid
@@ -412,7 +427,10 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
           strategist's prose explanation. */}
       {isPaid47V2 && Array.isArray(report.connections) && report.connections.length > 0 && (
         <div className="space-y-6 py-12 border-t border-white/5">
-          <h3 className="font-display text-3xl font-bold text-center">How These Findings Interact</h3>
+          <div className="text-center">
+            <h3 className="font-display text-3xl font-bold">What the Numbers Are Telling Us</h3>
+            <p className="text-sm text-muted-foreground italic mt-1">How these findings interact</p>
+          </div>
           <div className="grid gap-4">
             {report.connections!.map((c, i) => (
               <Card key={i} className="p-6 glass-card border-white/5">

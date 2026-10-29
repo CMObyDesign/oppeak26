@@ -129,6 +129,14 @@ export interface AgentReport {
   // Strength card does not render. Never show an empty card.
   strength?: { title: string; desc?: string };
 
+  // Free-tier Contextual Insight — the memorable connection the
+  // owner may not have made themselves. Title must be one of
+  // "The tension" / "What I'd watch" / "That number means" /
+  // "The question I wouldn't ignore". Optional; the renderer skips
+  // the card when either title or body is empty (never render a
+  // blank shell). Historical reports without the field still render.
+  contextualInsight?: { title: string; body: string };
+
   // Free-tier "The Gap" — the next unresolved CFO question, structured
   // as what the Health Check already established / what remains unknown
   // / why it matters to a real decision / what the $47 Full Diagnostic

@@ -197,6 +197,38 @@ That information gap is the legitimate reason for the $47 Full Diagnostic.
 Do not artificially withhold an insight that the free data clearly
 supports.
 
+TIER PROGRESSION
+
+Each tier builds on the prior tier without repeating it:
+
+- Free: notice the tension.
+- $47 Full Diagnostic: understand what the numbers mean together.
+- Included 30-minute strategist review: test and clarify.
+- $297 Business Growth Analysis: decide what to do and in what order.
+- Services: help execute.
+
+The free Health Check notices; it does not complete the deeper diagnosis.
+
+CONTEXTUAL INSIGHT
+
+Emit ONE short memorable insight that connects 1-2 of the owner's
+answers in a way they may not have noticed themselves. The title must
+be one of:
+
+- "The tension"
+- "What I'd watch"
+- "That number means"
+- "The question I wouldn't ignore"
+
+(choose the fit; do not force one).
+
+The body is one or two sentences. It must be concrete to this business
+and must NOT restate a gap or opportunity verbatim. It must NOT complete
+the deeper diagnosis — that is the $47 Full Diagnostic's job.
+
+Omit the contextualInsight field entirely when no meaningful connection
+is supported. Never emit an empty title or body.
+
 MEMORABLE THESIS
 
 The owner should be able to summarize the Health Check in one sentence.

@@ -38,6 +38,7 @@ function customerFacingText(agent) {
     agent.nextStepHeadline, agent.nextStepBody,
   ];
   if (agent.strength) parts.push(agent.strength.title, agent.strength.desc);
+  if (agent.contextualInsight) parts.push(agent.contextualInsight.title, agent.contextualInsight.body);
   if (agent.oneMove) parts.push(agent.oneMove.title, agent.oneMove.desc);
   if (agent.theGap) {
     parts.push(agent.theGap.known, agent.theGap.unknown, agent.theGap.whyItMatters, agent.theGap.whatPaidWillInvestigate);
@@ -179,6 +180,71 @@ describe("FREE REPORT RENDERING CONTRACT — fixture: shankar_dental_free_q1_q11
     // surfaces a visibility finding without choking.
     const html = buildReportHtml(mutated);
     assert.ok(html.includes("Financial decisions still partly ride on the bank balance"));
+  });
+
+  it("contextualInsight renders when present and uses an approved title", () => {
+    assert.ok(fixture.contextualInsight, "fixture must carry a contextualInsight when a meaningful connection is supported");
+    assert.ok(fixture.contextualInsight.title && String(fixture.contextualInsight.title).trim(), "contextualInsight.title must be non-empty");
+    assert.ok(fixture.contextualInsight.body && String(fixture.contextualInsight.body).trim(), "contextualInsight.body must be non-empty");
+    const APPROVED_TITLES = new Set([
+      "The tension",
+      "What I'd watch",
+      "That number means",
+      "The question I wouldn't ignore",
+    ]);
+    assert.ok(
+      APPROVED_TITLES.has(fixture.contextualInsight.title),
+      `contextualInsight.title "${fixture.contextualInsight.title}" is not one of the four approved titles`,
+    );
+    const html = buildReportHtml(fixture);
+    assert.match(html, /Contextual Insight/);
+    assert.ok(html.includes(fixture.contextualInsight.title), "contextualInsight.title must appear in the rendered HTML");
+    assert.ok(html.includes(fixture.contextualInsight.body), "contextualInsight.body must appear in the rendered HTML");
+  });
+
+  it("no blank contextualInsight shell: missing title OR body suppresses the card entirely", () => {
+    // Missing title
+    const noTitle = structuredClone(fixture);
+    noTitle.contextualInsight = { title: "", body: "something" };
+    assert.doesNotMatch(buildReportHtml(noTitle), /Contextual Insight/,
+      "Contextual Insight heading must not render when title is empty");
+    // Missing body
+    const noBody = structuredClone(fixture);
+    noBody.contextualInsight = { title: "The tension", body: "" };
+    assert.doesNotMatch(buildReportHtml(noBody), /Contextual Insight/,
+      "Contextual Insight heading must not render when body is empty");
+    // Entire field absent
+    const noField = structuredClone(fixture);
+    delete noField.contextualInsight;
+    assert.doesNotMatch(buildReportHtml(noField), /Contextual Insight/,
+      "Contextual Insight heading must not render when the field is absent");
+  });
+
+  it("contextualInsight is not verbatim-equal to a gap or opportunity", () => {
+    const norm = (s) => String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
+    const ciBody = norm(fixture.contextualInsight?.body);
+    const ciTitle = norm(fixture.contextualInsight?.title);
+    for (const g of fixture.gaps || []) {
+      assert.notEqual(ciBody, norm(g.impact), `contextualInsight.body matches gap.impact "${g.title}" verbatim`);
+      assert.notEqual(ciTitle, norm(g.title), `contextualInsight.title matches gap.title "${g.title}" verbatim`);
+    }
+    for (const o of fixture.opportunities || []) {
+      assert.notEqual(ciBody, norm(o.desc), `contextualInsight.body matches opportunity.desc "${o.title}" verbatim`);
+      assert.notEqual(ciTitle, norm(o.title), `contextualInsight.title matches opportunity.title "${o.title}" verbatim`);
+    }
+  });
+
+  it("historical free report WITHOUT contextualInsight still renders", () => {
+    const legacy = structuredClone(fixture);
+    delete legacy.contextualInsight;
+    const html = buildReportHtml(legacy);
+    // Core sections still present
+    assert.match(html, /Critical Gaps Identified/);
+    assert.match(html, /Your Highest-Impact Opportunities/);
+    assert.match(html, /One Move You Can Make Now/);
+    assert.match(html, /The Gap/);
+    // And no "Contextual Insight" shell leaked through
+    assert.doesNotMatch(html, /Contextual Insight/);
   });
 
   it("customer-facing output contains no em dashes", () => {
