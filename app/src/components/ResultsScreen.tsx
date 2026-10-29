@@ -36,8 +36,22 @@ interface ResultsScreenProps {
 // Snapshot excerpt helper. Produces a short summary from the same
 // body field the detailed card uses, so the Snapshot quadrant does
 // not read verbatim-equal to its matching Gap / Opportunity card.
-// First sentence only, trimmed to ~120 chars; adds a trailing
-// ellipsis when the detailed body goes beyond that.
+//
+// Rules (ordered — the first one that applies wins):
+//
+//   1. Body is empty or whitespace → return "" (no card body; card
+//      still renders its title).
+//   2. Body is multi-sentence AND the first sentence is at or below
+//      SNAPSHOT_MAX_CHARS → return first sentence + "…" (the
+//      ellipsis signals "there is more in the detailed card").
+//   3. Body is longer than SNAPSHOT_MAX_CHARS (single long sentence
+//      or multi-sentence with a long first sentence) → truncate the
+//      first sentence on a word boundary and append "…".
+//   4. Body is a SINGLE short sentence at or below the limit → return
+//      "" so the Snapshot card renders TITLE-ONLY. If we returned
+//      the body unchanged here it would read verbatim-identical to
+//      the detailed card, which is the exact bug the Snapshot role
+//      split exists to prevent (Codex P2 on #166).
 const SNAPSHOT_MAX_CHARS = 120;
 function snapshotExcerpt(body: string | null | undefined): string {
   if (!body) return "";
@@ -46,10 +60,18 @@ function snapshotExcerpt(body: string | null | undefined): string {
   // First sentence boundary — . ! ? followed by space + capital, or end.
   const sentenceMatch = s.match(/^(.+?[.!?])(?:\s+[A-Z]|$)/);
   const first = sentenceMatch ? sentenceMatch[1] : s;
+  const hasMore = first.length < s.length; // multi-sentence body
   if (first.length <= SNAPSHOT_MAX_CHARS) {
-    return first === s ? first : (first + (s.length > first.length ? "" : ""));
+    if (hasMore) {
+      // Multi-sentence body: Snapshot shows first sentence + ellipsis;
+      // detailed card still carries all sentences. Snapshot differs.
+      return first + "…";
+    }
+    // Single short sentence: no shorter form of the same prose exists
+    // without ellipsis-faking content. Snapshot renders title-only.
+    return "";
   }
-  // Truncate on word boundary before SNAPSHOT_MAX_CHARS.
+  // Long first sentence: truncate on a word boundary and ellipsis.
   const slice = first.slice(0, SNAPSHOT_MAX_CHARS);
   const lastSpace = slice.lastIndexOf(" ");
   const cut = lastSpace > 60 ? slice.slice(0, lastSpace) : slice;

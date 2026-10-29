@@ -82,7 +82,18 @@ export const SwotQuadrant = ({ items }: Props) => {
         {SLOTS.map((slot) => {
           const slotItem = items?.[slot.key];
           const heading  = (slotItem && slotItem.heading) || slot.heading;
-          const body     = (slotItem && slotItem.body)    || slot.fallback;
+          // 2026-10-29: distinguish "snapshotExcerpt returned ''
+          // on a short single-sentence body — render title-only"
+          // from "no slotItem at all — use the generic fallback."
+          // Previously `(slotItem && slotItem.body) || slot.fallback`
+          // treated the two cases identically, so a deliberate ''
+          // from snapshotExcerpt would fall back to the generic
+          // placeholder copy. Now the fallback only fires when the
+          // body field is undefined (no slotItem supplied).
+          const body =
+            slotItem && slotItem.body !== undefined
+              ? slotItem.body
+              : slot.fallback;
           return (
             <Card
               key={slot.key}
@@ -96,9 +107,11 @@ export const SwotQuadrant = ({ items }: Props) => {
               <p className="font-display text-lg md:text-xl font-bold leading-tight">
                 {heading}
               </p>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {body}
-              </p>
+              {body && (
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {body}
+                </p>
+              )}
             </Card>
           );
         })}
