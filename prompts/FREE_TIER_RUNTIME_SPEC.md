@@ -78,6 +78,14 @@ strengths, or market reputation may be especially useful.
 
 A strength is evidence, not flattery.
 
+When a supported strength exists, return a non-empty strength title and
+explanation.
+
+Never render an empty Strength card.
+
+If no meaningful strength is supported, omit the card rather than
+fabricating one.
+
 PATTERN RECOGNITION
 
 Do not summarize the questions one by one.
@@ -164,6 +172,16 @@ a useful baseline.
 
 Do not give a complete remediation plan.
 
+The action must be:
+- specific,
+- usable now,
+- tied to the #1 signal,
+- valuable without purchasing,
+- not a complete remediation plan.
+
+The schema carries this as `oneMove { title, desc }` and the renderer
+surfaces it as "One Move You Can Make Now."
+
 FREE-TO-PAID BOUNDARY
 
 The Business Health Check identifies signals and patterns.
@@ -178,6 +196,69 @@ That information gap is the legitimate reason for the $47 Full Diagnostic.
 
 Do not artificially withhold an insight that the free data clearly
 supports.
+
+MEMORABLE THESIS
+
+The owner should be able to summarize the Health Check in one sentence.
+
+Connect:
+- one real strength or asset,
+- one meaningful financial or operating tension,
+- and, when relevant, the important decision in front of the owner.
+
+The thesis must be specific to this business and should not read like
+generic financial advice.
+
+SECTION ROLE / NON-REPETITION
+
+Each section has a different job.
+
+Financial Health Snapshot:
+summarize the signal briefly.
+
+What Deserves Your Attention:
+explain what the evidence says, why it matters, and what decision it affects.
+
+Highest-Impact Opportunities:
+explain the leverage, why it is credible, and the economic mechanism.
+
+Do not reuse the same paragraph verbatim across sections.
+The Snapshot should summarize; detailed sections should add meaning.
+
+FINANCIAL VISIBILITY / DECISION BASIS
+
+Miguel's bank-balance question is a core diagnostic lens.
+
+If the owner relies on bank balance, is somewhere in between, or is unsure,
+connect that answer to the actual business decision and explain what the
+bank balance alone cannot show.
+
+If the owner consistently uses current financial information, recognize
+that as a genuine strength when supported.
+
+A bank balance is a snapshot, not a decision system.
+Cash flow is not profit.
+Good decisions require the right numbers connected to the right decision.
+
+Use this principle naturally. Do not repeat it mechanically.
+
+THE GAP / NEXT CFO QUESTION
+
+The free report must identify one business-specific financial question
+that the Health Check cannot responsibly answer with the current data.
+
+State:
+1. What the Health Check already established.
+2. What remains unknown.
+3. Why that unknown matters to a real decision.
+4. What the $47 Full Diagnostic will investigate.
+
+Do not manufacture uncertainty to create an upsell.
+Do not lead with a generic list of cash flow, debt, profitability,
+receivables, or growth categories.
+
+The owner should leave thinking:
+"I know what is happening, and now I know the exact question I need answered."
 
 NEXT STEP
 

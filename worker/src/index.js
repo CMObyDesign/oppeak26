@@ -1009,6 +1009,28 @@ Identify the strongest patterns the intake actually supports and explain
 them with Miguel Hernandez's financial point of view: direct, specific,
 plainspoken, and focused on the next decision.
 
+MEMORABLE THESIS
+
+The owner should be able to summarize the Health Check in one sentence.
+Connect one real strength or asset, one meaningful financial or operating
+tension, and — when relevant — the important decision in front of the
+owner. The thesis must be specific to this business and must not read
+like generic financial advice.
+
+SECTION ROLE / NON-REPETITION
+
+Each section of the rendered free report has a different job:
+- Financial Health Snapshot: summarize the signal briefly.
+- What Deserves Your Attention: explain what the evidence says, why it
+  matters, and what decision it affects.
+- Highest-Impact Opportunities: explain the leverage, why it is
+  credible, and the economic mechanism.
+
+Do not reuse the same paragraph verbatim across sections. The Snapshot
+summarizes; the detailed sections add meaning. If the same evidence
+belongs in two places, write a short tag for the Snapshot and the full
+explanation for the detailed section.
+
 FINDINGS
 
 - Emit AT MOST 2–3 gaps.
@@ -1035,6 +1057,10 @@ specific.
 
 A strength is evidence, not flattery.
 
+When a supported strength exists, return a non-empty strength title and
+explanation. Never render an empty Strength card. If no meaningful
+strength is supported, omit the card rather than fabricating one.
+
 OPPORTUNITIES
 
 Identify up to 2 meaningful opportunities backed by the intake.
@@ -1050,16 +1076,29 @@ deterministic metrics provide it.
 
 Never invent the financial result of a recommendation.
 
-FINANCIAL VISIBILITY
+FINANCIAL VISIBILITY / DECISION BASIS
 
-Miguel's bank-balance question is a core signal.
+Miguel's bank-balance question is a core diagnostic lens.
 
-When the owner says decisions are made from bank balance, somewhere in
-between, or they are unsure, explain that financial visibility is
-incomplete using the owner's actual answer.
+If the owner relies on bank balance, is somewhere in between, or is
+unsure, connect that answer to the actual business decision in front of
+them and explain what the bank balance alone cannot show. Use the
+owner's actual answer; do not infer stale books, missing KPIs, poor cash
+flow, or inaccurate financials unless the intake separately establishes
+those facts.
 
-Do not infer stale books, missing KPIs, poor cash flow, or inaccurate
-financials unless the intake separately establishes those facts.
+If the owner consistently uses current financial information, recognize
+that as a genuine strength when supported — do not manufacture a
+visibility gap where none exists.
+
+Positioning phrases Solomon may use when decision-basis evidence
+supports them:
+- "A bank balance is a snapshot, not a decision system."
+- "Cash flow is not profit."
+- "Good decisions require the right numbers connected to the right
+  decision."
+
+Use these naturally; do not repeat them mechanically.
 
 DEBT
 
@@ -1077,9 +1116,33 @@ ACTION
 Include ONE concrete action the owner can take now without purchasing
 anything.
 
-Tie it to the first-ranked signal.
+The action must be:
+- specific (one named step, not a category),
+- usable now (owner can start today without new tools or vendors),
+- tied to the #1 signal (the first-ranked finding),
+- valuable without purchasing anything,
+- not a complete remediation plan.
 
-Do not attempt to provide a complete remediation plan.
+The free action is required when a supported first-ranked signal exists;
+the renderer surfaces it as "One Move You Can Make Now."
+
+THE GAP / NEXT CFO QUESTION
+
+The free report must identify ONE business-specific financial question
+that the Health Check cannot responsibly answer with the current data.
+
+State:
+1. What the Health Check already established.
+2. What remains unknown.
+3. Why that unknown matters to a real decision.
+4. What the $47 Full Diagnostic will investigate.
+
+Do not manufacture uncertainty to create an upsell. Do not lead with a
+generic list of cash flow, debt, profitability, receivables, or growth
+categories.
+
+The owner should leave thinking: "I know what is happening, and now I
+know the exact question I need answered."
 
 BOUNDARY
 
@@ -1567,6 +1630,7 @@ Return ONLY valid JSON — no markdown code fences, no text before or after — 
   "opportunities": [
     { "title": "short", "desc": "one sentence", "impact": "short tag, e.g. Unlock $250K+" }
   ],
+  "oneMove": { "title": "short imperative — the One Move You Can Make Now", "desc": "one or two sentences; specific, usable now, tied to the #1 signal, valuable without purchasing, not a complete remediation plan" },
   "nextStepHeadline": "short",
   "nextStepBody": "2-3 sentences leading to a strategy call",
   "opportunityFlags": ["MERCHANT_PROCESSING_OPP"],
@@ -2514,6 +2578,26 @@ function buildReportHtml(agent) {
 <ul style="margin:0;padding-left:20px;">${items}</ul>`;
   }
 
+  // One Move You Can Make Now — free-tier required block when a
+  // first-ranked signal exists. Rendered on BOTH tiers when the model
+  // emits it (the paid tier's richer decisionOrder covers the same
+  // ground, so paid responses typically omit it). Non-empty title +
+  // desc gate rendering so an empty object doesn't produce an empty
+  // card.
+  let oneMoveBlock = "";
+  if (agent.oneMove && agent.oneMove.title && String(agent.oneMove.title).trim()) {
+    const om = agent.oneMove;
+    const desc = om.desc && String(om.desc).trim() ? e(om.desc) : "";
+    oneMoveBlock = `
+<h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">One Move You Can Make Now</h2>
+<table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">
+  <tr><td style="padding:14px 16px;background:#fdf8f0;border-left:4px solid #c4a647;border-radius:4px;">
+    <div style="font-family:Georgia,serif;font-weight:700;color:#1a1a1a;font-size:16px;">${e(om.title)}</div>
+    ${desc ? `<div style="font-family:Georgia,serif;color:#374151;font-size:14px;margin-top:6px;line-height:1.55;">${desc}</div>` : ""}
+  </td></tr>
+</table>`;
+  }
+
   let decisionBlock = "";
   if (isV2 && Array.isArray(agent.decisionOrder) && agent.decisionOrder.length) {
     const items = agent.decisionOrder.map((d) => `
@@ -2536,6 +2620,7 @@ ${snapshotBlock}
 <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">${gaps}</table>
 <h2 style="font-family:Arial,sans-serif;font-size:13px;letter-spacing:2px;text-transform:uppercase;color:#92400e;border-bottom:1px solid #e5e7eb;padding-bottom:8px;margin:32px 0 16px;">Your Highest-Impact Opportunities</h2>
 <table cellpadding="0" cellspacing="0" width="100%" style="border-collapse:separate;">${opps}</table>
+${oneMoveBlock}
 ${connectionsBlock}
 ${decisionBlock}
 ${questionsBlock}

@@ -196,17 +196,20 @@ describe("Rubric v3 — ASSESSMENT_RUBRIC content", () => {
 
 describe("Rubric v3 — TIER_GUIDE content", () => {
   it("free tier carries the approved customer-directive block (2026-10-17 round-5 directive)", () => {
-    // Section headers from the approved rewrite — PURPOSE / FINDINGS /
-    // STRENGTH / OPPORTUNITIES / FINANCIAL VISIBILITY / DEBT / ACTION /
-    // BOUNDARY / STYLE / FREE HEALTH CHECK COMPLETENESS CONTRACT.
+    // Section headers from the approved rewrite + 2026-10-29 additions
+    // (MEMORABLE THESIS / SECTION ROLE / THE GAP + enhanced
+    // FINANCIAL VISIBILITY / DECISION BASIS header).
     assert.match(TIER_GUIDE.free, /FREE BUSINESS HEALTH CHECK/);
     assert.match(TIER_GUIDE.free, /^PURPOSE$/m);
+    assert.match(TIER_GUIDE.free, /^MEMORABLE THESIS$/m);
+    assert.match(TIER_GUIDE.free, /^SECTION ROLE \/ NON-REPETITION$/m);
     assert.match(TIER_GUIDE.free, /^FINDINGS$/m);
     assert.match(TIER_GUIDE.free, /^STRENGTH$/m);
     assert.match(TIER_GUIDE.free, /^OPPORTUNITIES$/m);
-    assert.match(TIER_GUIDE.free, /^FINANCIAL VISIBILITY$/m);
+    assert.match(TIER_GUIDE.free, /^FINANCIAL VISIBILITY \/ DECISION BASIS$/m);
     assert.match(TIER_GUIDE.free, /^DEBT$/m);
     assert.match(TIER_GUIDE.free, /^ACTION$/m);
+    assert.match(TIER_GUIDE.free, /^THE GAP \/ NEXT CFO QUESTION$/m);
     assert.match(TIER_GUIDE.free, /^BOUNDARY$/m);
     assert.match(TIER_GUIDE.free, /^STYLE$/m);
     assert.match(TIER_GUIDE.free, /FREE HEALTH CHECK COMPLETENESS CONTRACT/);

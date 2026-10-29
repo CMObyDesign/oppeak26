@@ -22,7 +22,7 @@ describe("free-tier finding caps", () => {
   });
 
   it("today's known-good free fixture respects the caps", () => {
-    const good = loadFixture("liz_free_good.json");
+    const good = loadFixture("liz_free_v1_legacy.json");
     assert.ok(Array.isArray(good.gaps), "fixture should have a gaps array");
     assert.ok(Array.isArray(good.opportunities), "fixture should have an opportunities array");
     assert.ok(good.gaps.length <= FREE_GAP_CAP,
@@ -34,7 +34,7 @@ describe("free-tier finding caps", () => {
   it("the known-good free fixture has at least one gap and one opportunity (not empty)", () => {
     // An empty free report is not useful — if Solomon ships one, the free
     // conversion CTA stops working. Confirm the fixture isn't degenerate.
-    const good = loadFixture("liz_free_good.json");
+    const good = loadFixture("liz_free_v1_legacy.json");
     assert.ok(good.gaps.length >= 1, "free report should surface at least one gap");
     assert.ok(good.opportunities.length >= 1, "free report should surface at least one opportunity");
   });

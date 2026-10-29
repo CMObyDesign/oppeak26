@@ -392,6 +392,23 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
         </div>
       </div>
 
+      {/* One Move You Can Make Now — free-tier concrete action tied to
+          the #1 signal. Only rendered when the model emits a non-empty
+          title, so an empty object never produces an empty card. Paid
+          tiers typically omit this (decisionOrder[] covers the same
+          job). */}
+      {report.oneMove && report.oneMove.title && (
+        <div className="space-y-6 py-12 border-t border-white/5">
+          <h3 className="font-display text-3xl font-bold text-center">One Move You Can Make Now</h3>
+          <Card className="p-6 glass-card border-white/5 max-w-2xl mx-auto">
+            <h4 className="font-display text-lg font-bold mb-2">{report.oneMove.title}</h4>
+            {report.oneMove.desc && (
+              <p className="text-muted-foreground leading-relaxed">{report.oneMove.desc}</p>
+            )}
+          </Card>
+        </div>
+      )}
+
       {/* paid47-v2 Connections — cross-finding synthesis. Keyed by
           finding ids on the Worker side; here we just render the
           strategist's prose explanation. */}

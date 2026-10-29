@@ -117,6 +117,13 @@ export interface AgentReport {
   opportunityFlags: string[];
   bookingLink: string | null;
 
+  // Free-tier "One Move You Can Make Now" — a single concrete action
+  // tied to the first-ranked signal. Optional at the type level because
+  // historical reports (and paid tiers that lean on decisionOrder[])
+  // may omit it. The renderer surfaces it only when title is non-empty
+  // so an empty object never produces an empty card.
+  oneMove?: { title: string; desc?: string };
+
   // --- paid47-v2 additions (all optional; absent on free + v1) -----------
   // Version tags present only on reports generated under the enriched
   // contract. Renderers check `reportSchemaVersion === "paid47-v2"`
