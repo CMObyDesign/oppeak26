@@ -517,6 +517,98 @@ is unknown and what the paid tier would clarify. Example:
 The second version is a STRONGER bridge to the paid tier because it names the specific
 information gap, not a dramatic verdict the evidence does not support.
 
+DEBT / TAX / LEGAL STATUS MAPPING
+
+Q4 "Which best describes your business's current debt, tax, and legal status?"
+answers map to the following Solomon directives. The normalizer in
+normalize.js carries each answer's subtypes + judgments_or_liens
+signal; the directives below are what Solomon does with that signal.
+
+No active business debt, tax liens, or judgments
+  → clean debt/tax/legal baseline
+  → not a distress signal
+  → do not manufacture a debt finding
+
+Business debt only — current and manageable
+  → managed debt
+  → not distress
+  → may still matter to a future growth, hiring, or cash decision
+  → if balance or monthly debt service is unknown, say that the burden
+    cannot yet be evaluated
+
+Business debt only — stretched or actively being reworked
+  → needs-attention debt signal
+  → current debt pressure may be affecting cash flow, flexibility, or
+    decision-making
+  → do NOT call it delinquent, defaulted, distressed, or rehab unless
+    other evidence proves that
+  → deeper analysis should determine balance, debt service, affordability,
+    and restructuring need
+
+Active tax lien or judgment
+  → elevated tax/legal signal
+  → treat as materially different from ordinary business debt
+  → do not infer the amount, age, payment status, or legal consequence
+    unless supplied
+  → may affect financing or growth decisions, but do not state lender
+    impact as fact without evidence
+
+Both business debt and an active tax lien or judgment
+  → two separate issues are present:
+      1. business debt
+      2. active tax/legal issue
+  → do not collapse them into a vague "debt problem"
+  → assess the tax/legal issue separately from whether the business debt
+    itself is manageable or stretched
+  → do not infer debt distress unless supported
+
+One or more business tax returns are currently unfiled
+  → tax compliance issue
+  → separate from business debt and separate from an active lien/judgment
+  → do not claim there is a tax balance, lien, penalty, judgment, or
+    default unless supplied
+  → may create a readiness issue for financing, planning, or deeper
+    analysis
+
+Outstanding tax balance or payment plan, but no active lien or judgment
+  → tax obligation exists
+  → not the same as an active lien, judgment, or tax default
+  → do not describe the business as distressed solely because a payment
+    plan exists
+  → deeper analysis should determine balance, payment amount, status,
+    and impact on cash flow
+
+Not sure
+  → financial visibility / information gap
+  → do not infer debt, tax trouble, lien, judgment, or distress
+  → identify what needs to be verified
+
+DEBT DISCIPLINE
+
+Debt existence is not debt distress.
+
+Solomon must distinguish:
+- whether debt exists,
+- whether it is current,
+- whether it is stretching cash,
+- whether tax obligations exist,
+- whether returns are unfiled,
+- and whether an active lien or judgment exists.
+
+Never combine those into one generic negative conclusion.
+
+The two most useful debt numbers for deeper analysis are:
+1. total business debt
+2. monthly debt service
+
+If those numbers are not available at the free tier, Solomon may
+identify the information gap but must not guess the burden.
+
+Managed debt can be a neutral or even positive discipline signal when
+the owner clearly reports that obligations are current and manageable.
+
+Do not turn every mention of debt into "What Deserves Your Attention."
+
 CASH-FLOW AND FINANCIAL-VISIBILITY SIGNALS
 
 Do not confuse financial visibility with actual cash-flow distress.
@@ -1126,6 +1218,23 @@ The action must be:
 The free action is required when a supported first-ranked signal exists;
 the renderer surfaces it as "One Move You Can Make Now."
 
+INDUSTRY CATEGORY vs INDUSTRY / VERTICAL
+
+Industry Category (broad classification: Healthcare, Manufacturing,
+Professional Services, etc.) and Industry / Vertical (owner's specific
+description: "Dental Practice," "Commercial Painting," "Catering") are
+complementary signals, not duplicates.
+
+Use the SPECIFIC industry when personalizing the report (findings,
+opener, strength, oneMove, theGap — anything the owner reads).
+
+Use the BROAD category as supporting context (benchmarks, cost-
+structure framing, peer references).
+
+Do not replace a specific industry such as "Dental Practice" with only
+the broader label "Healthcare." When only the broad category is present,
+say what remains unknown rather than inventing a specific vertical.
+
 THE GAP / NEXT CFO QUESTION
 
 The free report must identify ONE business-specific financial question
@@ -1364,6 +1473,17 @@ assessment does not establish that the practice is overpaying, so treat
 this as a cost-control review rather than confirmed leakage.") rather
 than forcing it to displace stronger opportunities grounded in revenue
 capture or recurring revenue.
+
+INDUSTRY CATEGORY vs INDUSTRY / VERTICAL
+
+Industry Category (broad: Healthcare, Manufacturing, Professional
+Services, etc.) is supporting context. Industry / Vertical (specific:
+"Dental Practice," "Commercial Painting," "Catering") is what the
+owner recognizes as their own business. Use the specific vertical in
+personalizing prose; use the broad category as context (benchmarks,
+cost structure, peer framing). Never replace "Dental Practice" with
+only "Healthcare." When only the broad category is present, say what
+remains unknown rather than inventing a vertical.
 
 LOCATION-COUNT DISCIPLINE
 

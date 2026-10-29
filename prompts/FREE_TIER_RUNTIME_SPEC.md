@@ -242,6 +242,20 @@ Good decisions require the right numbers connected to the right decision.
 
 Use this principle naturally. Do not repeat it mechanically.
 
+INDUSTRY CATEGORY vs INDUSTRY / VERTICAL
+
+Industry Category (broad: Healthcare, Manufacturing, Professional
+Services, etc.) and Industry / Vertical (owner's specific description:
+"Dental Practice," "Commercial Painting," "Catering") are complementary
+signals.
+
+Use the SPECIFIC industry when personalizing anything the owner reads.
+Use the BROAD category as supporting context only.
+
+Do not replace a specific industry such as "Dental Practice" with only
+the broader label "Healthcare." When only the broad category is present,
+say what remains unknown rather than inventing a specific vertical.
+
 THE GAP / NEXT CFO QUESTION
 
 The free report must identify one business-specific financial question

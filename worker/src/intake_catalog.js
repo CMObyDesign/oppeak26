@@ -25,10 +25,12 @@ export const INTAKE_CATALOG = Object.freeze({
       hint: "Local presence / Statewide / Regional / National / E-commerce" },
     { key: "Q3",  text: "What industry or vertical best describes your business?",
       hint: "HVAC/Trades / Construction / Professional services / E-commerce / Other" },
-    // Q4 just moved to the six-state option set — see
-    // ASSESSMENT_RUBRIC Q4 discipline in index.js.
-    { key: "Q4",  text: "Which best describes your business's current debt, tax, and legal standing?",
-      hint: "No debt or issues / Managed debt / Tax balance / Unfiled taxes / Lien or judgment / Not sure" },
+    // Q4 moved from the six-state set to the 2026-10-29 eight-state
+    // set — see DEBT / TAX / LEGAL STATUS MAPPING in index.js
+    // ASSESSMENT_RUBRIC. Text + hints must stay in verbatim lockstep
+    // with app/src/data/freeAssessmentQuestions.ts Q4.
+    { key: "Q4",  text: "Which best describes your business's current debt, tax, and legal status?",
+      hint: "No active debt/liens/judgments / Managed debt / Managed debt stretched / Tax lien or judgment / Both debt + lien / Unfiled returns / Outstanding tax balance / Not sure" },
     { key: "Q5",  text: "When you make business decisions, are you basing them on your actual numbers or on what is in your bank account?",
       hint: "Clean numbers / Bank balance / In between / Not sure" },
     { key: "Q6",  text: "What does your business consistently deliver that your clients say they cannot get anywhere else?" },
