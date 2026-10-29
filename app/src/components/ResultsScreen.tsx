@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/card";
 import type { AgentReport } from "@/lib/assessment";
 import { CountdownTimer } from "./CountdownTimer";
 import { OFFERS, getRemainingTime } from "@/lib/offerTiming";
-import { PAYMENT_LINK_47, PAYMENT_LINK_297 } from "@/lib/ghl-config";
+import { PAYMENT_LINK_47 } from "@/lib/ghl-config";
 import { navigateExternal } from "@/lib/navigate-external";
 
 const BETA_MID_ANALYSIS_URL = "https://success.cfobydesign.com/mid-analysis";
@@ -33,6 +33,51 @@ interface ResultsScreenProps {
 // primary (green) for growth, and visually consistent with the
 // SEVERITY IS NOT TONE discipline (a non-legal stress bucket should
 // not look like an emergency).
+// Snapshot excerpt helper. Produces a short summary from the same
+// body field the detailed card uses, so the Snapshot quadrant does
+// not read verbatim-equal to its matching Gap / Opportunity card.
+//
+// Rules (ordered — the first one that applies wins):
+//
+//   1. Body is empty or whitespace → return "" (no card body; card
+//      still renders its title).
+//   2. Body is multi-sentence AND the first sentence is at or below
+//      SNAPSHOT_MAX_CHARS → return first sentence + "…" (the
+//      ellipsis signals "there is more in the detailed card").
+//   3. Body is longer than SNAPSHOT_MAX_CHARS (single long sentence
+//      or multi-sentence with a long first sentence) → truncate the
+//      first sentence on a word boundary and append "…".
+//   4. Body is a SINGLE short sentence at or below the limit → return
+//      "" so the Snapshot card renders TITLE-ONLY. If we returned
+//      the body unchanged here it would read verbatim-identical to
+//      the detailed card, which is the exact bug the Snapshot role
+//      split exists to prevent (Codex P2 on #166).
+const SNAPSHOT_MAX_CHARS = 120;
+function snapshotExcerpt(body: string | null | undefined): string {
+  if (!body) return "";
+  const s = String(body).replace(/\s+/g, " ").trim();
+  if (!s) return "";
+  // First sentence boundary — . ! ? followed by space + capital, or end.
+  const sentenceMatch = s.match(/^(.+?[.!?])(?:\s+[A-Z]|$)/);
+  const first = sentenceMatch ? sentenceMatch[1] : s;
+  const hasMore = first.length < s.length; // multi-sentence body
+  if (first.length <= SNAPSHOT_MAX_CHARS) {
+    if (hasMore) {
+      // Multi-sentence body: Snapshot shows first sentence + ellipsis;
+      // detailed card still carries all sentences. Snapshot differs.
+      return first + "…";
+    }
+    // Single short sentence: no shorter form of the same prose exists
+    // without ellipsis-faking content. Snapshot renders title-only.
+    return "";
+  }
+  // Long first sentence: truncate on a word boundary and ellipsis.
+  const slice = first.slice(0, SNAPSHOT_MAX_CHARS);
+  const lastSpace = slice.lastIndexOf(" ");
+  const cut = lastSpace > 60 ? slice.slice(0, lastSpace) : slice;
+  return cut.replace(/[,;:]$/, "") + "…";
+}
+
 const PATH_STYLE: Record<string, { score: string; badge: string }> = {
   rehab:             { score: "text-destructive", badge: "bg-destructive/10 border-destructive/20 text-destructive" },
   "needs-attention": { score: "text-accent",      badge: "bg-accent/10 border-accent/20 text-accent" },
@@ -302,24 +347,33 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
             when the field is absent). Replaces the previous
             `report.context` misuse that put risk framing in the
             strength slot. */}
+        {/* 2026-10-29 Snapshot role fix: the Snapshot quadrant was
+            consuming the SAME impact/desc body as the detailed Gap /
+            Opportunity cards below, so the Snapshot and "What Deserves
+            Your Attention" sections displayed the exact same prose
+            word for word. Snapshot role is now SUMMARY only — title
+            plus a first-sentence excerpt capped at ~120 chars with
+            an ellipsis when the detailed body goes beyond that.
+            The detailed section still renders the full body. No
+            schema change: this is a renderer-side distinction. */}
         <SwotQuadrant
           items={{
             strength: report.strength && report.strength.title
-              ? { heading: report.strength.title, body: report.strength.desc || "" }
+              ? { heading: report.strength.title, body: snapshotExcerpt(report.strength.desc) }
               : undefined,
             needsAttention: (() => {
               const top = (report.gaps as any[]).find((g) => g.priority === "CRITICAL")
                        || (report.gaps as any[]).find((g) => g.priority === "HIGH")
                        || report.gaps[0];
-              return top ? { heading: top.title, body: top.impact } : undefined;
+              return top ? { heading: top.title, body: snapshotExcerpt(top.impact) } : undefined;
             })(),
             opportunity: report.opportunities[0]
-              ? { heading: report.opportunities[0].title, body: (report.opportunities[0] as any).desc }
+              ? { heading: report.opportunities[0].title, body: snapshotExcerpt((report.opportunities[0] as any).desc) }
               : undefined,
             watch: (() => {
               const w = (report.gaps as any[]).find((g) => g.priority === "MEDIUM")
                      || report.gaps[1];
-              return w ? { heading: w.title, body: w.impact } : undefined;
+              return w ? { heading: w.title, body: snapshotExcerpt(w.impact) } : undefined;
             })(),
           }}
         />
@@ -624,7 +678,7 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
                 className="w-full h-20 text-xl font-bold rounded-xl shadow-glow-gold transition-all hover:-translate-y-1 active:translate-y-0 bg-primary hover:bg-primary/90 text-primary-foreground relative overflow-hidden group"
               >
                 <div className="relative z-10 flex flex-col items-center">
-                  <span>Get My Full Diagnostic + Strategist Review — $47</span>
+                  <span>Get My Full Diagnostic + Strategist Review for $47</span>
                   {/* 2026-10-29: removed the "(24h only)" sublabel.
                       The countdown above runs 48h on the Diagnostic
                       offer; adding "24h only" here read as a direct
@@ -731,18 +785,15 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
             </Button>
           )}
 
-          {report.tier === "paid_47" && (
-            <Button
-              onClick={() => {
-                console.log("[Analytics] SWOT_UPSELL_297_CLICK");
-                navigateExternal(PAYMENT_LINK_297);
-              }}
-              variant="ghost"
-              className="w-full text-sm text-muted-foreground hover:text-foreground"
-            >
-              Explore the Business Growth Analysis — $297 →
-            </Button>
-          )}
+          {/* 2026-10-29: removed the ghost "$297 Business Growth
+              Analysis" CTA from the paid_47 results page. The
+              primary next step after the Full Diagnostic is the
+              INCLUDED 30-minute strategist review above. Promoting
+              the BGA before that review undermines the included
+              consultation and runs ahead of the strategist's own
+              judgment on whether deeper work is indicated. The
+              strategist introduces the next tier contextually after
+              the review when the facts call for it. */}
         </div>
       )}
 

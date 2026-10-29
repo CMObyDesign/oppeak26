@@ -127,6 +127,17 @@ export function deriveMetrics(norm) {
   pushDollarPassthrough("monthly_debt_service_amount", "monthly_debt_service");
   pushDollarPassthrough("ar_30_plus_amount", "ar_30_plus");
   pushDollarPassthrough("ar_60_plus_amount", "ar_60_plus");
+  // Average Sale / Project Value (paid_47, 2026-10-29). Exposed to
+  // the prompt as a passthrough so the model can anchor "how many
+  // sales does X dollars represent" type comparisons on the real
+  // owner-reported figure. No ratio or ROI math is computed from
+  // this value here — see TIER_GUIDE.paid_47 "AVERAGE SALE /
+  // PROJECT VALUE DISCIPLINE" for the rule set (never profit,
+  // never margin, never cash, never LTV; a comparison like "a
+  // $100,000 opportunity is roughly four $25,000 projects" is
+  // allowed because that is deterministic division, not an ROI
+  // claim).
+  pushDollarPassthrough("average_sale_project_value_amount", "average_sale_project_value");
 
   // --- A/R aging vs debt service -------------------------------------------
   // "$6,500 in 60+ day receivables is 3.61 months of debt service" —

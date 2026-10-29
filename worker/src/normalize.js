@@ -119,10 +119,18 @@ function normDebtStatus(raw) {
 
 // Merchant-processing-last-reviewed answer buckets (used by the
 // Phase 2B merchant-processing opportunity).
+//
+// 2026-10-29: added a "not_applicable" bucket so businesses that
+// do not accept card payments can answer the required field
+// truthfully. The downstream opportunity-flag emission must skip
+// MERCHANT_PROCESSING_OPP when this bucket resolves — a business
+// with no card volume cannot have a merchant-processing cost
+// opportunity.
 function normMerchantReview(raw) {
   if (raw === null || raw === undefined) return null;
   const s = String(raw).trim().toLowerCase();
   if (!s) return null;
+  if (/not applicable|n\/a|no card|do not accept card|don'?t accept card|cash only|no merchant/.test(s)) return "not_applicable";
   if (/within.*6 months|under 6|less than 6/.test(s)) return "within_6_months";
   if (/6.*12 months|6 to 12|6-12/.test(s)) return "6_to_12_months";
   if (/1.*3 years|1 to 3|1-3 years/.test(s)) return "1_to_3_years";
@@ -365,6 +373,27 @@ export const FIELD_NORMALIZERS = Object.freeze({
   "kBmYfSbx77Cg72cCc1TG": { question_key: "has_documented_budget",         normalizer: normYesNo },
   "tbY1bimXCPjV7GocyPBv": { question_key: "debt_status",                   normalizer: normDebtStatus },
   "RwNhRxRitJX9NG8Lg4Q2": { question_key: "merchant_processing_last_review", normalizer: normMerchantReview },
+  // Average Sale / Project Value (paid_47 only, 2026-10-29). Contextual
+  // evidence for revenue opportunity sizing, concentration economics,
+  // and capacity decisions. The TIER_GUIDE.paid_47 "AVERAGE SALE /
+  // PROJECT VALUE DISCIPLINE" block instructs Solomon never to treat
+  // this value as profit, contribution margin, cash, or LTV, and never
+  // to invent an average when the owner skipped the field or answered
+  // "varies significantly".
+  //
+  // IMPORTANT (ops): the HL field ID below is a PLACEHOLDER. Replace
+  // "__TBD_HL_FIELD_ID_FOR_AVERAGE_SALE_PROJECT_VALUE__" with the real
+  // GHL custom-field id once the field is published in HL. Until then
+  // this row is inert — the dispatcher keys off HL field id, so an
+  // intake carrying no matching id simply skips normalization and
+  // nothing else breaks. The derived-metric passthrough and the
+  // TIER_GUIDE block are safe to ship ahead of the id for the same
+  // reason: both no-op when `average_sale_project_value` is absent
+  // from the normalized facts.
+  "__TBD_HL_FIELD_ID_FOR_AVERAGE_SALE_PROJECT_VALUE__": {
+    question_key: "average_sale_project_value",
+    normalizer: normMoney,
+  },
   // Deliberately NOT normalizing paid_47 narrative fields: competitors,
   // automation ideas, best-margins, proprietary process, recurring revenue
   // idea, bold move, visibility, where losing deals, financial metrics not

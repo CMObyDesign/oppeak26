@@ -139,6 +139,18 @@ describe("normMerchantReview", () => {
     assert.equal(f("5+ years ago"), "5_plus_years");
     assert.equal(f("Never"), "never");
   });
+
+  // 2026-10-29: businesses with no card volume need a truthful N/A
+  // answer. The TIER_GUIDE now forbids MERCHANT_PROCESSING_OPP when
+  // this bucket resolves.
+  it("maps a 'not applicable' / cash-only answer to not_applicable", () => {
+    assert.equal(f("Not applicable"), "not_applicable");
+    assert.equal(f("N/A"), "not_applicable");
+    assert.equal(f("We do not accept card payments"), "not_applicable");
+    assert.equal(f("We don't accept card payments"), "not_applicable");
+    assert.equal(f("Cash only"), "not_applicable");
+    assert.equal(f("No merchant processing"), "not_applicable");
+  });
 });
 
 describe("normFinancialDecisionBasis", () => {
@@ -256,6 +268,19 @@ describe("FIELD_NORMALIZERS", () => {
     assert.equal(FIELD_NORMALIZERS["tbY1bimXCPjV7GocyPBv"].question_key, "debt_status");
     assert.equal(FIELD_NORMALIZERS["OyQjw4nGNHJYADsq5ggg"].question_key, "active_debt_summary");
     assert.equal(FIELD_NORMALIZERS["8sSKohKtQZZzJEtM2ju0"].question_key, "financial_decision_basis");
+  });
+
+  // 2026-10-29: Average Sale / Project Value — new paid_47 contextual
+  // field. The HL field id is a documented placeholder until ops
+  // supplies the real id; the question_key and normalizer are the
+  // stable contract downstream code reads.
+  it("exposes the Average Sale / Project Value row with the stable question_key and normMoney normalizer", () => {
+    const row = Object.values(FIELD_NORMALIZERS).find(
+      (r) => r.question_key === "average_sale_project_value",
+    );
+    assert.ok(row, "FIELD_NORMALIZERS must carry an average_sale_project_value row");
+    assert.equal(row.normalizer, PRIMITIVES.normMoney,
+      "average_sale_project_value must be normalized as a dollar amount");
   });
 });
 
