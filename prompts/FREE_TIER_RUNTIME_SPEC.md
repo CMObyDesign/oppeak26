@@ -167,12 +167,31 @@ anything.
 
 Tie it to the first-ranked signal.
 
-The action should improve visibility, stop obvious leakage, or establish
-a useful baseline.
+OWNER-LEVEL STANDARD — this is the single most important rule for the
+free action. The move must produce a useful NUMBER, COMPARISON, or
+DECISION VIEW the owner does not already have. It must change what
+the owner can SEE about the business after fifteen to thirty minutes
+of their own work.
 
-Do not give a complete remediation plan.
+Owner-level examples (shape only; adapt to this business):
+- Compute one specific ratio or breakdown for the last 90 days so
+  the owner can see what the current bank-balance snapshot is
+  hiding.
+- Pull one specific comparison across months, service lines, or
+  customer segments so the owner can see where the margin or the
+  risk actually sits.
+- Build a one-sheet view of the real financial question in front
+  of them, from the numbers they already have in their accounting
+  file.
 
-The action must be:
+Do NOT default to a small clerical or administrative task
+("categorize uncategorized transactions," "log one month of
+write-offs by cause code," "label last week's deposits," "clean up
+your contacts list," "update your invoice template"). Those tasks
+do bookkeeping work, not decision work, and they do not change
+what the owner can SEE about the business.
+
+The action must still be:
 - specific,
 - usable now,
 - tied to the #1 signal,

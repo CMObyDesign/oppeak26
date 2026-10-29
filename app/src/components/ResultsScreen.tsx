@@ -741,7 +741,7 @@ export const ResultsScreen = ({ report, error, answers, leadData, onCtaClick }: 
       )}
 
       <footer className="mt-20 py-12 border-t border-border/50 text-center">
-        <p className="text-xs text-muted-foreground uppercase tracking-[0.4em]">Your integrated money partner · CFO By Design</p>
+        <p className="text-xs text-muted-foreground uppercase tracking-[0.4em]">Your integrated money partner.</p>
       </footer>
     </div>
   );

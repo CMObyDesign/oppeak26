@@ -1315,7 +1315,31 @@ ACTION
 Include ONE concrete action the owner can take now without purchasing
 anything.
 
-The action must be:
+OWNER-LEVEL STANDARD — this is the single most important rule for the
+free action. The move must produce a useful NUMBER, COMPARISON, or
+DECISION VIEW the owner does not already have. It must change what
+the owner can SEE about the business after fifteen to thirty minutes
+of their own work.
+
+Owner-level examples (shape only; adapt to this business):
+- Compute [one specific ratio or breakdown] for the last 90 days
+  so the owner can see what the current bank-balance snapshot is
+  hiding.
+- Pull [one specific comparison across months, service lines, or
+  customer segments] so the owner can see where the margin or the
+  risk actually sits.
+- Build a one-sheet view of [the real financial question in front
+  of them] with the numbers they already have in their accounting
+  file.
+
+Do NOT default to a small clerical or administrative task
+("categorize uncategorized transactions," "log one month of
+write-offs by cause code," "label last week's deposits," "clean up
+your contacts list," "update your invoice template"). Those tasks
+do bookkeeping work, not decision work, and they do not change
+what the owner can SEE about the business.
+
+The action must still be:
 - specific (one named step, not a category),
 - usable now (owner can start today without new tools or vendors),
 - tied to the #1 signal (the first-ranked finding),
@@ -2736,7 +2760,20 @@ function formatMetricValue(m) {
 }
 
 function buildReportHtml(agent) {
-  const e = escapeHtml;
+  // 2026-10-29 em-dash runtime sanitation. The TIER_GUIDE STYLE
+  // block already instructs Solomon not to emit em dashes in
+  // customer-facing fields, but live reports still slipped them
+  // through (Liz's 2026-10-29 test surfaced several). This wraps
+  // escapeHtml so every rendered field is normalized at the
+  // boundary: U+2014 (em dash) becomes " - " and any resulting
+  // double space is collapsed. This covers tight ("word—word")
+  // and padded ("word — word") usages uniformly as a thought-break
+  // hyphen, which is what the brand voice guide prefers.
+  const stripEmDashes = (s) => {
+    if (s == null) return s;
+    return String(s).replace(/\s*—\s*/g, " - ").replace(/ {2,}/g, " ");
+  };
+  const e = (s) => escapeHtml(stripEmDashes(s));
   const priColor = (p) =>
     p === "CRITICAL" ? "#b91c1c" :
     p === "HIGH" ? "#d97706" :

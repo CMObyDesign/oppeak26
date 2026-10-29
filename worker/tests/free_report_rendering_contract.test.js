@@ -280,4 +280,23 @@ describe("FREE REPORT RENDERING CONTRACT — fixture: shankar_dental_free_q1_q11
     const htmlEmDashCount = (html.match(/—/g) || []).length;
     assert.equal(htmlEmDashCount, 0, `rendered HTML contains ${htmlEmDashCount} em dash(es)`);
   });
+
+  it("buildReportHtml strips em dashes at the boundary even when Solomon emits them", () => {
+    // Runtime guarantee: even if the model slips an em dash through
+    // (which Liz's 2026-10-29 live test caught several times), the
+    // renderer normalizes U+2014 to " - " and collapses the extra
+    // spacing. This test proves the sanitation path, not the prompt
+    // rule — the prompt rule is tested above against the fixture.
+    const dirty = structuredClone(fixture);
+    dirty.headline = "Decisions ride on cash — and that is costing you clarity";
+    dirty.opener = "You are growing—but the gauges have not kept up.";
+    dirty.gaps[0].title = "A/R aging — $9k past due";
+    const html = buildReportHtml(dirty);
+    assert.equal((html.match(/—/g) || []).length, 0,
+      "buildReportHtml must strip every em dash from customer-facing fields");
+    // And the rewrites preserve the sentence meaning.
+    assert.match(html, /Decisions ride on cash - and that is costing you clarity/);
+    assert.match(html, /You are growing - but the gauges have not kept up\./);
+    assert.match(html, /A\/R aging - \$9k past due/);
+  });
 });
