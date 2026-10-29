@@ -38,8 +38,8 @@
     }
   ],
   "oneMove": {
-    "title": "Log one month of insurance claim write-offs by cause code",
-    "desc": "Before you make any Oak Ridge decision, isolate the top two reasons claims are getting written off. Fifteen minutes of data collection, no new tools. The pattern it reveals changes which fix comes first."
+    "title": "Put the Oak Ridge decision on one page",
+    "desc": "Pull four numbers from your last 90 days of books and list them side by side: gross production, insurance claim write-offs as a share of production, current monthly debt service, and your estimate of the Oak Ridge buildout cost. You already have the first three. The one-sheet shows you whether the question is really expansion or really visibility before Oak Ridge gets any further."
   },
   "theGap": {
     "question": "Can the current practice financially support the Oak Ridge buildout at your real margins, or does the Oak Ridge decision depend on numbers the bank-balance view cannot show you?",

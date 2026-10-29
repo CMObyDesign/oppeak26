@@ -114,6 +114,38 @@ describe("FREE REPORT RENDERING CONTRACT — fixture: shankar_dental_free_q1_q11
     assert.ok(html.includes(fixture.oneMove.title), "oneMove.title must appear in the rendered HTML");
   });
 
+  it("One Move meets the owner-level standard (not a clerical task)", () => {
+    // Codex P2 on #165: the previous fixture used "Log one month of
+    // insurance claim write-offs by cause code" — the exact shape of
+    // clerical task the TIER_GUIDE.free ACTION block now prohibits.
+    // The non-empty gate accepted it, so a regression toward the
+    // behavior this change is intended to prevent went undetected.
+    // Lock the owner-level standard here: the fixture's One Move
+    // must not match any of the explicitly forbidden clerical
+    // patterns Solomon is instructed never to emit.
+    const CLERICAL_BLOCKLIST = [
+      /\bcategorize .* transactions?\b/i,
+      /\blog .* month .* (write[-\s]?offs?|deposits|invoices?)\b/i,
+      /\blabel (last|this|the)? ?(week'?s|month'?s|day'?s)? deposits\b/i,
+      /\bclean up your (contacts?|email|invoice|list)\b/i,
+      /\bupdate your (invoice|email|contacts?) template\b/i,
+      /\baudit (two|three|four|a few) projects? for missed change orders?\b/i,
+    ];
+    const combined = `${fixture.oneMove.title} ${fixture.oneMove.desc || ""}`;
+    for (const pat of CLERICAL_BLOCKLIST) {
+      assert.doesNotMatch(combined, pat,
+        `oneMove reads as a clerical task (matched ${pat}); TIER_GUIDE.free ACTION requires an owner-level action that creates a number, comparison, or decision view`);
+    }
+    // And an affirmative decision-signal check: the action should
+    // reference something that produces a number, a comparison, or a
+    // one-page decision view. Any one of these verbs/nouns is enough
+    // to pass; the blocklist above does the heavy lifting of
+    // rejecting clerical shapes.
+    const DECISION_SIGNAL = /\b(side by side|one page|one[-\s]?sheet|baseline|compare|list|quantif|margin|cost of|runway|cash tied up|monthly debt service|share of|ratio|per[-\s](service|customer|month))\b/i;
+    assert.match(combined, DECISION_SIGNAL,
+      "oneMove must reference a number, comparison, or decision view (e.g. list side by side, baseline, quantify, margin, ratio, share of…) per TIER_GUIDE.free OWNER-LEVEL STANDARD");
+  });
+
   it("The Gap contains a personalized unresolved CFO question", () => {
     assert.ok(fixture.theGap, "theGap must be present");
     assert.ok(fixture.theGap.unknown && String(fixture.theGap.unknown).trim(), "theGap.unknown must be non-empty");
