@@ -1240,6 +1240,91 @@ unsure, connect it to the other signals. Do not assume stale books,
 poor cash flow, missing KPIs, or inaccurate statements unless another
 answer establishes those facts.
 
+MIGUEL'S DECISION-BASIS LENS
+
+The owner's answer to the financial decision-making question is a core
+context signal across the Full Diagnostic. When the owner says decisions
+are based primarily on bank balance, "somewhere in between," or they are
+unsure:
+
+- connect that answer to the specific financial decision in front of
+  them;
+- explain which obligations, timing issues, or operating facts the bank
+  balance alone cannot show;
+- use the other diagnostic evidence to make the explanation specific.
+
+Do not repeat generic bank-balance copy mechanically.
+
+Example: "You have six weeks of cash runway, $4,100 in monthly debt
+service, aging insurance receivables, and a six-figure expansion
+requirement. That is exactly why the Oak Ridge decision has to be made
+from more than the current bank balance."
+
+When the owner reports a strong numbers-based decision process,
+recognize that as a strength rather than manufacturing a visibility gap.
+
+Positioning phrases Solomon may use when decision-basis evidence
+supports them: "A bank balance is a snapshot, not a decision system."
+"Cash flow is not profit." "Before you make the next move, make sure
+the numbers can carry it."
+
+Consider surfacing the decision basis in financialSnapshot[] when the
+answer is informative, with sourceType "customer_answer":
+- label "Decision basis", value "Somewhere between financials and bank
+  balance" (adapt to the owner's exact answer).
+
+MECHANISM DISCIPLINE
+
+Do not conflate three distinct financial mechanisms when selecting the
+primary gaps:
+
+- Aged A/R → cash conversion / working capital timing.
+- Insurance or claim write-offs → revenue leakage (billed but not
+  collected).
+- Merchant-processing fees + vendor costs (lab, supply) → cost control.
+  Opportunity until actual overpayment is established, not confirmed
+  leakage.
+
+Bundling all three into one "margin leakage" gap muddies the diagnosis
+and the Order of Attention. If two or more of these interact, name the
+interaction in connections[] rather than fusing them into a single gap.
+
+MERCHANT PROCESSING
+
+Treat merchant-processing exposure as a cost-control opportunity, not
+confirmed leakage, unless the intake establishes an actual rate
+comparison or an explicitly stated overpayment. When processing volume
+is substantial but the owner has not reviewed pricing, surface it as a
+secondary cost-control / validation item ("At roughly $X in reported
+card volume, processing costs are worth quantifying. The current
+assessment does not establish that the practice is overpaying, so treat
+this as a cost-control review rather than confirmed leakage.") rather
+than forcing it to displace stronger opportunities grounded in revenue
+capture or recurring revenue.
+
+LOCATION-COUNT DISCIPLINE
+
+Never infer first / second / third / fourth location from incomplete
+context. When the intake does not state the number of existing
+locations, say "the Oak Ridge expansion" or "the planned Oak Ridge
+location" rather than "a second location." Count-of-locations is a
+client fact; if the intake does not supply it, it stays unknown and
+belongs in questionsToClarify[].
+
+ILLUSTRATIVE NUMBERS
+
+Illustrative examples are allowed when clearly labeled as illustrations
+("If gross billings were $1.5M, a 4% write-off rate would equal
+$60,000") in questionsToClarify[] or whyItMatters prose. Rules:
+
+- cannot become a client fact;
+- cannot drive severity;
+- cannot enter financialSnapshot[] as an actual value;
+- cannot become a derived metric;
+- cannot be reused later in the report as though the client supplied it.
+
+Unknown client facts must remain unknown.
+
 DEBT
 
 Follow debt-subtype discipline. Never conflate managed business debt,
@@ -4134,20 +4219,43 @@ async function handleReport(contactId, env, requestUrl) {
               .catch(function () { showReadyFallback(); });
           }
 
-          function showTimeout() {
-            clearInterval(stepInterval);
+          // Soft "still working" state — replaces the spinner copy with a
+          // longer-wait message but KEEPS polling. The paid47-v2 Full
+          // Diagnostic typically lands in ~3-5 minutes under the streaming
+          // Claude path; the previous terminal timeout gave up at 2.5
+          // minutes and lost Priya Shankar's finished report (2026-10-28:
+          // the server had the report by ~5 min, the browser had stopped
+          // observing at ~3.5 min, manual refresh picked it up in 10s).
+          // The new behavior: never give up on its own — soften the copy,
+          // keep polling at the same cadence, show the report when it
+          // actually lands.
+          var softenedCopy = false;
+          function showSoftWaitCopy() {
+            if (softenedCopy) return;
+            softenedCopy = true;
             var wrap = document.getElementById('analyzing');
             if (!wrap) return;
             wrap.innerHTML =
+              '<div class="dots"><span></span><span></span><span></span></div>' +
               '<h3 style="font-family:Georgia,serif;font-size:22px;color:#1a1a1a;margin:0 0 10px;">Still working on your report…</h3>' +
               '<p style="color:#6b7280;font-size:15px;max-width:460px;margin:0 auto 6px;">' +
-                'This usually takes 30–60 seconds. If the wait feels long, refresh manually or email ' +
+                'This one is taking a little longer than usual. We are still watching for it — the page will update as soon as it is ready. ' +
+                'If something feels wrong, email ' +
                 '<a href="mailto:support@cfobydesign.com" style="color:#92400e;">support@cfobydesign.com</a> ' +
-                'and we\\'ll dig in.</p>';
+                'and we will dig in.</p>';
           }
 
           var elapsed = 0;
-          var MAX_SECONDS = 150; // 2.5 min
+          // Soft-wait threshold: switch the copy to "still working" but
+          // keep polling. Was the terminal timeout before PR fixing
+          // Priya's stuck-page bug.
+          var SOFT_WAIT_SECONDS = 180; // 3 min — soften copy, do not stop
+          // Hard cap on polling in a single page view. Streaming Claude
+          // calls complete in ~2-5 min on paid_47; a page that has been
+          // open for 10 minutes without the report appearing is almost
+          // certainly a terminal failure the operator should see via
+          // swot|deliveryfailed, not something the browser can recover.
+          var MAX_SECONDS = 600; // 10 min
           var POLL_INTERVAL_MS = 4000;
           var pollTimer;
 
@@ -4157,13 +4265,15 @@ async function handleReport(contactId, env, requestUrl) {
               .then(function (data) {
                 if (data && data.ready) { showReady(); return; }
                 elapsed += POLL_INTERVAL_MS / 1000;
-                if (elapsed >= MAX_SECONDS) { showTimeout(); return; }
+                if (elapsed >= SOFT_WAIT_SECONDS) showSoftWaitCopy();
+                if (elapsed >= MAX_SECONDS) return;  // give up polling, leave soft-wait copy
                 pollTimer = setTimeout(poll, POLL_INTERVAL_MS);
               })
               .catch(function () {
-                // Network hiccup — keep trying until timeout.
+                // Network hiccup — keep trying under the hard cap.
                 elapsed += POLL_INTERVAL_MS / 1000;
-                if (elapsed >= MAX_SECONDS) { showTimeout(); return; }
+                if (elapsed >= SOFT_WAIT_SECONDS) showSoftWaitCopy();
+                if (elapsed >= MAX_SECONDS) return;
                 pollTimer = setTimeout(poll, POLL_INTERVAL_MS);
               });
           }
@@ -4184,7 +4294,16 @@ async function handleReport(contactId, env, requestUrl) {
       `swot_full_report=${contentFull ? contentFull.length + "chars" : "empty"} ` +
       `business_playbook=${contentPlaybook ? contentPlaybook.length + "chars" : "empty"} ` +
       `tags=[${(c.tags || []).join(",")}]`);
-    return new Response(await buildReportPage(fallback, tierLabel, "Business Owner", tier, env, c.email || "", contactId, { isPending: true }), {
+    // Prefer the real first name on the pending shell so the loading
+    // page reads "Priya, your diagnostic is on the way" instead of
+    // "Business, your diagnostic is on the way" (2026-10-28 Cowork /
+    // Priya Shankar test — the pending shell hardcoded "Business Owner"
+    // and the first-name split in buildReportPage then showed "Business"
+    // as the greeting). Fall back to a sensible default only when no
+    // first name is on the contact.
+    const pendingName_fn =
+      c.firstName || c.contactName || [c.firstName, c.lastName].filter(Boolean).join(" ") || "Business Owner";
+    return new Response(await buildReportPage(fallback, tierLabel, pendingName_fn, tier, env, c.email || "", contactId, { isPending: true }), {
       status: 200,
       headers: htmlHeaders(),
     });
