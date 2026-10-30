@@ -201,20 +201,65 @@ describe("flattenAnswersForTracking — free tier (stable position map)", () => 
     assert.equal(out.answer_5, "basis");
   });
 
-  it("emits unmapped_<i> for a tier-mapped answer missing _field_id (safer than mis-slotting)", async () => {
+  it("mixed batch: some entries have _field_id, some don't → falls back to indexed (Codex P1 on #171)", async () => {
     const { flattenAnswersForTracking } = await import("../src/index.js");
+    // Pathological: the GHL survey path tags every entry; the React
+    // inline path tags none. A mixed batch should NOT flip into
+    // mapped mode and lose the field-id-less entries. The simpler
+    // rule — "require ALL entries to have _field_id before enabling
+    // mapped mode" — keeps both callers safe.
+    const answers = [
+      { _field_id: "5VWVNRrQYcLqXhckh4f4", question: "Q1", answer: "has field id" },
+      { question: "someQ", answer: "no field id" },
+    ];
+    const out = flattenAnswersForTracking(answers, { tier: "free" });
+    assert.deepEqual(out, { answer_1: "has field id", answer_2: "no field id" },
+      "mixed batch stays indexed; no entry disappears into unmapped_<N>");
+  });
+
+  it("in mapped mode, an unknown field_id surfaces under unmapped_<i>", async () => {
+    const { flattenAnswersForTracking } = await import("../src/index.js");
+    // All entries carry _field_id (mapped mode is on), but one of the
+    // IDs isn't in INTAKE_POSITIONS.free. That one must NOT silently
+    // land in answer_1 — the position map is incomplete, not the
+    // caller's error.
     const answers = [
       { _field_id: "5VWVNRrQYcLqXhckh4f4", question: "Q1", answer: "biz-type" },
-      { question: "someQ", answer: "orphan — no field id" },
       { _field_id: "unknown_id_in_HL",     question: "QX", answer: "stranger field" },
     ];
     const out = flattenAnswersForTracking(answers, { tier: "free" });
     assert.equal(out.answer_1, "biz-type");
-    // Neither orphan lands in an answer_N slot; both surface as
-    // unmapped_<index> so HL automation can see they exist but will
-    // never read them as Q1-Q11 responses.
-    assert.equal(out.unmapped_2, "orphan — no field id");
-    assert.equal(out.unmapped_3, "stranger field");
+    assert.equal(out.unmapped_2, "stranger field");
+  });
+
+  it("React free-tier inline path (no _field_id anywhere) keeps answer_1..answer_11 (Codex P1 on #171)", async () => {
+    const { flattenAnswersForTracking } = await import("../src/index.js");
+    // formatAnswersForAgent on the swot-app React path sends only
+    // { question, answer }. Codex caught that passing tier: "free"
+    // from the inline handler was pushing every answer into
+    // `unmapped_N` and the flat keys disappeared from the tracking
+    // webhook. The all-have-field-ids guard prevents that regression:
+    // a batch with zero field IDs stays in indexed mode even when
+    // tier is set.
+    const answers = [
+      { question: "Q1 business type",        answer: "Service-based" },
+      { question: "Q2 reach",                answer: "Local presence" },
+      { question: "Q3 industry",             answer: "Construction" },
+      { question: "Q4 debt",                 answer: "managed_debt" },
+      { question: "Q5 decision basis",       answer: "Somewhere in between" },
+      { question: "Q6 unique value",         answer: "..." },
+      { question: "Q7 referral",             answer: "..." },
+      { question: "Q8 revenue leak",         answer: "..." },
+      { question: "Q9 20% more profit",      answer: "..." },
+      { question: "Q10 uncaptured demand",   answer: "..." },
+      { question: "Q11 concentration",       answer: "..." },
+    ];
+    const out = flattenAnswersForTracking(answers, { tier: "free" });
+    assert.equal(Object.keys(out).filter((k) => k.startsWith("answer_")).length, 11);
+    assert.equal(Object.keys(out).filter((k) => k.startsWith("unmapped_")).length, 0,
+      "no unmapped_<N> keys when the whole batch is field-id-less");
+    assert.equal(out.answer_1, "Service-based");
+    assert.equal(out.answer_11, "...");
   });
 
   it("un-mapped tier (e.g. paid_47) falls back to indexed answer_N for backward compat", async () => {

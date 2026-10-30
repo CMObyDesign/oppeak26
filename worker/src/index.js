@@ -4399,20 +4399,46 @@ function flattenAnswersForTracking(answers, opts = {}) {
   const positionMap = tier && Object.hasOwn(INTAKE_POSITIONS, tier)
     ? INTAKE_POSITIONS[tier]
     : null;
+  // 2026-10-30 (Codex P1 on #171): enter mapped mode ONLY when the
+  // batch actually carries field IDs. The React free-tier path
+  // (`source: "swot-app"`) submits `{question, answer}` objects with
+  // no `_field_id` — formatAnswersForAgent builds them and
+  // normalizeAnswers strips anything else. If we entered mapped
+  // mode on a batch with no field IDs we'd push every answer into
+  // `unmapped_N` and lose `answer_1`..`answer_11` entirely on that
+  // path, breaking any HL automation that reads the flat keys.
+  //
+  // Require ALL non-empty answers to carry `_field_id` before using
+  // the position map. The GHL survey path (`answersFromContactFields`)
+  // tags every entry with its HL custom-field id, so it stays mapped.
+  // The React inline path and the console path carry no field IDs and
+  // fall through to indexed, which is safe because those callers
+  // control the submission order themselves.
+  const nonEmpty = answers.filter((a) => {
+    const raw = a && (a.answer ?? a.value);
+    if (raw === undefined || raw === null) return false;
+    const str = typeof raw === "string" ? raw : String(raw);
+    return !!str.trim();
+  });
+  const allHaveFieldIds =
+    nonEmpty.length > 0 && nonEmpty.every((a) => a && a._field_id);
+  const useMappedMode = !!(positionMap && allHaveFieldIds);
   answers.forEach((a, i) => {
     const raw = a && (a.answer ?? a.value);
     if (raw === undefined || raw === null) return;
     const str = typeof raw === "string" ? raw : String(raw);
     if (!str.trim()) return;
-    if (positionMap) {
-      const fieldId = a && a._field_id;
-      const pos = fieldId && Object.hasOwn(positionMap, fieldId) ? positionMap[fieldId] : null;
+    if (useMappedMode) {
+      const fieldId = a._field_id;
+      const pos = Object.hasOwn(positionMap, fieldId) ? positionMap[fieldId] : null;
       if (pos) {
         out[`answer_${pos}`] = str;
       } else {
-        // Mapped tier but this entry couldn't be resolved to a stable
-        // position. Emit under a clearly-unordered key so Liz's HL
-        // automation never reads it as a canonical position.
+        // Mapped tier + the batch carries field IDs, but THIS entry's
+        // field ID is not in the tier's position map (unknown HL
+        // field or a non-Solomon CRM field slipped past the filter).
+        // Emit under a clearly-unordered key so Liz's HL automation
+        // never reads an orphan as a canonical Q position.
         out[`unmapped_${i + 1}`] = str;
       }
     } else {
