@@ -5,81 +5,116 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="format-detection" content="telephone=no, address=no, date=no, email=no">
+
   <title>Your Health Check found the signals. Here is the next question.</title>
+
+  <!-- Brand colours match the BGA sales page / cfobydesign.com:
+       cream #f3f0ec, sage #596654, gold #e0a838, ink #1d1d1b.
+       Manrope loads where the client supports web fonts; Arial elsewhere. -->
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+
   <style>
     @media only screen and (max-width:600px) {
       .wrap-td { padding: 16px 8px !important; }
       .card-td { padding: 20px 20px !important; }
-      .btn-primary { display: block !important; width: 100% !important; padding: 16px 20px !important; font-size: 14px !important; box-sizing: border-box; }
+      .report-box { padding: 16px !important; }
+      .upsell-box { padding: 20px 16px !important; }
+      .includes-box { padding: 14px 14px !important; }
+      .btn-primary, .btn-secondary {
+        display: block !important;
+        width: 100% !important;
+        padding: 15px 12px !important;
+        font-size: 14px !important;
+        box-sizing: border-box;
+      }
       .logo { width: 160px !important; max-width: 160px !important; }
-      body, td, p, li { font-size: 15px !important; }
-      h1 { font-size: 22px !important; line-height: 1.25 !important; }
+      .tagline { font-size: 9px !important; letter-spacing: 1.5px !important; }
+      h1 { font-size: 24px !important; line-height: 1.25 !important; }
       h2 { font-size: 18px !important; line-height: 1.3 !important; }
+    }
+
+    @media only screen and (max-width:360px) {
+      .card-td { padding: 18px 16px !important; }
+      .btn-primary, .btn-secondary {
+        padding: 15px 10px !important;
+        font-size: 13px !important;
+        letter-spacing: 0 !important;
+      }
     }
   </style>
 </head>
-<body style="margin:0;padding:0;background:#fafaf7;font-family:Georgia,serif;">
-  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#fafaf7;">
-    What is actually driving those signals, and what deserves action first?
-  </div>
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#fafaf7;">
-    <tr>
-      <td class="wrap-td" align="center" style="padding:24px 12px;">
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;background:#ffffff;border-radius:12px;">
 
-          <tr>
-            <td class="card-td" style="padding:28px 32px;background:#0f0f0f;border-radius:12px 12px 0 0;text-align:center;">
-              <img class="logo" src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png" alt="CFO By Design" width="200" style="display:block;margin:0 auto;width:200px;max-width:200px;height:auto;border:0;">
-              <div style="font-family:Arial,sans-serif;color:#9ca3af;font-size:11px;letter-spacing:2.5px;margin-top:10px;">STRATEGY MATTERS · YOUR BUSINESS MATTERS</div>
-            </td>
-          </tr>
+<body style="margin:0;padding:0;background:#f3f0ec;font-family:'Manrope',Arial,Helvetica,sans-serif;">
 
-          <tr>
-            <td class="card-td" style="padding:28px 32px;font-family:Georgia,serif;color:#1a1a1a;font-size:16px;line-height:1.7;">
+<!-- PREHEADER -->
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#f3f0ec;">
+What is actually driving those signals, and what deserves action first?
+</div>
 
-              <p style="margin:0 0 16px;">Hi {{contact.first_name}},</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f3f0ec;">
+<tr>
+<td class="wrap-td" align="center" style="padding:24px 12px;">
 
-              <p style="margin:0 0 20px;">Your free Health Check did its job if it made one or two things harder to ignore.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;background:#ffffff;border-radius:12px;">
 
-              <p style="margin:0 0 16px;">The next question is not, "What else is wrong?"</p>
+<!-- HEADER -->
+<tr>
+<td class="card-td" style="padding:28px 32px;background:#596654;border-radius:12px 12px 0 0;text-align:center;">
+<img class="logo" src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png" alt="CFO By Design" width="200" style="display:block;margin:0 auto;width:200px;max-width:200px;height:auto;border:0;">
+<div class="tagline" style="font-family:'Manrope',Arial,Helvetica,sans-serif;color:#d6ddd3;font-size:11px;letter-spacing:2.5px;margin-top:10px;">STRATEGY MATTERS &middot; YOUR BUSINESS MATTERS</div>
+</td>
+</tr>
 
-              <p style="margin:0 0 20px;">The next question is, <strong>"What is actually driving this, how significant is it, and what deserves attention first?"</strong></p>
+<!-- BODY -->
+<tr>
+<td class="card-td" style="padding:32px 32px;font-family:'Manrope',Arial,Helvetica,sans-serif;color:#1d1d1b;font-size:16px;line-height:1.7;">
 
-              <p style="margin:0 0 16px;">That is what the $47 Full Diagnostic is built to answer.</p>
+<p style="margin:0 0 16px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#1d1d1b;font-weight:400;text-align:left;">Hi {{contact.first_name}},</p>
 
-              <p style="margin:0 0 20px;">It connects the patterns across cash flow, debt, margins, receivables, financial visibility, and growth capacity. Then a CFO By Design strategist reviews it with you so you are not left trying to interpret a report by yourself.</p>
+<p style="margin:0 0 16px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#4f524c;font-weight:400;text-align:left;">Your Business Health Check did its job if it made one or two things harder to ignore.</p>
 
-              <p style="margin:0 0 24px;">A report is not a relationship. The analysis shows you what is happening. The strategist helps you decide what to do about it.</p>
+<p style="margin:0 0 8px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#4f524c;font-weight:400;text-align:left;">The next question is not:</p>
 
-              <div style="margin:20px 0;text-align:center;">
-                <a class="btn-primary" href="https://my.cfobydesign.com/payment-link/6a0db7aa1a6dcdeebb53b641" style="display:inline-block;padding:16px 32px;background:#c4a647;color:#ffffff;font-family:Arial,sans-serif;font-weight:700;text-decoration:none;border-radius:6px;font-size:15px;letter-spacing:1px;">GET THE FULL DIAGNOSTIC + 30-MIN REVIEW — $47</a>
-              </div>
-              <p style="margin:12px 0 24px;text-align:center;font-family:Arial,sans-serif;color:#9ca3af;font-size:11px;">One-time payment · No subscription · Includes your live strategist review</p>
+<p style="margin:0 0 16px;padding:2px 0 2px 14px;border-left:3px solid #e0a838;font-family:'Manrope',Arial,Helvetica,sans-serif;color:#1d1d1b;font-size:17px;line-height:1.5;font-weight:700;">"What else is wrong?"</p>
 
-              <p style="margin:20px 0 0;color:#6b7280;font-size:14px;text-align:center;">
-                Reply with questions — we read every response.
-              </p>
+<p style="margin:0 0 8px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#4f524c;font-weight:400;text-align:left;">The next question is:</p>
 
-            </td>
-          </tr>
+<p style="margin:0 0 20px;padding:2px 0 2px 14px;border-left:3px solid #e0a838;font-family:'Manrope',Arial,Helvetica,sans-serif;color:#1d1d1b;font-size:17px;line-height:1.5;font-weight:700;">"What is actually driving this, how significant is it, and what deserves attention first?"</p>
 
-          <tr>
-            <td class="card-td" style="padding:22px 32px;background:#0f0f0f;border-radius:0 0 12px 12px;text-align:center;">
-              <div style="font-family:Arial,sans-serif;color:#9ca3af;font-size:11px;letter-spacing:2px;">CFO BY DESIGN · cfobydesign.com</div>
-              <div style="font-family:Arial,sans-serif;color:#6b7280;font-size:10px;margin-top:6px;">Your Business Finances. Professionally Managed.</div>
-              <div style="font-family:Arial,sans-serif;color:#4b5563;font-size:10px;margin-top:12px;">
-                <a href="https://cfobydesign.com/privacy" style="color:#6b7280;text-decoration:underline;mso-style-textfill-fill-color:#6b7280;"><!--[if mso]><font color="#6b7280"><![endif]-->Privacy<!--[if mso]></font><![endif]--></a>
-                &nbsp;·&nbsp;
-                <a href="https://success.cfobydesign.com/tc-page" style="color:#6b7280;text-decoration:underline;mso-style-textfill-fill-color:#6b7280;"><!--[if mso]><font color="#6b7280"><![endif]-->Terms<!--[if mso]></font><![endif]--></a>
-                &nbsp;·&nbsp;
-                <a href="{{unsubscribe_url}}" style="color:#6b7280;text-decoration:underline;mso-style-textfill-fill-color:#6b7280;"><!--[if mso]><font color="#6b7280"><![endif]-->Unsubscribe<!--[if mso]></font><![endif]--></a>
-              </div>
-            </td>
-          </tr>
+<!-- $47 FULL DIAGNOSTIC -->
+<div class="upsell-box" style="margin:8px 0 12px;padding:24px;background:#edf0ea;border:1px solid #d6ddd3;border-left:4px solid #e0a838;border-radius:12px;">
+<p style="margin:0 0 10px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#1d1d1b;font-weight:700;text-align:left;">That is what the Full Diagnostic is built to answer.</p>
+<p style="margin:0 0 14px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#4f524c;font-weight:400;text-align:left;">It connects the patterns across cash flow, debt, margins, receivables, financial visibility, and growth capacity.<br>
+Then a CFO By Design strategist reviews the findings with you so you are not left trying to interpret a report by yourself.</p>
+<p style="margin:0 0 6px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#4f524c;font-weight:400;text-align:left;">A report can show you the signals.<br>
+The live review helps you decide what they mean for the next decision.</p>
+<div style="margin:20px 0 8px;text-align:center;">
+<a class="btn-primary" href="https://my.cfobydesign.com/payment-link/6a0db7aa1a6dcdeebb53b641" style="display:inline-block;padding:15px 30px;background:#596654;color:#ffffff;border:2px solid #596654;font-family:'Manrope',Arial,Helvetica,sans-serif;font-weight:700;text-decoration:none;border-radius:10px;font-size:15px;letter-spacing:0.5px;text-transform:uppercase;">Get my Full Diagnostic</a>
+</div>
+<p style="margin:12px 0 0;font-family:'Manrope',Arial,Helvetica,sans-serif;text-align:center;color:#6f736b;font-size:12px;line-height:1.6;">One-time investment: <strong style="color:#1d1d1b;font-size:14px;">$47</strong><br>
+No subscription. Your 30-minute Strategist Review is included.</p>
+</div>
 
-        </table>
-      </td>
-    </tr>
-  </table>
+<p style="margin:24px 0 0;font-family:'Manrope',Arial,Helvetica,sans-serif;color:#6f736b;font-size:14px;line-height:1.6;text-align:center;">Reply with questions. We read every response.</p>
+
+</td>
+</tr>
+
+<!-- FOOTER -->
+<tr>
+<td class="card-td" style="padding:22px 32px;background:#596654;border-radius:0 0 12px 12px;text-align:center;">
+<div style="font-family:'Manrope',Arial,Helvetica,sans-serif;color:#f3f0ec;font-size:11px;letter-spacing:2px;">CFO BY DESIGN &middot; cfobydesign.com</div>
+<div style="font-family:'Manrope',Arial,Helvetica,sans-serif;color:#d6ddd3;font-size:10px;margin-top:6px;">Your Business Finances. Professionally Managed.</div>
+<div style="font-family:'Manrope',Arial,Helvetica,sans-serif;color:#d6ddd3;font-size:10px;margin-top:12px;">
+<a href="https://cfobydesign.com/privacy" style="color:#d6ddd3;text-decoration:underline;mso-style-textfill-fill-color:#d6ddd3;"><!--[if mso]><font color="#d6ddd3"><![endif]-->Privacy<!--[if mso]></font><![endif]--></a> &nbsp;&middot;&nbsp; <a href="https://success.cfobydesign.com/tc-page" style="color:#d6ddd3;text-decoration:underline;mso-style-textfill-fill-color:#d6ddd3;"><!--[if mso]><font color="#d6ddd3"><![endif]-->Terms<!--[if mso]></font><![endif]--></a> &nbsp;&middot;&nbsp; <a href="{{unsubscribe_url}}" style="color:#d6ddd3;text-decoration:underline;mso-style-textfill-fill-color:#d6ddd3;"><!--[if mso]><font color="#d6ddd3"><![endif]-->Unsubscribe<!--[if mso]></font><![endif]--></a>
+</div>
+</td>
+</tr>
+
+</table>
+</td>
+</tr>
+</table>
+
 </body>
 </html>
