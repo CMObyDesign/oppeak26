@@ -373,31 +373,42 @@ export const FIELD_NORMALIZERS = Object.freeze({
   "kBmYfSbx77Cg72cCc1TG": { question_key: "has_documented_budget",         normalizer: normYesNo },
   "tbY1bimXCPjV7GocyPBv": { question_key: "debt_status",                   normalizer: normDebtStatus },
   "RwNhRxRitJX9NG8Lg4Q2": { question_key: "merchant_processing_last_review", normalizer: normMerchantReview },
-  // Average Sale / Project Value (paid_47 only, 2026-10-29). Contextual
-  // evidence for revenue opportunity sizing, concentration economics,
-  // and capacity decisions. The TIER_GUIDE.paid_47 "AVERAGE SALE /
-  // PROJECT VALUE DISCIPLINE" block instructs Solomon never to treat
-  // this value as profit, contribution margin, cash, or LTV, and never
-  // to invent an average when the owner skipped the field or answered
-  // "varies significantly".
-  //
-  // IMPORTANT (ops): the HL field ID below is a PLACEHOLDER. Replace
-  // "__TBD_HL_FIELD_ID_FOR_AVERAGE_SALE_PROJECT_VALUE__" with the real
-  // GHL custom-field id once the field is published in HL. Until then
-  // this row is inert — the dispatcher keys off HL field id, so an
-  // intake carrying no matching id simply skips normalization and
-  // nothing else breaks. The derived-metric passthrough and the
-  // TIER_GUIDE block are safe to ship ahead of the id for the same
-  // reason: both no-op when `average_sale_project_value` is absent
-  // from the normalized facts.
-  "__TBD_HL_FIELD_ID_FOR_AVERAGE_SALE_PROJECT_VALUE__": {
-    question_key: "average_sale_project_value",
-    normalizer: normMoney,
-  },
   // Deliberately NOT normalizing paid_47 narrative fields: competitors,
   // automation ideas, best-margins, proprietary process, recurring revenue
   // idea, bold move, visibility, where losing deals, financial metrics not
   // tracked. Prose stays prose.
+});
+
+// Secondary dispatch table keyed by HL custom-field fieldKey (the bit
+// after `contact.` in a merge tag like `{{contact.my_field}}`). Used
+// by `normalizeContactFields` as a fallback when a field has no row
+// in FIELD_NORMALIZERS by id — which lets ops wire a new HL field by
+// just creating it in HL and giving us its fieldKey, without needing
+// to look up the opaque HL internal id.
+//
+// Match order inside `normalizeContactFields`:
+//   1. FIELD_NORMALIZERS[f.id]  (fastest; existing rows live here)
+//   2. FIELD_NORMALIZERS_BY_KEY[bareKey]  (fallback)
+//
+// `bareKey` is the fieldKey with any leading "contact." stripped. Both
+// the catalog's `fieldKey` and the per-field `f.fieldKey` echo HL use
+// the "contact." prefix on some surfaces and bare on others; the
+// dispatcher accepts either.
+export const FIELD_NORMALIZERS_BY_KEY = Object.freeze({
+  // Average Sale / Project Value (paid_47 only, 2026-10-29).
+  // Contextual evidence for revenue-opportunity sizing, concentration
+  // economics, and capacity decisions. The TIER_GUIDE.paid_47
+  // "AVERAGE SALE / PROJECT VALUE DISCIPLINE" block instructs Solomon
+  // never to treat this value as profit, contribution margin, cash,
+  // or LTV, and never to invent an average when the owner skipped the
+  // field or answered "varies significantly".
+  //
+  // HL merge tag: {{contact.average_saleproject_value}}
+  // Bare fieldKey: average_saleproject_value
+  "average_saleproject_value": {
+    question_key: "average_sale_project_value",
+    normalizer: normMoney,
+  },
 });
 
 // Count helper exposed for test visibility — operational use is the full
@@ -444,7 +455,22 @@ export function normalizeContactFields(contact, catalog) {
   const out = [];
   for (const f of cfs) {
     if (!f || !f.id) continue;
-    const spec = FIELD_NORMALIZERS[f.id];
+    // Primary dispatch: match by HL custom-field id.
+    let spec = FIELD_NORMALIZERS[f.id];
+    // Secondary dispatch (2026-10-30): if no id-row exists, fall back
+    // to matching by fieldKey. Lets ops wire a new HL field by giving
+    // us only the merge-field key, without the opaque HL internal id.
+    // Pulls the fieldKey from the field itself first; falls back to
+    // the catalog metadata when HL did not echo it on the field.
+    if (!spec) {
+      const rawKey = f.fieldKey || f.key || catalog?.[f.id]?.fieldKey || "";
+      const bareKey = String(rawKey).startsWith("contact.")
+        ? String(rawKey).slice("contact.".length)
+        : String(rawKey);
+      if (bareKey && FIELD_NORMALIZERS_BY_KEY[bareKey]) {
+        spec = FIELD_NORMALIZERS_BY_KEY[bareKey];
+      }
+    }
     if (!spec) continue;
     const raw = f.value ?? f.field_value ?? "";
     const rawStr = typeof raw === "string" ? raw : String(raw ?? "");
