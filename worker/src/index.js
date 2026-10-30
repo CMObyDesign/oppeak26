@@ -4343,19 +4343,107 @@ const TIER_REQUIRED_TAG = {
 // (not instead of) the array keeps backward compatibility for any
 // downstream consumer that already reads `answers`.
 //
-// The map keys answer the position in the submitted order so Liz can
-// cross-reference by question number without having to parse strings.
-// Values are the raw owner answer strings; empty / missing entries are
-// omitted rather than echoed as "" so the HL preview is readable.
-function flattenAnswersForTracking(answers) {
+// POSITION STABILITY (Codex P1 on #170): the answer index is NOT a
+// stable question number on the GHL survey path. `answersFromContactFields`
+// drops blank fields and includes non-Solomon CRM fields in GHL's
+// own iteration order; `normalizeAnswers` filters empties too. If an
+// owner skips an optional field, every later `answer_N` key shifts
+// and Liz's HL automation would copy the wrong response into the wrong
+// contact field.
+//
+// Fix: resolve the position from a tier-specific intake-position map
+// keyed by HL custom-field id. When the tier has a map AND the answer
+// carries its originating field id (`_field_id`, injected by
+// `answersFromContactFields`), the position is deterministic. Entries
+// that cannot resolve to a stable position in a mapped tier are
+// emitted under `unmapped_<i>` so downstream automation sees they are
+// NOT at the stable position — never mis-slotted into a numbered key.
+//
+// Tiers without a position map (currently: paid_47, paid_297, console)
+// retain the array-index behavior for backward compatibility; the
+// paid tiers' intake is variable-shape (merge-tag HL custom fields
+// with no canonical Q1..QN order) and a position map there would be
+// as fragile as the index it replaced. Documented in the result as
+// `_positions: "indexed"` vs `"mapped"` so a consumer can tell.
+//
+// Values are the raw owner answer strings; empty / missing entries
+// are omitted rather than echoed as "" so the HL preview is readable.
+
+// Stable Q1-Q11 position by HL custom-field id for the free intake.
+// Pinned to the current `freeAssessmentQuestions.ts` order; any change
+// to the live intake order must update this map.
+const FREE_INTAKE_POSITION_BY_FIELD_ID = Object.freeze({
+  "5VWVNRrQYcLqXhckh4f4":  1, // Q1  business_type
+  "nCRqWH0x1sdJIgUPDr2E":  2, // Q2  customer_acquisition_channel
+  "nbPL6APmjrjr43J6urVb":  3, // Q3  industry
+  "OyQjw4nGNHJYADsq5ggg":  4, // Q4  active_debt_summary
+  "8sSKohKtQZZzJEtM2ju0":  5, // Q5  financial_decision_basis
+  "deItnw0p1H7sO1okRjGS":  6, // Q6  differentiator
+  "hV9yij5uFitztZzanSaa":  7, // Q7  referral_language
+  "ngBePHf4iKPhaHm2OtSv":  8, // Q8  revenue_leak
+  "cvuAgfuL94eBahOrnTY0":  9, // Q9  twenty_percent_profit
+  "cdlV9zqJxztcxfXgD4J0": 10, // Q10 demand_not_captured
+  "qKRvCyjprebbK75tC05h": 11, // Q11 ninety_day_loss
+});
+
+const INTAKE_POSITIONS = Object.freeze({
+  free: FREE_INTAKE_POSITION_BY_FIELD_ID,
+  // paid_47 / paid_297: no canonical position map (variable-shape
+  // intake; see comment above). Fall back to indexed behavior.
+});
+
+function flattenAnswersForTracking(answers, opts = {}) {
   const out = {};
   if (!Array.isArray(answers)) return out;
+  const tier = opts.tier || null;
+  const positionMap = tier && Object.hasOwn(INTAKE_POSITIONS, tier)
+    ? INTAKE_POSITIONS[tier]
+    : null;
+  // 2026-10-30 (Codex P1 on #171): enter mapped mode ONLY when the
+  // batch actually carries field IDs. The React free-tier path
+  // (`source: "swot-app"`) submits `{question, answer}` objects with
+  // no `_field_id` — formatAnswersForAgent builds them and
+  // normalizeAnswers strips anything else. If we entered mapped
+  // mode on a batch with no field IDs we'd push every answer into
+  // `unmapped_N` and lose `answer_1`..`answer_11` entirely on that
+  // path, breaking any HL automation that reads the flat keys.
+  //
+  // Require ALL non-empty answers to carry `_field_id` before using
+  // the position map. The GHL survey path (`answersFromContactFields`)
+  // tags every entry with its HL custom-field id, so it stays mapped.
+  // The React inline path and the console path carry no field IDs and
+  // fall through to indexed, which is safe because those callers
+  // control the submission order themselves.
+  const nonEmpty = answers.filter((a) => {
+    const raw = a && (a.answer ?? a.value);
+    if (raw === undefined || raw === null) return false;
+    const str = typeof raw === "string" ? raw : String(raw);
+    return !!str.trim();
+  });
+  const allHaveFieldIds =
+    nonEmpty.length > 0 && nonEmpty.every((a) => a && a._field_id);
+  const useMappedMode = !!(positionMap && allHaveFieldIds);
   answers.forEach((a, i) => {
     const raw = a && (a.answer ?? a.value);
     if (raw === undefined || raw === null) return;
     const str = typeof raw === "string" ? raw : String(raw);
     if (!str.trim()) return;
-    out[`answer_${i + 1}`] = str;
+    if (useMappedMode) {
+      const fieldId = a._field_id;
+      const pos = Object.hasOwn(positionMap, fieldId) ? positionMap[fieldId] : null;
+      if (pos) {
+        out[`answer_${pos}`] = str;
+      } else {
+        // Mapped tier + the batch carries field IDs, but THIS entry's
+        // field ID is not in the tier's position map (unknown HL
+        // field or a non-Solomon CRM field slipped past the filter).
+        // Emit under a clearly-unordered key so Liz's HL automation
+        // never reads an orphan as a canonical Q position.
+        out[`unmapped_${i + 1}`] = str;
+      }
+    } else {
+      out[`answer_${i + 1}`] = str;
+    }
   });
   return out;
 }
@@ -6374,6 +6462,13 @@ async function answersFromContactFields(contact, env) {
       return {
         question,
         answer: String(f.value).trim(),
+        // _field_id lets flattenAnswersForTracking resolve a stable
+        // Q-position via INTAKE_POSITIONS. Prefixed with `_` so it
+        // stays internal — Solomon's prompt builder uses only the
+        // {question, answer} fields; the strategist brief uses the
+        // normalized facts bundle; this metadata never bleeds into
+        // the LLM input.
+        _field_id: f.id,
         _source: curated ? "mapped" : "fallback",
       };
     })
@@ -7124,7 +7219,7 @@ async function finalizeSurveyWriteback({
       headline: agent.headline || "",
       opportunity_flags: agent.opportunityFlags || [],
       answers,
-      ...flattenAnswersForTracking(answers),
+      ...flattenAnswersForTracking(answers, { tier }),
       source: "ghl_survey",
     }, env, { dryRun }),
   ]);
@@ -8725,7 +8820,7 @@ export default {
             headline: agent.headline || "",
             opportunity_flags: agent.opportunityFlags || [],
             answers,
-            ...flattenAnswersForTracking(answers),
+            ...flattenAnswersForTracking(answers, { tier }),
             source: "swot-app",
           }, env)
         ])
