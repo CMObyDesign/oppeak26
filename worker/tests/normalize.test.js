@@ -270,18 +270,128 @@ describe("FIELD_NORMALIZERS", () => {
     assert.equal(FIELD_NORMALIZERS["8sSKohKtQZZzJEtM2ju0"].question_key, "financial_decision_basis");
   });
 
-  // 2026-10-29: Average Sale / Project Value — new paid_47 contextual
-  // field. The HL field id is a documented placeholder until ops
-  // supplies the real id; the question_key and normalizer are the
-  // stable contract downstream code reads.
-  it("exposes the Average Sale / Project Value row with the stable question_key and normMoney normalizer", () => {
-    const row = Object.values(FIELD_NORMALIZERS).find(
-      (r) => r.question_key === "average_sale_project_value",
-    );
-    assert.ok(row, "FIELD_NORMALIZERS must carry an average_sale_project_value row");
-    assert.equal(row.normalizer, PRIMITIVES.normMoney,
-      "average_sale_project_value must be normalized as a dollar amount");
+  // 2026-10-30: Average Sale / Project Value — paid_47 contextual
+  // field. Dispatched via FIELD_NORMALIZERS_BY_KEY (secondary map
+  // keyed by HL merge-field key), so ops never needs to look up the
+  // opaque HL internal id — just share the merge tag.
+  it("exposes the Average Sale / Project Value row via FIELD_NORMALIZERS_BY_KEY with normMoney", async () => {
+    const { FIELD_NORMALIZERS_BY_KEY } = await import("../src/normalize.js");
+    const row = FIELD_NORMALIZERS_BY_KEY["average_saleproject_value"];
+    assert.ok(row, "FIELD_NORMALIZERS_BY_KEY must carry average_saleproject_value");
+    assert.equal(row.question_key, "average_sale_project_value");
+    assert.equal(row.normalizer, PRIMITIVES.normMoney);
   });
+});
+
+// --- fieldKey fallback dispatch -----------------------------------------
+
+describe("normalizeContactFields — fieldKey fallback dispatch", () => {
+  it("normalizes a field whose id is NOT in FIELD_NORMALIZERS but whose fieldKey matches FIELD_NORMALIZERS_BY_KEY", async () => {
+    const { normalizeContactFields } = await import("../src/normalize.js");
+    // Simulate HL echoing the Average Sale / Project Value field
+    // with an unknown id but a known fieldKey. The dispatcher's
+    // secondary path must still produce a normalized entry.
+    const contact = {
+      customFields: [
+        {
+          id: "whatever_hl_assigned_this_id",
+          fieldKey: "contact.average_saleproject_value",
+          value: "$25,000",
+        },
+      ],
+    };
+    const out = normalizeContactFields(contact, {});
+    assert.equal(out.length, 1);
+    assert.equal(out[0].question_key, "average_sale_project_value");
+    assert.equal(out[0].normalized_value, 25000);
+    assert.equal(out[0].source_field_id, "whatever_hl_assigned_this_id");
+  });
+
+  it("accepts the bare fieldKey form (no 'contact.' prefix)", async () => {
+    const { normalizeContactFields } = await import("../src/normalize.js");
+    const contact = {
+      customFields: [
+        {
+          id: "arbitrary_id",
+          fieldKey: "average_saleproject_value",
+          value: "12500",
+        },
+      ],
+    };
+    const out = normalizeContactFields(contact, {});
+    assert.equal(out.length, 1);
+    assert.equal(out[0].normalized_value, 12500);
+  });
+
+  it("falls back through the catalog's fieldKey when the field itself did not echo one", async () => {
+    const { normalizeContactFields } = await import("../src/normalize.js");
+    const contact = {
+      customFields: [
+        { id: "catalog_only_field", value: "7500" },
+      ],
+    };
+    const catalog = {
+      "catalog_only_field": { fieldKey: "contact.average_saleproject_value" },
+    };
+    const out = normalizeContactFields(contact, catalog);
+    assert.equal(out.length, 1);
+    assert.equal(out[0].normalized_value, 7500);
+  });
+
+  it("silently skips a field with neither id-row nor fieldKey-row (no spurious normalization)", async () => {
+    const { normalizeContactFields } = await import("../src/normalize.js");
+    const contact = {
+      customFields: [
+        { id: "unknown_id", fieldKey: "contact.completely_new_field", value: "ok" },
+      ],
+    };
+    const out = normalizeContactFields(contact, {});
+    assert.equal(out.length, 0);
+  });
+
+  // 2026-10-30 (Codex P2 on #167): FIELD_NORMALIZERS_BY_KEY[bareKey]
+  // without an own-property guard would match Object.prototype
+  // members. An HL field with fieldKey "contact.constructor" or
+  // "contact.toString" would resolve to a native function, and the
+  // later `spec.normalizer(rawStr)` call would throw. In the queue +
+  // webhook paths that exception nukes the entire normalization +
+  // derived-facts bundle for the run, so one unrelated custom field
+  // can discard every deterministic fact Solomon would have cited.
+  //
+  // Hardening: `Object.hasOwn` on both the id and the fieldKey
+  // lookups. These tests pin the hardening against regressions.
+  for (const protoKey of ["constructor", "toString", "hasOwnProperty", "__proto__"]) {
+    it(`is safe when a field's fieldKey resolves to the Object.prototype member "${protoKey}"`, async () => {
+      const { normalizeContactFields } = await import("../src/normalize.js");
+      const contact = {
+        customFields: [
+          { id: `some_hl_id_for_${protoKey}`, fieldKey: `contact.${protoKey}`, value: "ok" },
+          // Confirm the dispatcher survives + still normalizes the
+          // real Average Sale row in the same batch.
+          { id: "arbitrary_id", fieldKey: "contact.average_saleproject_value", value: "25000" },
+        ],
+      };
+      // Must NOT throw and must still return the real row.
+      const out = normalizeContactFields(contact, {});
+      assert.equal(out.length, 1);
+      assert.equal(out[0].question_key, "average_sale_project_value");
+      assert.equal(out[0].normalized_value, 25000);
+    });
+
+    it(`is safe when a field's id itself matches the Object.prototype member "${protoKey}"`, async () => {
+      const { normalizeContactFields } = await import("../src/normalize.js");
+      // Pathological case: HL assigns an internal id that is literally
+      // "constructor". The primary lookup must own-property-check
+      // against FIELD_NORMALIZERS the same way.
+      const contact = {
+        customFields: [
+          { id: protoKey, value: "ok" },
+        ],
+      };
+      const out = normalizeContactFields(contact, {});
+      assert.equal(out.length, 0, "prototype-member id must not resolve to a spec");
+    });
+  }
 });
 
 // --- normalizeContactFields dispatcher ----------------------------------
