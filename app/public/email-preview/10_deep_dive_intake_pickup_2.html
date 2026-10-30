@@ -5,87 +5,123 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="format-detection" content="telephone=no, address=no, date=no, email=no">
+
   <title>About 12 minutes from done</title>
+
+  <!-- Brand colours match the BGA sales page / cfobydesign.com:
+       cream #f3f0ec, sage #596654, gold #e0a838, ink #1d1d1b.
+       Manrope loads where the client supports web fonts; Arial elsewhere. -->
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+
   <style>
     @media only screen and (max-width:600px) {
       .wrap-td { padding: 16px 8px !important; }
       .card-td { padding: 20px 20px !important; }
-      .btn-primary { display: block !important; width: 100% !important; padding: 16px 20px !important; font-size: 14px !important; box-sizing: border-box; }
+      .report-box { padding: 16px !important; }
+      .upsell-box { padding: 20px 16px !important; }
+      .includes-box { padding: 14px 14px !important; }
+      .btn-primary, .btn-secondary {
+        display: block !important;
+        width: 100% !important;
+        padding: 15px 12px !important;
+        font-size: 14px !important;
+        box-sizing: border-box;
+      }
       .logo { width: 160px !important; max-width: 160px !important; }
-      body, td, p, li { font-size: 15px !important; }
-      h1 { font-size: 22px !important; line-height: 1.25 !important; }
+      .tagline { font-size: 9px !important; letter-spacing: 1.5px !important; }
+      h1 { font-size: 24px !important; line-height: 1.25 !important; }
+      h2 { font-size: 18px !important; line-height: 1.3 !important; }
+    }
+
+    @media only screen and (max-width:360px) {
+      .card-td { padding: 18px 16px !important; }
+      .btn-primary, .btn-secondary {
+        padding: 15px 10px !important;
+        font-size: 13px !important;
+        letter-spacing: 0 !important;
+      }
     }
   </style>
 </head>
-<body style="margin:0;padding:0;background:#fafaf7;font-family:Georgia,serif;">
-  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#fafaf7;">
-    Your progress is right where you left it &mdash; on this device. About 12 focused minutes to finish.
-  </div>
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#fafaf7;">
-    <tr>
-      <td class="wrap-td" align="center" style="padding:24px 12px;">
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;background:#ffffff;border-radius:12px;">
 
-          <tr>
-            <td class="card-td" style="padding:28px 32px;background:#0f0f0f;border-radius:12px 12px 0 0;text-align:center;">
-              <img class="logo" src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png" alt="CFO by Design" width="200" style="display:block;margin:0 auto;width:200px;max-width:200px;height:auto;border:0;">
-              <div style="font-family:Arial,sans-serif;color:#9ca3af;font-size:11px;letter-spacing:2.5px;margin-top:10px;">STRATEGY MATTERS &middot; YOUR BUSINESS MATTERS</div>
-            </td>
-          </tr>
+<body style="margin:0;padding:0;background:#f3f0ec;font-family:'Manrope',Arial,Helvetica,sans-serif;">
 
-          <tr>
-            <td class="card-td" style="padding:28px 32px;font-family:Georgia,serif;color:#1a1a1a;font-size:16px;line-height:1.7;">
+<!-- PREHEADER -->
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#f3f0ec;">
+Your progress is right where you left it on this device. About 12 focused minutes to finish.
+</div>
 
-              <p style="margin:0 0 16px;">Hi {{contact.first_name}},</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f3f0ec;">
+<tr>
+<td class="wrap-td" align="center" style="padding:24px 12px;">
 
-              <p style="margin:0 0 16px;">Circling back on your Business Growth Analysis. You started it, and there is roughly 12 focused minutes of questions left before the team can get to work on it.</p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;background:#ffffff;border-radius:12px;">
 
-              <p style="margin:0 0 20px;">No pressure on the timing &mdash; I would rather you finish this thoughtfully than fast. But I did want to make sure it did not get buried under everything else this week.</p>
+<!-- HEADER -->
+<tr>
+<td class="card-td" style="padding:28px 32px;background:#596654;border-radius:12px 12px 0 0;text-align:center;">
+<img class="logo" src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png" alt="CFO By Design" width="200" style="display:block;margin:0 auto;width:200px;max-width:200px;height:auto;border:0;">
+<div class="tagline" style="font-family:'Manrope',Arial,Helvetica,sans-serif;color:#d6ddd3;font-size:11px;letter-spacing:2.5px;margin-top:10px;">STRATEGY MATTERS &middot; YOUR BUSINESS MATTERS</div>
+</td>
+</tr>
 
-              <div style="margin:18px 0 22px;padding:18px 20px;background:#fafaf7;border-left:4px solid #c4a647;border-radius:6px;">
-                <p style="margin:0;color:#1a1a1a;font-size:15px;line-height:1.7;">
-                  <strong>Everything you already entered is saved on this device.</strong> Open the link on the same browser you started on and you will land exactly where you stopped &mdash; nothing to redo. If you started on your laptop and want to finish on your phone (or vice versa), use "Resume by email" on the intake page and we will send you back in.
-                </p>
-              </div>
+<!-- BODY -->
+<tr>
+<td class="card-td" style="padding:32px 32px;font-family:'Manrope',Arial,Helvetica,sans-serif;color:#1d1d1b;font-size:16px;line-height:1.7;">
 
-              <div style="margin:20px 0;text-align:center;">
-                <a class="btn-primary" href="https://success.cfobydesign.com/bga-intake?contactId={{contact.id}}" style="display:inline-block;padding:16px 32px;background:#c4a647;color:#ffffff;border-radius:6px;font-size:15px;letter-spacing:1px;font-family:Arial,sans-serif;font-weight:700;text-decoration:none;">PICK UP WHERE I LEFT OFF</a>
-              </div>
+<p style="margin:0 0 16px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#1d1d1b;font-weight:400;text-align:left;">Hi {{contact.first_name}},</p>
 
-              <p style="margin:0 0 16px;">If it helps to know what is left: how you price, what delivery actually costs you, where money goes when things tighten up, and what you are trying to decide in the next 90 days. Real answers, not tidy ones.</p>
+<p style="margin:0 0 16px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#4f524c;font-weight:400;text-align:left;">Circling back on your Business Growth Analysis.<br>
+You started it, and there are roughly 12 focused minutes of questions left before the team can start preparing the next stage.</p>
 
-              <p style="margin:0 0 16px;">The rest of the process is on us. Five of us read your analysis before you see it, and we get 50 minutes together to walk through it. But none of that starts until your part is in.</p>
+<p style="margin:0 0 16px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#4f524c;font-weight:400;text-align:left;">No pressure on the timing.<br>
+I would rather you finish this thoughtfully than fast. I just do not want it to get buried under everything else happening this week.</p>
 
-              <div style="margin:22px 0 0;padding-top:18px;border-top:1px solid #e5e7eb;">
-                <p style="margin:0;font-size:16px;color:#1a1a1a;">Miguel Hernandez</p>
-                <p style="margin:2px 0 0;font-family:Arial,sans-serif;font-size:12px;color:#6b7280;letter-spacing:0.5px;">Founder, CFO by Design</p>
-              </div>
+<div class="upsell-box" style="margin:8px 0 12px;padding:24px;background:#f3f0ec;border:1px solid #e4e1dc;border-radius:12px;">
+<p style="margin:0 0 6px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#4f524c;font-weight:400;text-align:left;">Everything you already entered is saved on this device.<br>
+Open the link in the same browser you started on and you should land where you stopped. If you want to finish on another device, use Resume by email on the intake page.</p>
+<div style="margin:20px 0 8px;text-align:center;">
+<a class="btn-primary" href="https://success.cfobydesign.com/bga-intake?contactId={{contact.id}}" style="display:inline-block;padding:15px 30px;background:#596654;color:#ffffff;border:2px solid #596654;font-family:'Manrope',Arial,Helvetica,sans-serif;font-weight:700;text-decoration:none;border-radius:10px;font-size:15px;letter-spacing:0.5px;text-transform:uppercase;">Pick up where I left off</a>
+</div>
+</div>
 
-              <p style="margin:18px 0 0;color:#6b7280;font-size:14px;line-height:1.7;">P.S. If a question is confusing or a term does not make sense, just reply to this email. Faster than guessing, and I would rather help than have you get stuck.</p>
+<p style="margin:20px 0 10px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#4f524c;font-weight:400;text-align:left;">What is left gets into the questions that matter most:</p>
 
-            </td>
-          </tr>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 18px;">
+<tr><td valign="top" width="20" style="width:20px;padding:4px 0;"><div style="width:7px;height:7px;margin-top:9px;border-radius:50%;background:#e0a838;"></div></td><td valign="top" style="padding:4px 0;font-family:'Manrope',Arial,Helvetica,sans-serif;color:#4f524c;font-size:15px;line-height:1.6;">How you price.</td></tr>
+<tr><td valign="top" width="20" style="width:20px;padding:4px 0;"><div style="width:7px;height:7px;margin-top:9px;border-radius:50%;background:#e0a838;"></div></td><td valign="top" style="padding:4px 0;font-family:'Manrope',Arial,Helvetica,sans-serif;color:#4f524c;font-size:15px;line-height:1.6;">What delivery actually costs.</td></tr>
+<tr><td valign="top" width="20" style="width:20px;padding:4px 0;"><div style="width:7px;height:7px;margin-top:9px;border-radius:50%;background:#e0a838;"></div></td><td valign="top" style="padding:4px 0;font-family:'Manrope',Arial,Helvetica,sans-serif;color:#4f524c;font-size:15px;line-height:1.6;">Where money gets tight.</td></tr>
+<tr><td valign="top" width="20" style="width:20px;padding:4px 0;"><div style="width:7px;height:7px;margin-top:9px;border-radius:50%;background:#e0a838;"></div></td><td valign="top" style="padding:4px 0;font-family:'Manrope',Arial,Helvetica,sans-serif;color:#4f524c;font-size:15px;line-height:1.6;">What you are trying to decide in the next 90 days.</td></tr>
+</table>
 
-          <tr>
-            <td class="card-td" style="padding:22px 32px;background:#0f0f0f;border-radius:0 0 12px 12px;text-align:center;">
-              <div style="font-family:Arial,sans-serif;color:#9ca3af;font-size:11px;letter-spacing:2px;">CFO BY DESIGN &middot; cfobydesign.com</div>
-              <div style="font-family:Arial,sans-serif;color:#6b7280;font-size:10px;margin-top:6px;">Your Business Finances. Professionally Managed.</div>
-              <div style="font-family:Arial,sans-serif;color:#4b5563;font-size:10px;margin-top:12px;">
-                <a href="https://cfobydesign.com/privacy" style="color:#6b7280;text-decoration:underline;"><!--[if mso]><font color="#6b7280"><![endif]-->Privacy<!--[if mso]></font><![endif]--></a>
-                &nbsp;&middot;&nbsp;
-                <a href="https://success.cfobydesign.com/tc-page" style="color:#6b7280;text-decoration:underline;"><!--[if mso]><font color="#6b7280"><![endif]-->Terms<!--[if mso]></font><![endif]--></a>
-                &nbsp;&middot;&nbsp;
-                <a href="mailto:support@cfobydesign.com" style="color:#6b7280;text-decoration:underline;"><!--[if mso]><font color="#6b7280"><![endif]-->Support<!--[if mso]></font><![endif]--></a>
-              </div>
-              <div style="font-family:Arial,sans-serif;color:#4b5563;font-size:9px;margin-top:10px;line-height:1.6;">
-                You are receiving this because you purchased the Business Growth Analysis. This is a service message about your order.
-              </div>
-            </td>
-          </tr>
+<p style="margin:0 0 16px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#1d1d1b;font-weight:700;text-align:left;">Give us the real answers, not the tidy ones.</p>
 
-        </table>
-      </td>
-    </tr>
-  </table>
+<p style="margin:0 0 0px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#4f524c;font-weight:400;text-align:left;">Once your intake and financials are in, the CFO By Design team can prepare the roadmap for your 50-minute BGA session.<br>
+We will work through it with you on the call, then finalize the written Business Growth Plan afterward.</p>
+
+<div style="margin:26px 0 0;padding-top:18px;border-top:1px solid #e4e1dc;"><p style="margin:0;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;font-weight:800;color:#1d1d1b;">Miguel Hernandez</p><p style="margin:2px 0 0;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:12px;color:#6f736b;letter-spacing:0.5px;">Founder, CFO By Design</p></div>
+
+<p style="margin:18px 0 0;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#6f736b;font-weight:400;text-align:left;">P.S. If a question is confusing or a term does not make sense, reply to this email. I would rather help than have you guess.</p>
+
+</td>
+</tr>
+
+<!-- FOOTER -->
+<tr>
+<td class="card-td" style="padding:22px 32px;background:#596654;border-radius:0 0 12px 12px;text-align:center;">
+<div style="font-family:'Manrope',Arial,Helvetica,sans-serif;color:#f3f0ec;font-size:11px;letter-spacing:2px;">CFO BY DESIGN &middot; cfobydesign.com</div>
+<div style="font-family:'Manrope',Arial,Helvetica,sans-serif;color:#d6ddd3;font-size:10px;margin-top:6px;">Your Business Finances. Professionally Managed.</div>
+<div style="font-family:'Manrope',Arial,Helvetica,sans-serif;color:#d6ddd3;font-size:10px;margin-top:12px;">
+<a href="https://cfobydesign.com/privacy" style="color:#d6ddd3;text-decoration:underline;mso-style-textfill-fill-color:#d6ddd3;"><!--[if mso]><font color="#d6ddd3"><![endif]-->Privacy<!--[if mso]></font><![endif]--></a> &nbsp;&middot;&nbsp; <a href="https://success.cfobydesign.com/tc-page" style="color:#d6ddd3;text-decoration:underline;mso-style-textfill-fill-color:#d6ddd3;"><!--[if mso]><font color="#d6ddd3"><![endif]-->Terms<!--[if mso]></font><![endif]--></a> &nbsp;&middot;&nbsp; <a href="mailto:support@cfobydesign.com" style="color:#d6ddd3;text-decoration:underline;mso-style-textfill-fill-color:#d6ddd3;"><!--[if mso]><font color="#d6ddd3"><![endif]-->Support<!--[if mso]></font><![endif]--></a>
+</div>
+<div style="font-family:'Manrope',Arial,Helvetica,sans-serif;color:#d6ddd3;font-size:10px;margin-top:10px;line-height:1.6;">You are receiving this because you purchased the Business Growth Analysis. This is a service message about your order.</div>
+</td>
+</tr>
+
+</table>
+</td>
+</tr>
+</table>
+
 </body>
 </html>
