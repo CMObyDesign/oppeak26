@@ -455,19 +455,31 @@ export function normalizeContactFields(contact, catalog) {
   const out = [];
   for (const f of cfs) {
     if (!f || !f.id) continue;
-    // Primary dispatch: match by HL custom-field id.
-    let spec = FIELD_NORMALIZERS[f.id];
+    // Primary dispatch: match by HL custom-field id. Own-property
+    // check hardens the lookup against Object.prototype members —
+    // if an HL field id ever collides with "constructor" / "toString"
+    // / etc., the plain bracket lookup would return the inherited
+    // function and the later `spec.normalizer(rawStr)` call would
+    // throw, which in the queue + webhook paths nukes the whole
+    // normalization + derived-facts bundle for that run.
+    let spec = Object.hasOwn(FIELD_NORMALIZERS, f.id)
+      ? FIELD_NORMALIZERS[f.id]
+      : undefined;
     // Secondary dispatch (2026-10-30): if no id-row exists, fall back
     // to matching by fieldKey. Lets ops wire a new HL field by giving
     // us only the merge-field key, without the opaque HL internal id.
     // Pulls the fieldKey from the field itself first; falls back to
     // the catalog metadata when HL did not echo it on the field.
+    // Same own-property guard — the fieldKey space is much more
+    // likely to collide ("contact.constructor" is a legal HL field
+    // key) and Codex surfaced this as a real production hazard
+    // (P2 on #167).
     if (!spec) {
       const rawKey = f.fieldKey || f.key || catalog?.[f.id]?.fieldKey || "";
       const bareKey = String(rawKey).startsWith("contact.")
         ? String(rawKey).slice("contact.".length)
         : String(rawKey);
-      if (bareKey && FIELD_NORMALIZERS_BY_KEY[bareKey]) {
+      if (bareKey && Object.hasOwn(FIELD_NORMALIZERS_BY_KEY, bareKey)) {
         spec = FIELD_NORMALIZERS_BY_KEY[bareKey];
       }
     }

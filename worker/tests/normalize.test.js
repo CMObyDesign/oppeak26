@@ -348,6 +348,50 @@ describe("normalizeContactFields — fieldKey fallback dispatch", () => {
     const out = normalizeContactFields(contact, {});
     assert.equal(out.length, 0);
   });
+
+  // 2026-10-30 (Codex P2 on #167): FIELD_NORMALIZERS_BY_KEY[bareKey]
+  // without an own-property guard would match Object.prototype
+  // members. An HL field with fieldKey "contact.constructor" or
+  // "contact.toString" would resolve to a native function, and the
+  // later `spec.normalizer(rawStr)` call would throw. In the queue +
+  // webhook paths that exception nukes the entire normalization +
+  // derived-facts bundle for the run, so one unrelated custom field
+  // can discard every deterministic fact Solomon would have cited.
+  //
+  // Hardening: `Object.hasOwn` on both the id and the fieldKey
+  // lookups. These tests pin the hardening against regressions.
+  for (const protoKey of ["constructor", "toString", "hasOwnProperty", "__proto__"]) {
+    it(`is safe when a field's fieldKey resolves to the Object.prototype member "${protoKey}"`, async () => {
+      const { normalizeContactFields } = await import("../src/normalize.js");
+      const contact = {
+        customFields: [
+          { id: `some_hl_id_for_${protoKey}`, fieldKey: `contact.${protoKey}`, value: "ok" },
+          // Confirm the dispatcher survives + still normalizes the
+          // real Average Sale row in the same batch.
+          { id: "arbitrary_id", fieldKey: "contact.average_saleproject_value", value: "25000" },
+        ],
+      };
+      // Must NOT throw and must still return the real row.
+      const out = normalizeContactFields(contact, {});
+      assert.equal(out.length, 1);
+      assert.equal(out[0].question_key, "average_sale_project_value");
+      assert.equal(out[0].normalized_value, 25000);
+    });
+
+    it(`is safe when a field's id itself matches the Object.prototype member "${protoKey}"`, async () => {
+      const { normalizeContactFields } = await import("../src/normalize.js");
+      // Pathological case: HL assigns an internal id that is literally
+      // "constructor". The primary lookup must own-property-check
+      // against FIELD_NORMALIZERS the same way.
+      const contact = {
+        customFields: [
+          { id: protoKey, value: "ok" },
+        ],
+      };
+      const out = normalizeContactFields(contact, {});
+      assert.equal(out.length, 0, "prototype-member id must not resolve to a spec");
+    });
+  }
 });
 
 // --- normalizeContactFields dispatcher ----------------------------------
