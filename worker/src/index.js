@@ -1882,6 +1882,28 @@ significantly," or the field is otherwise absent, do not invent an
 average. Do not create a finding solely because the field exists;
 treat its presence as supporting context, not a diagnostic trigger.
 
+RANGE VALUES (e.g. "$25,001-$50,000"):
+If the intake supplies a range rather than an exact number:
+- Preserve the range exactly.
+- Do NOT infer a midpoint.
+- Do NOT convert it into an exact client value.
+- Do NOT use it for exact project-count calculations.
+- Use it as scale / context when materially relevant.
+
+Allowed:
+  "The typical project falls in the reported $25K-$50K range."
+
+Not allowed (midpoint inference):
+  "Your average project is $42K."
+  "The $100K opportunity is roughly 2-3 projects at your $42K
+   average." (converts the range to a midpoint for a count)
+
+A deterministic lower / upper bound is acceptable when it respects
+the range:
+  "At $25K-$50K per project, a $100K opportunity represents 2-4
+   projects depending on where in the range they land." (clearly
+   derives from both ends of the stated range; no midpoint.)
+
 The value may appear in financialSnapshot[] when it is materially
 useful to the owner's decision, with sourceType "customer_answer".
 Do not force it into every report.

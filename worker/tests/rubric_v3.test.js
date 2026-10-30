@@ -362,6 +362,19 @@ describe("Rubric v3 — TIER_GUIDE content", () => {
     assert.match(TIER_GUIDE.paid_47, /Do\s+not\s+create\s+a\s+finding\s+solely\s+because\s+the\s+field\s+exists/);
     assert.match(TIER_GUIDE.paid_47, /Do\s+not\s+force\s+it\s+into\s+every\s+report/);
 
+    // 2026-10-30: RANGE VALUES sub-block — when the intake supplies
+    // a range (e.g. "$25,001-$50,000"), the model must preserve it
+    // exactly, never infer a midpoint, and never convert the range
+    // into an exact client value or exact project-count math.
+    assert.match(TIER_GUIDE.paid_47, /RANGE\s+VALUES/);
+    assert.match(TIER_GUIDE.paid_47, /Preserve\s+the\s+range\s+exactly/);
+    assert.match(TIER_GUIDE.paid_47, /Do\s+NOT\s+infer\s+a\s+midpoint/);
+    assert.match(TIER_GUIDE.paid_47, /Do\s+NOT\s+convert\s+it\s+into\s+an\s+exact\s+client\s+value/);
+    assert.match(TIER_GUIDE.paid_47, /Do\s+NOT\s+use\s+it\s+for\s+exact\s+project-count\s+calculations/);
+    // Positive example present; negative "Your average project is $42K"
+    // explicitly rejected.
+    assert.match(TIER_GUIDE.paid_47, /Your\s+average\s+project\s+is\s+\$42K/);
+
     // 2026-10-29: SUPPORTABILITY LANGUAGE block — paid_47 investigates
     // affordability but does not pronounce a conclusive negative
     // verdict absent the evidence to prove it.
