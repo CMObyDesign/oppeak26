@@ -4334,6 +4334,32 @@ const TIER_REQUIRED_TAG = {
 // Fire an event to the HL Inbound Webhook (Workflow trigger). Non-blocking:
 // runs inside a Promise.allSettled so its failure never breaks the primary
 // GHL writeback. Skips silently if no webhook URL is configured.
+// Flatten the normalized answers array into a top-level
+// { answer_1, answer_2, ... } map for the HL tracking webhook body.
+// Liz uses the webhook payload directly inside HL's "Last Execution"
+// panel to inspect / copy individual question responses back into
+// contact fields, and the nested `answers: [{question, answer}, ...]`
+// shape made every answer collapse into one blob. Flattening alongside
+// (not instead of) the array keeps backward compatibility for any
+// downstream consumer that already reads `answers`.
+//
+// The map keys answer the position in the submitted order so Liz can
+// cross-reference by question number without having to parse strings.
+// Values are the raw owner answer strings; empty / missing entries are
+// omitted rather than echoed as "" so the HL preview is readable.
+function flattenAnswersForTracking(answers) {
+  const out = {};
+  if (!Array.isArray(answers)) return out;
+  answers.forEach((a, i) => {
+    const raw = a && (a.answer ?? a.value);
+    if (raw === undefined || raw === null) return;
+    const str = typeof raw === "string" ? raw : String(raw);
+    if (!str.trim()) return;
+    out[`answer_${i + 1}`] = str;
+  });
+  return out;
+}
+
 async function fireTrackingEvent(payload, env, opts = {}) {
   const url = env.HL_TRACKING_WEBHOOK || CONFIG.HL_TRACKING_WEBHOOK;
   if (!url) return { skipped: true };
@@ -7098,6 +7124,7 @@ async function finalizeSurveyWriteback({
       headline: agent.headline || "",
       opportunity_flags: agent.opportunityFlags || [],
       answers,
+      ...flattenAnswersForTracking(answers),
       source: "ghl_survey",
     }, env, { dryRun }),
   ]);
@@ -8698,6 +8725,7 @@ export default {
             headline: agent.headline || "",
             opportunity_flags: agent.opportunityFlags || [],
             answers,
+            ...flattenAnswersForTracking(answers),
             source: "swot-app",
           }, env)
         ])
@@ -8762,6 +8790,7 @@ export {
   updateGHLContact,
   addGHLTag,
   fireTrackingEvent,
+  flattenAnswersForTracking,
   writeCanonicalRecord,
   writeReportArtifact,
   recordGhlWriteback,
