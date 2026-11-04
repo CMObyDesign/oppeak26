@@ -5,99 +5,144 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="format-detection" content="telephone=no, address=no, date=no, email=no">
+
   <title>Your Business Growth Plan is ready</title>
+
+  <!-- Brand colours match the BGA sales page / cfobydesign.com:
+       cream #f3f0ec, sage #596654, gold #e0a838, ink #1d1d1b.
+       Manrope loads where the client supports web fonts; Arial elsewhere. -->
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;600;700;800&display=swap" rel="stylesheet">
+
   <style>
     @media only screen and (max-width:600px) {
-      .wrap-td { padding:16px 8px !important; }
-      .card-td { padding:22px !important; }
-      .box { padding:16px !important; }
-      .btn-primary { display:block !important;width:100% !important;box-sizing:border-box !important;padding:16px 20px !important;font-size:14px !important; }
-      .btn-secondary { display:block !important;width:100% !important;box-sizing:border-box !important;padding:12px 20px !important; }
-      .logo { width:160px !important;max-width:160px !important; }
-      body, td, p, li { font-size:15px !important; }
-      h1 { font-size:22px !important;line-height:1.25 !important; }
-      h2 { font-size:18px !important;line-height:1.3 !important; }
+      .wrap-td { padding: 16px 8px !important; }
+      .card-td { padding: 20px 20px !important; }
+      .report-box { padding: 16px !important; }
+      .upsell-box { padding: 20px 16px !important; }
+      .includes-box { padding: 14px 14px !important; }
+      .btn-primary, .btn-secondary {
+        display: block !important;
+        width: 100% !important;
+        padding: 15px 12px !important;
+        font-size: 14px !important;
+        box-sizing: border-box;
+      }
+      .logo { width: 160px !important; max-width: 160px !important; }
+      .tagline { font-size: 9px !important; letter-spacing: 1.5px !important; }
+      h1 { font-size: 24px !important; line-height: 1.25 !important; }
+      h2 { font-size: 18px !important; line-height: 1.3 !important; }
+    }
+
+    @media only screen and (max-width:360px) {
+      .card-td { padding: 18px 16px !important; }
+      .btn-primary, .btn-secondary {
+        padding: 15px 10px !important;
+        font-size: 13px !important;
+        letter-spacing: 0 !important;
+      }
     }
   </style>
 </head>
-<body style="margin:0;padding:0;background:#fafaf7;font-family:Arial,Helvetica,sans-serif;">
-  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#fafaf7;">
-    Your finalized roadmap is ready. Start with the 90-day priorities.
-  </div>
 
-  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#fafaf7;">
-    <tr>
-      <td class="wrap-td" align="center" style="padding:24px 12px;">
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;background:#ffffff;border-radius:12px;">
+<body style="margin:0;padding:0;background:#f3f0ec;font-family:'Manrope',Arial,Helvetica,sans-serif;">
 
-          <tr>
-            <td class="card-td" style="padding:28px 32px;background:#0f0f0f;border-radius:12px 12px 0 0;text-align:center;">
-              <img class="logo" src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png" alt="CFO By Design" width="190" style="display:block;margin:0 auto;width:190px;max-width:190px;height:auto;border:0;">
-              <div style="color:#9ca3af;font-size:11px;letter-spacing:2px;margin-top:10px;">SEE CLEARLY · FUND SMART · GROW ON PURPOSE</div>
-            </td>
-          </tr>
+<!-- PREHEADER -->
+<div style="display:none;max-height:0;overflow:hidden;mso-hide:all;font-size:1px;line-height:1px;color:#f3f0ec;">
+Your finalized roadmap is ready. Start with the 90-day priorities.
+</div>
 
-          <tr>
-            <td class="card-td" style="padding:32px;color:#1a1a1a;font-size:16px;line-height:1.7;">
-              <p style="margin:0 0 16px;">Hi {{contact.first_name}},</p>
-              <h1 style="margin:0 0 18px;font-size:27px;line-height:1.3;">Your Business Growth Plan is ready.</h1>
-              <p style="margin:0 0 16px;">This is the finalized roadmap from your Business Growth Analysis and 50-minute strategy session.</p>
-              <p style="margin:0 0 16px;">It reflects the priorities we discussed, the timing behind them, the next steps you agreed to focus on, and the support options that were relevant to your situation.</p>
-              <ul style="margin:0 0 24px;padding-left:24px;color:#374151;">
-                <li style="margin-bottom:8px;"><strong>90-day priorities</strong> are what deserves attention now.</li>
-                <li style="margin-bottom:8px;"><strong>6-month direction</strong> assumes the immediate priorities are already moving.</li>
-                <li style="margin-bottom:8px;"><strong>12-month goals</strong> are where the business is aiming. Reassess them as the 90-day and 6-month work changes the numbers.</li>
-              </ul>
-              <p style="margin:0 0 24px;"><strong>Do not try to do all three time horizons at once.</strong></p>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background:#f3f0ec;">
+<tr>
+<td class="wrap-td" align="center" style="padding:24px 12px;">
 
-              <div class="box" style="margin:20px 0 28px;padding:20px;background:#fafaf7;border:1px solid #e5e7eb;border-radius:8px;">
-                <div style="font-weight:700;color:#92400e;font-size:11px;letter-spacing:2px;margin-bottom:16px;">PART 2 · YOUR BUSINESS GROWTH PLAN</div>
-                {{contact.swot_growth_plan}}
-              </div>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;background:#ffffff;border-radius:12px;">
 
-              <div class="box" style="margin:20px 0 28px;padding:20px;background:#fafaf7;border:1px solid #e5e7eb;border-radius:8px;">
-                <div style="font-weight:700;color:#92400e;font-size:11px;letter-spacing:2px;margin-bottom:16px;">NEXT STEPS FROM YOUR SESSION</div>
-                {{contact.swot_bga_next_steps}}
-              </div>
+<!-- HEADER -->
+<tr>
+<td class="card-td" style="padding:28px 32px;background:#596654;border-radius:12px 12px 0 0;text-align:center;">
+<img class="logo" src="https://assets.cdn.filesafe.space/oLIENQCtGnt9U6gfLhE5/media/6a57c2731097b811951d0e7d.png" alt="CFO By Design" width="200" style="display:block;margin:0 auto;width:200px;max-width:200px;height:auto;border:0;">
+<div class="tagline" style="font-family:'Manrope',Arial,Helvetica,sans-serif;color:#d6ddd3;font-size:11px;letter-spacing:2.5px;margin-top:10px;">SEE CLEARLY &middot; FUND SMART &middot; GROW ON PURPOSE</div>
+</td>
+</tr>
 
-              <div class="box" style="margin:20px 0 28px;padding:20px;background:#fafaf7;border:1px solid #e5e7eb;border-radius:8px;">
-                <div style="font-weight:700;color:#92400e;font-size:11px;letter-spacing:2px;margin-bottom:16px;">CFO BY DESIGN SERVICES SELECTED</div>
-                {{contact.swot_bga_services_selected_display}}
-              </div>
+<!-- BODY -->
+<tr>
+<td class="card-td" style="padding:32px 32px;font-family:'Manrope',Arial,Helvetica,sans-serif;color:#1d1d1b;font-size:16px;line-height:1.7;">
 
-              <div style="margin:24px 0;text-align:center;">
-                <a class="btn-primary" href="{{contact.swot_report_path}}" style="display:inline-block;padding:16px 28px;background:#c4a647;color:#ffffff;text-decoration:none;font-weight:700;border-radius:6px;font-size:15px;letter-spacing:.5px;">VIEW MY BUSINESS GROWTH PLAN</a>
-              </div>
-              <p style="margin:0 0 24px;text-align:center;color:#9ca3af;font-size:12px;">Re-read Part 1 alongside this plan. To save a copy, open the report online and use your browser's Print / Save as PDF option.</p>
+<p style="margin:0 0 16px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#1d1d1b;font-weight:400;text-align:left;">Hi {{contact.first_name}},</p>
 
-              <div class="box" style="margin:24px 0;padding:20px;background:#fdf8f0;border-left:4px solid #c4a647;border-radius:6px;">
-                <div style="color:#92400e;font-size:11px;font-weight:700;letter-spacing:2px;margin-bottom:8px;">HOW TO USE THE PLAN</div>
-                <div style="color:#374151;font-size:14px;line-height:1.7;"><strong>Start with the 90-day priorities.</strong> The 6-month direction comes next. Treat the 12-month section as goals and reassessment points rather than a rigid checklist.</div>
-              </div>
+<h1 style="margin:0 0 18px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:30px;line-height:1.2;color:#1d1d1b;font-weight:800;letter-spacing:-0.3px;">Your Business Growth Plan is ready.</h1>
 
-              <p style="margin:0 0 16px;">If anything in the plan no longer fits as you start executing — a number changes, a priority shifts, or you want to revisit a service option — reply to this email and the team can help.</p>
-              <p style="margin:0 0 0px;color:#6b7280;font-size:14px;text-align:center;">Questions on anything in the plan? Reply to this email or contact <a href="mailto:consulting@cfobydesign.com" style="color:#92400e;">consulting@cfobydesign.com</a>.</p>
-            </td>
-          </tr>
+<p style="margin:0 0 16px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#4f524c;font-weight:400;text-align:left;">This is the finalized roadmap from your Business Growth Analysis and 50-minute BGA session.</p>
 
-          <tr>
-            <td class="card-td" style="padding:22px 32px;background:#0f0f0f;border-radius:0 0 12px 12px;text-align:center;">
-              <div style="color:#9ca3af;font-size:11px;letter-spacing:2px;">CFO BY DESIGN · cfobydesign.com</div>
-              <div style="color:#6b7280;font-size:10px;margin-top:6px;">Your integrated money partner.</div>
+<p style="margin:0 0 16px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#4f524c;font-weight:400;text-align:left;">It reflects what we confirmed together: the priorities, the timing behind them, the next steps you agreed to focus on, and any support options that were relevant to your situation.</p>
 
-              <div style="margin-top:12px;font-size:10px;">
-                <a href="https://cfobydesign.com/privacy" style="color:#6b7280;text-decoration:underline;mso-style-textfill-fill-color:#6b7280;"><!--[if mso]><font color="#6b7280"><![endif]-->Privacy<!--[if mso]></font><![endif]--></a>
-                &nbsp;·&nbsp;
-                <a href="https://success.cfobydesign.com/tc-page" style="color:#6b7280;text-decoration:underline;mso-style-textfill-fill-color:#6b7280;"><!--[if mso]><font color="#6b7280"><![endif]-->Terms<!--[if mso]></font><![endif]--></a>
-                &nbsp;·&nbsp;
-                <a href="{{unsubscribe_url}}" style="color:#6b7280;text-decoration:underline;mso-style-textfill-fill-color:#6b7280;"><!--[if mso]><font color="#6b7280"><![endif]-->Unsubscribe<!--[if mso]></font><![endif]--></a>
-              </div>
-            </td>
-          </tr>
+<div class="upsell-box" style="margin:8px 0 12px;padding:24px;background:#f3f0ec;border:1px solid #e4e1dc;border-radius:12px;">
+<div style="margin:0px 0 10px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-weight:800;color:#9a6f12;font-size:11px;letter-spacing:2px;text-transform:uppercase;">How to read it</div>
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin:0 0 18px;">
+<tr><td valign="top" width="20" style="width:20px;padding:4px 0;"><div style="width:7px;height:7px;margin-top:9px;border-radius:50%;background:#e0a838;"></div></td><td valign="top" style="padding:4px 0;font-family:'Manrope',Arial,Helvetica,sans-serif;color:#4f524c;font-size:14px;line-height:1.6;"><strong style="color:#1d1d1b;">90-day priorities</strong> are what deserves attention now.</td></tr>
+<tr><td valign="top" width="20" style="width:20px;padding:4px 0;"><div style="width:7px;height:7px;margin-top:9px;border-radius:50%;background:#e0a838;"></div></td><td valign="top" style="padding:4px 0;font-family:'Manrope',Arial,Helvetica,sans-serif;color:#4f524c;font-size:14px;line-height:1.6;"><strong style="color:#1d1d1b;">6-month direction</strong> assumes the immediate priorities are already moving.</td></tr>
+<tr><td valign="top" width="20" style="width:20px;padding:4px 0;"><div style="width:7px;height:7px;margin-top:9px;border-radius:50%;background:#e0a838;"></div></td><td valign="top" style="padding:4px 0;font-family:'Manrope',Arial,Helvetica,sans-serif;color:#4f524c;font-size:14px;line-height:1.6;"><strong style="color:#1d1d1b;">12-month goals</strong> are where the business is aiming. Reassess them as the 90-day and 6-month work changes the numbers.</td></tr>
+</table>
+<p style="margin:0 0 0px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#1d1d1b;font-weight:700;text-align:left;">Do not try to do all three time horizons at once.</p>
+</div>
 
-        </table>
-      </td>
-    </tr>
-  </table>
+<div style="margin:28px 0 10px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-weight:800;color:#9a6f12;font-size:11px;letter-spacing:2px;text-transform:uppercase;">Part 2 · Your Business Growth Plan</div>
+
+<!-- GROWTH PLAN -->
+<div class="report-box" style="margin:8px 0 24px;padding:20px;background:#f3f0ec;border:1px solid #e4e1dc;border-radius:12px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#1d1d1b;word-break:break-word;overflow-wrap:anywhere;">
+{{contact.swot_growth_plan}}
+</div>
+
+<div style="margin:8px 0 10px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-weight:800;color:#9a6f12;font-size:11px;letter-spacing:2px;text-transform:uppercase;">Next steps from your session</div>
+
+<!-- NEXT STEPS -->
+<div class="report-box" style="margin:8px 0 24px;padding:20px;background:#f3f0ec;border:1px solid #e4e1dc;border-radius:12px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#1d1d1b;word-break:break-word;overflow-wrap:anywhere;">
+{{contact.swot_bga_next_steps}}
+</div>
+
+<div style="margin:8px 0 10px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-weight:800;color:#9a6f12;font-size:11px;letter-spacing:2px;text-transform:uppercase;">Support options discussed in your session</div>
+
+<!-- SUPPORT OPTIONS -->
+<div class="report-box" style="margin:8px 0 24px;padding:20px;background:#f3f0ec;border:1px solid #e4e1dc;border-radius:12px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:16px;line-height:1.7;color:#1d1d1b;word-break:break-word;overflow-wrap:anywhere;">
+{{contact.swot_bga_services_selected_display}}
+</div>
+
+<div style="margin:4px 0 8px;text-align:center;">
+<a class="btn-primary" href="{{contact.swot_report_path}}" style="display:inline-block;padding:15px 30px;background:#596654;color:#ffffff;border:2px solid #596654;font-family:'Manrope',Arial,Helvetica,sans-serif;font-weight:700;text-decoration:none;border-radius:10px;font-size:15px;letter-spacing:0.5px;text-transform:uppercase;">View my Business Growth Plan</a>
+</div>
+
+<p style="margin:0 0 8px;font-family:'Manrope',Arial,Helvetica,sans-serif;text-align:center;color:#6f736b;font-size:12px;line-height:1.6;">Re-read Part 1 alongside the final plan when useful.<br>
+To save a copy, open the report online and use your browser's Print / Save as PDF option.</p>
+
+<div class="upsell-box" style="margin:28px 0 12px;padding:24px;background:#edf0ea;border:1px solid #d6ddd3;border-left:4px solid #e0a838;border-radius:12px;">
+<div style="margin:0px 0 10px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-weight:800;color:#9a6f12;font-size:11px;letter-spacing:2px;text-transform:uppercase;">How to use the plan</div>
+<p style="margin:0 0 14px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#4f524c;font-weight:400;text-align:left;">Start with the 90-day priorities.<br>
+The 6-month direction comes next.<br>
+Treat the 12-month section as goals and reassessment points rather than a rigid checklist.</p>
+<p style="margin:0 0 0px;font-family:'Manrope',Arial,Helvetica,sans-serif;font-size:14px;line-height:1.7;color:#4f524c;font-weight:400;text-align:left;">If something changes as you start executing, a number moves, a priority shifts, or you want to revisit a support option, reply to this email and the team can help.</p>
+</div>
+
+<p style="margin:24px 0 0;font-family:'Manrope',Arial,Helvetica,sans-serif;color:#6f736b;font-size:14px;line-height:1.6;text-align:center;">Questions on anything in the plan? Reply to this email or contact <a href="mailto:consulting@cfobydesign.com" style="color:#596654;font-weight:700;text-decoration:underline;">consulting@cfobydesign.com</a>.</p>
+
+</td>
+</tr>
+
+<!-- FOOTER -->
+<tr>
+<td class="card-td" style="padding:22px 32px;background:#596654;border-radius:0 0 12px 12px;text-align:center;">
+<div style="font-family:'Manrope',Arial,Helvetica,sans-serif;color:#f3f0ec;font-size:11px;letter-spacing:2px;">CFO BY DESIGN &middot; cfobydesign.com</div>
+<div style="font-family:'Manrope',Arial,Helvetica,sans-serif;color:#d6ddd3;font-size:10px;margin-top:6px;">Your integrated money partner.</div>
+<div style="font-family:'Manrope',Arial,Helvetica,sans-serif;color:#d6ddd3;font-size:10px;margin-top:12px;">
+<a href="https://cfobydesign.com/privacy" style="color:#d6ddd3;text-decoration:underline;mso-style-textfill-fill-color:#d6ddd3;"><!--[if mso]><font color="#d6ddd3"><![endif]-->Privacy<!--[if mso]></font><![endif]--></a> &nbsp;&middot;&nbsp; <a href="https://success.cfobydesign.com/tc-page" style="color:#d6ddd3;text-decoration:underline;mso-style-textfill-fill-color:#d6ddd3;"><!--[if mso]><font color="#d6ddd3"><![endif]-->Terms<!--[if mso]></font><![endif]--></a> &nbsp;&middot;&nbsp; <a href="{{unsubscribe_url}}" style="color:#d6ddd3;text-decoration:underline;mso-style-textfill-fill-color:#d6ddd3;"><!--[if mso]><font color="#d6ddd3"><![endif]-->Unsubscribe<!--[if mso]></font><![endif]--></a>
+</div>
+</td>
+</tr>
+
+</table>
+</td>
+</tr>
+</table>
+
 </body>
 </html>
