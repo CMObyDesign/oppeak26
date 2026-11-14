@@ -13,7 +13,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import {
+import worker, {
   writeCanonicalRecord,
   writeReportArtifact,
   recordGhlWriteback,
@@ -21,6 +21,7 @@ import {
   RUBRIC_VERSION,
   PROMPT_VERSION,
 } from "../src/index.js";
+import { captureFetch } from "./helpers.js";
 
 // Mock D1 handle: records every prepared SQL + bind args, lets each test
 // control the outcome of `run()` and `first()`.
@@ -318,5 +319,86 @@ describe("recordGhlWriteback", () => {
     assert.equal(call.binds[2], "failed");
     assert.equal(call.binds[4], "GHL 500");
     assert.equal(call.binds[6], null, "synced_at must be null on failure");
+  });
+});
+
+// -----------------------------------------------------------------------------
+// POST / React-path canonical write
+//
+// Regression lock: the public assessment endpoint used to call Claude, render
+// the report, and write to GHL custom fields — but it never called
+// writeCanonicalRecord, so every free-tier run through the React app went
+// invisible to /strategist (0 rows in production D1 as of 2026-11-14 while
+// paid_47, which goes through /from-ghl-survey, had 71 rows). A future
+// refactor must not silently re-drop this call.
+// -----------------------------------------------------------------------------
+
+describe("POST / — free tier writes a canonical D1 row", () => {
+  it("calls insertSubmission with tier=free when contactId resolves", async () => {
+    const db = makeMockDb({
+      firstResult: (entry) => (/MAX\(report_version\)/i.test(entry.sql) ? { v: 0 } : null),
+    });
+    const bucket = makeMockBucket();
+    const env = {
+      GHL_API_KEY: "test-ghl",
+      ANTHROPIC_API_KEY: "test-anthropic",
+      SOLOMON_DB: db,
+      SOLOMON_REPORTS: bucket,
+      __CLAUDE_STUB__: async () => JSON.stringify(AGENT_FIXTURE),
+    };
+
+    // Short-circuit every outbound fetch (GHL writeback, tag add, tracking
+    // webhook). Each endpoint just returns 200 so the handler proceeds and
+    // the D1 mock captures the canonical write SQL.
+    const cap = captureFetch(() =>
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    );
+
+    try {
+      const res = await worker.fetch(
+        new Request("https://example.com/", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            tier: "free",
+            contact: { contactId: "c_react_free_1", email: "liz@example.com", firstName: "Liz" },
+            businessProfile: {},
+            answers: [
+              { question: "What best describes your business type?", answer: "Remodeling" },
+              { question: "How do you reach customers?", answer: "Referrals" },
+            ],
+          }),
+        }),
+        env,
+        { waitUntil: () => {}, passThroughOnException: () => {} },
+      );
+      assert.equal(res.status, 200, "free POST should succeed end-to-end");
+
+      // Submissions insert must have happened. Look for the tier binding on
+      // any INSERT INTO submissions call.
+      const submissionInsert = db._log.find((entry) =>
+        /INSERT\s+INTO\s+submissions/i.test(entry.sql)
+      );
+      assert.ok(
+        submissionInsert,
+        "insertSubmission must be called on POST / free tier (regression: was silently skipped)"
+      );
+      assert.equal(
+        submissionInsert.binds[2],
+        "free",
+        "submissions row must record tier=free"
+      );
+
+      // R2 artifact must have been written too — part of the canonical contract.
+      assert.ok(
+        bucket._log.length > 0,
+        "canonical write must put the rendered report to R2"
+      );
+    } finally {
+      cap.restore();
+    }
   });
 });

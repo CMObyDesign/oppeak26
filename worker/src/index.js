@@ -8749,6 +8749,29 @@ export default {
     if (contactId) {
       const reportBody = buildReportHtml(agent);
 
+      // Canonical D1 + R2 write. Historically the POST / React path skipped
+      // this — every free-tier run went to the browser, got written to GHL
+      // custom fields, and never landed in the submissions / report_versions
+      // tables. That left /strategist blind to all free output (confirmed
+      // Nov 14 2026: 71 paid_47 rows, 0 free rows in production D1). Mirror
+      // the shape that handleConsoleRun uses (no normalizedAnswers /
+      // derivedMetrics on this path — the POST body carries raw
+      // {question, answer} with no field-id stream to normalize from).
+      const canonical = await writeCanonicalRecord(env, {
+        contact: { id: contactId, ...contact },
+        tier,
+        answers,
+        agent,
+        reportHtml: reportBody,
+        sourceEventId: null,
+        dryRun: false,
+      });
+      if (canonical && canonical.ok === false) {
+        console.warn(`[POST /] tier=${tier} contactId=${contactId} — canonical D1 write failed: ${canonical.error}`);
+      } else if (canonical && canonical.skipped) {
+        console.log(`[POST /] tier=${tier} contactId=${contactId} — canonical skipped: ${canonical.reason}`);
+      }
+
       // One report field per tier — no mirroring. Each tier has its own named deliverable:
       //   free     -> swot_free_report      (Free SWOT Report)
       //   paid_47  -> swot_full_report      (Full Diagnostic Report)
