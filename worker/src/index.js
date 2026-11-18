@@ -8757,8 +8757,13 @@ export default {
       // the shape that handleConsoleRun uses (no normalizedAnswers /
       // derivedMetrics on this path — the POST body carries raw
       // {question, answer} with no field-id stream to normalize from).
+      // Spread `contact` first so the resolved `contactId` wins if the
+      // JSON payload happened to carry its own `id`. Otherwise a caller
+      // could attribute the canonical submission and R2 artifact to a
+      // contact other than the one GHL writeback targets (Codex P2 on
+      // #173, finding 1).
       const canonical = await writeCanonicalRecord(env, {
-        contact: { id: contactId, ...contact },
+        contact: { ...contact, id: contactId },
         tier,
         answers,
         agent,
@@ -8840,6 +8845,16 @@ export default {
       ctx.waitUntil(
         Promise.allSettled([
           updateGHLContact(contactId, fields, env).then(async ok => {
+            // Log the GHL projection outcome against the canonical report
+            // id so the pending/failed sync log (`ghl_sync` D1 table)
+            // reflects POST / runs the same way the /from-ghl-survey and
+            // console paths do (Codex P2 on #173, finding 3).
+            await recordGhlWriteback(env, {
+              reportId: canonical?.reportId || null,
+              contactId,
+              status: ok ? "succeeded" : "failed",
+              error: ok ? null : "updateGHLContact returned false",
+            });
             if (ok) {
               const postWriteTags = [];
               if (reportReadyTag) postWriteTags.push(reportReadyTag);
