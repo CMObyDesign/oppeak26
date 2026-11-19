@@ -7929,6 +7929,75 @@ function corsHeaders() {
   };
 }
 
+// ----- Staff-route security headers + CORS (security review 2026-11-19) -----
+//
+// Staff surfaces (the Ask Solomon Lab, BGA Copilot case view, catalog admin,
+// strategist review, feedback queue, /diag/*) are served from this Worker and
+// call their APIs SAME-ORIGIN (relative fetch("/asksolomon/...")), so they
+// never needed `Access-Control-Allow-Origin: *`. That wildcard let any site
+// script these routes from a browser holding a pasted password/embed token.
+//
+// For staff paths this wrapper:
+//   - drops the wildcard CORS header; reflects the Origin only if it is in
+//     STAFF_CORS_ORIGINS (comma-separated env var, default empty = same-origin
+//     only). The future cfo-portal origin goes there when it starts calling.
+//   - sets Content-Security-Policy: frame-ancestors so the pages can only be
+//     iframed by HighLevel (the Miguel dashboard embed) and my.cfobydesign.com.
+//     Extra ancestors can be added with STAFF_FRAME_ANCESTORS (space-separated).
+//   - sets Referrer-Policy: no-referrer (the embed URL carries ?token=) and
+//     X-Content-Type-Options: nosniff.
+// Public routes (funnel at oppeak26.pages.dev, /report, /audit, /marketing,
+// /verify, /upload, /apply-solomon50, webhooks) are untouched.
+const STAFF_FRAME_ANCESTORS_DEFAULT = [
+  "'self'",
+  "https://my.cfobydesign.com",
+  "https://app.gohighlevel.com",
+  "https://*.gohighlevel.com",
+  "https://*.leadconnectorhq.com",
+  "https://*.msgsndr.com",
+];
+
+function isStaffPath(pathname) {
+  const p = String(pathname || "").replace(/\/+$/, "");
+  return p === "/asksolomon" || p.startsWith("/asksolomon/")
+    || p === "/strategist" || p.startsWith("/strategist/")
+    || p === "/feedback" || p.startsWith("/feedback/")
+    || p.startsWith("/diag/");
+}
+
+function staffAllowedOrigins(env) {
+  return String(env?.STAFF_CORS_ORIGINS || "")
+    .split(",").map(s => s.trim().replace(/\/+$/, "")).filter(Boolean);
+}
+
+function staffFrameAncestors(env) {
+  const extra = String(env?.STAFF_FRAME_ANCESTORS || "").split(/\s+/).filter(Boolean);
+  return [...STAFF_FRAME_ANCESTORS_DEFAULT, ...extra].join(" ");
+}
+
+function applyStaffRouteSecurity(request, env, response) {
+  let pathname;
+  try { pathname = new URL(request.url).pathname; } catch { return response; }
+  if (!isStaffPath(pathname) || !response) return response;
+
+  const res = new Response(response.body, response);
+  const h = res.headers;
+  h.delete("Access-Control-Allow-Origin");
+  h.delete("Access-Control-Allow-Methods");
+  h.delete("Access-Control-Allow-Headers");
+  const origin = request.headers.get("Origin");
+  if (origin && staffAllowedOrigins(env).includes(origin)) {
+    h.set("Access-Control-Allow-Origin", origin);
+    h.set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+    h.set("Access-Control-Allow-Headers", "Content-Type, x-console-password");
+  }
+  h.append("Vary", "Origin");
+  h.set("Content-Security-Policy", `frame-ancestors ${staffFrameAncestors(env)}`);
+  h.set("Referrer-Policy", "no-referrer");
+  h.set("X-Content-Type-Options", "nosniff");
+  return res;
+}
+
 function htmlHeaders() {
   return {
     ...corsHeaders(),
@@ -7943,8 +8012,9 @@ function json(body, status = 200) {
   });
 }
 
-export default {
-  async fetch(request, env, ctx) {
+// Main router. Wrapped by export default.fetch, which applies the staff-route
+// security headers / CORS policy (applyStaffRouteSecurity) to every response.
+async function routeFetch(request, env, ctx) {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders() });
 
     const url = new URL(request.url);
@@ -8987,6 +9057,12 @@ export default {
       : null;
 
     return json({ success: true, tier, ...agent, bookingLink });
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    const response = await routeFetch(request, env, ctx);
+    return applyStaffRouteSecurity(request, env, response);
   },
 
   // Queue consumer (2026-10-28 Codex P1 follow-up). Dispatched by the
@@ -9067,6 +9143,7 @@ export {
   safeEqual,
   checkConsolePassword,
   normalizePersonName,
+  isStaffPath,
 };
 
 // Phase 2A: normalization layer. Re-exported from index so tests that
