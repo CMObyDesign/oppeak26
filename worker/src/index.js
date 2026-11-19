@@ -11,7 +11,7 @@
  *
  * Endpoints:
  *   POST /                  — main assessment
- *   POST /upload            — multipart file upload to GHL Media Library
+ *   POST /upload            — multipart file upload to GHL Media Library (staff or paid contactId)
  *   POST /verify            — confirm a contact has paid for a tier
  *   GET  /report/{id}       — serve a contact's stored report as a styled standalone HTML page
  *   GET  /asksolomon        — internal training & testing console (password-protected)
@@ -4533,11 +4533,42 @@ async function releaseIdempotency(path, env) {
 
 // POST /upload — multipart/form-data with a "file" field.
 // Forwards to GHL Media Library and returns the hosted URL.
-// Optional form fields: contactId (for future per-contact organization).
+// Caller: the $297 Deep Dive survey (app/src/components/PaidTier297Survey.tsx)
+// where a customer attaches their P&L / financials.
+//
+// AUTH (security review 2026-11-19): this route used to be fully open, so
+// anyone could push 25 MB files into CFObD's GHL media library. Now one of:
+//   1. Staff: a valid x-console-password header (checkConsolePassword), or
+//   2. Customer: a `contactId` form field whose GHL contact carries one of
+//      UPLOAD_ALLOWED_TAGS — the same set /from-ghl-survey accepts for the
+//      $297 survey (the Deep Dive is sell-first, so swot_paid_297 may not be
+//      on the contact yet when they upload).
+// Unknown contact, missing tag, or a GHL read failure all refuse (fail closed).
 // Returns: { success, url, fileId, fileName, size }
+const UPLOAD_ALLOWED_TAGS = ["swot_paid_47", "swot_paid_297", "swot_solomon50_applied"];
+
+async function uploadCallerAuthorized(request, env, contactId) {
+  if (checkConsolePassword(request, env)) return true;
+  if (!contactId || !/^[A-Za-z0-9_-]{1,64}$/.test(contactId)) return false;
+  let contact = null;
+  try { contact = await fetchGHLContact(contactId, env); }
+  catch { return false; }
+  if (!contact) return false;
+  const tags = (contact.tags || []).map(t => String(t).toLowerCase());
+  return UPLOAD_ALLOWED_TAGS.some(t => tags.includes(t));
+}
+
 async function handleUpload(request, env) {
   if (!env.GHL_API_KEY) {
     return json({ success: false, error: "GHL not configured" }, 500);
+  }
+
+  // Cheap pre-check before buffering a large body: no staff header and
+  // a declared body over the limit → refuse without reading it.
+  const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
+  const declared = Number(request.headers.get("content-length") || 0);
+  if (declared > MAX_BYTES + 64 * 1024) {
+    return json({ success: false, error: "File too large (max 25 MB)" }, 413);
   }
 
   let formData;
@@ -4547,6 +4578,12 @@ async function handleUpload(request, env) {
     return json({ success: false, error: "Invalid multipart/form-data body" }, 400);
   }
 
+  const contactIdField = formData.get("contactId");
+  const contactId = typeof contactIdField === "string" ? contactIdField.trim() : "";
+  if (!(await uploadCallerAuthorized(request, env, contactId))) {
+    return json({ success: false, error: "Unauthorized" }, 401);
+  }
+
   const file = formData.get("file");
   // In Workers, file-typed parts come back as File. String would mean no file part.
   if (!file || typeof file === "string") {
@@ -4554,7 +4591,6 @@ async function handleUpload(request, env) {
   }
 
   // Conservative size limit — covers P&L PDFs, blocks accidental huge uploads.
-  const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
   if (file.size > MAX_BYTES) {
     return json({ success: false, error: "File too large (max 25 MB)" }, 413);
   }
