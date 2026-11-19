@@ -8012,6 +8012,52 @@ function json(body, status = 200) {
   });
 }
 
+// ----- Per-IP rate limit for unauthenticated Claude-calling routes -----
+// (security review 2026-11-19). /audit/render, /marketing/render and
+// POST /audit|/marketing run a Claude call with no auth — worst abuse is
+// Anthropic spend. Fixed one-hour window per client IP, counted in the
+// existing SOLOMON_DB (D1) binding, table from migrations/0010_rate_limits.sql.
+// No new binding, no new paid product.
+// Limit: env.AUDIT_RATE_LIMIT_PER_HOUR (default 10).
+// Fails OPEN on missing binding/table or any D1 error (logged) so the
+// public audit page never breaks because the limiter is unavailable.
+const AUDIT_RATE_LIMIT_DEFAULT = 10;
+const AUDIT_RATE_WINDOW_SECONDS = 3600;
+
+function clientIp(request) {
+  return request.headers.get("CF-Connecting-IP")
+    || (request.headers.get("X-Forwarded-For") || "").split(",")[0].trim()
+    || "unknown";
+}
+
+async function checkAuditRateLimit(request, env, ctx) {
+  const db = dbFromEnv(env);
+  if (!db) return { limited: false, skipped: "no_db_binding" };
+  const parsed = Number.parseInt(env.AUDIT_RATE_LIMIT_PER_HOUR, 10);
+  const limit = Number.isFinite(parsed) && parsed > 0 ? parsed : AUDIT_RATE_LIMIT_DEFAULT;
+  const now = Math.floor(Date.now() / 1000);
+  const windowStart = now - (now % AUDIT_RATE_WINDOW_SECONDS);
+  const expiresAt = windowStart + AUDIT_RATE_WINDOW_SECONDS;
+  const key = `audit|${clientIp(request)}|${windowStart}`;
+  try {
+    const row = await db.prepare(
+      "INSERT INTO rate_limits (bucket_key, count, expires_at) VALUES (?1, 1, ?2) " +
+      "ON CONFLICT(bucket_key) DO UPDATE SET count = count + 1 RETURNING count"
+    ).bind(key, expiresAt).first();
+    const count = Number(row?.count || 0);
+    if (Math.random() < 0.02 && ctx && typeof ctx.waitUntil === "function") {
+      ctx.waitUntil(
+        db.prepare("DELETE FROM rate_limits WHERE expires_at < ?1").bind(now).run().catch(() => {})
+      );
+    }
+    if (count > limit) return { limited: true, retryAfter: Math.max(1, expiresAt - now), limit };
+    return { limited: false, count, limit };
+  } catch (err) {
+    console.warn(`[rate-limit] D1 check failed, failing open: ${err?.message || err}`);
+    return { limited: false, skipped: "d1_error" };
+  }
+}
+
 // Main router. Wrapped by export default.fetch, which applies the staff-route
 // security headers / CORS policy (applyStaffRouteSecurity) to every response.
 async function routeFetch(request, env, ctx) {
@@ -8271,7 +8317,7 @@ async function routeFetch(request, env, ctx) {
   var mount = document.getElementById('audit-mount');
   if (!mount) return;
   fetch(${JSON.stringify(renderUrl)}, { cache: 'no-store', headers: { 'Accept': 'text/html' } })
-    .then(function (r) { return r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)); })
+    .then(function (r) { return (r.ok || r.status === 429) ? r.text() : Promise.reject(new Error('HTTP ' + r.status)); })
     .then(function (html) { mount.outerHTML = html; })
     .catch(function (err) {
       mount.outerHTML = ${JSON.stringify(buildAuditErrorCard({ message: "The audit failed to load. Please refresh." }))};
@@ -8296,6 +8342,12 @@ async function routeFetch(request, env, ctx) {
         if (!target) {
           return new Response(buildAuditErrorCard({ message: "Missing url parameter." }),
             { status: 400, headers: { ...htmlHeaders(), "Cache-Control": "no-store" } });
+        }
+        const rl = await checkAuditRateLimit(request, env, ctx);
+        if (rl.limited) {
+          return new Response(
+            buildAuditErrorCard({ message: "Too many audits from your network in the last hour. Please try again later." }),
+            { status: 429, headers: { ...htmlHeaders(), "Cache-Control": "no-store", "Retry-After": String(rl.retryAfter) } });
         }
         try {
           const { agent, signals } = await runMarketingAudit(target, env, mode);
@@ -8763,6 +8815,12 @@ async function routeFetch(request, env, ctx) {
       const target = body.url;
       const mode = body.mode === "internal" ? "internal" : "public";
       if (!target) return json({ success: false, error: "url required" }, 400);
+      const rl = await checkAuditRateLimit(request, env, ctx);
+      if (rl.limited) {
+        const res = json({ success: false, error: "Too many audits from your network in the last hour. Please try again later." }, 429);
+        res.headers.set("Retry-After", String(rl.retryAfter));
+        return res;
+      }
       try {
         const { agent, signals } = await runMarketingAudit(target, env, mode);
         return json({ success: true, agent, signals, mode });
@@ -9144,6 +9202,7 @@ export {
   checkConsolePassword,
   normalizePersonName,
   isStaffPath,
+  checkAuditRateLimit,
 };
 
 // Phase 2A: normalization layer. Re-exported from index so tests that
