@@ -6555,17 +6555,37 @@ async function answersFromContactFields(contact, env) {
 //   2. For paid tiers, verify the contact ALREADY carries the matching swot_paid_*
 //      tag applied by the payment workflow. Free tier is unrestricted since it
 //      corresponds to an intake with no gate.
-async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
-  if (env.WEBHOOK_SECRET) {
-    const headerSecret = request.headers.get("x-webhook-secret");
-    const authHeader = request.headers.get("Authorization") || request.headers.get("authorization") || "";
-    const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
-    const bearerSecret = bearerMatch ? bearerMatch[1].trim() : null;
-    const provided = headerSecret || bearerSecret;
-    if (!provided || provided !== env.WEBHOOK_SECRET) {
-      return json({ success: false, error: "Unauthorized" }, 401);
-    }
+// Shared-secret check for the GHL webhooks (/from-ghl-survey,
+// /payment-status, /reset-contact-tags). Accepts the secret as either
+// `x-webhook-secret: <secret>` or `Authorization: Bearer <secret>` (GHL's
+// webhook UI sends Bearer).
+//
+// FAILS CLOSED (security review 2026-11-19): these routes used to skip the
+// check entirely when WEBHOOK_SECRET was unset, so a missing secret on a
+// deploy silently opened paid-report generation and tag writes to anyone.
+// Now an unset secret is a 500 and nothing runs.
+// Returns null when the request is authorized, else the Response to send.
+function webhookAuthFailure(request, env) {
+  if (!env.WEBHOOK_SECRET) {
+    console.error("[webhook] WEBHOOK_SECRET is not set on this deploy — refusing request");
+    return json({ success: false, error: "Webhook secret not configured" }, 500);
   }
+  const headerSecret = request.headers.get("x-webhook-secret");
+  const authHeader = request.headers.get("authorization") || "";
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  // A bare `Authorization: <secret>` (no Bearer prefix) was accepted by
+  // /payment-status and /reset-contact-tags before; keep accepting it.
+  const bearerSecret = bearerMatch ? bearerMatch[1].trim() : (authHeader.trim() || null);
+  const provided = headerSecret || bearerSecret;
+  if (!provided || provided !== env.WEBHOOK_SECRET) {
+    return json({ success: false, error: "Unauthorized" }, 401);
+  }
+  return null;
+}
+
+async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
+  const webhookDenied = webhookAuthFailure(request, env);
+  if (webhookDenied) return webhookDenied;
 
   let body;
   try { body = await request.json(); }
@@ -7309,13 +7329,8 @@ async function finalizeSurveyWriteback({
 async function handlePaymentStatusWebhook(request, env, ctx) {
   // Same webhook secret as /from-ghl-survey. Accepted as either
   // 'x-webhook-secret' or 'Authorization: Bearer'.
-  if (env.WEBHOOK_SECRET) {
-    const auth = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-    const provided = request.headers.get("x-webhook-secret") || auth;
-    if (!provided || provided !== env.WEBHOOK_SECRET) {
-      return json({ success: false, error: "Unauthorized" }, 401);
-    }
-  }
+  const webhookDenied = webhookAuthFailure(request, env);
+  if (webhookDenied) return webhookDenied;
 
   let body;
   try { body = await request.json(); }
@@ -7621,13 +7636,8 @@ const TAG_PREFIXES_TO_RESET = ["swot_", "path_"];
 const TAG_SUFFIXES_TO_RESET = ["_opp"];
 
 async function handleResetContactTags(request, env) {
-  if (env.WEBHOOK_SECRET) {
-    const auth = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-    const provided = request.headers.get("x-webhook-secret") || auth;
-    if (!provided || provided !== env.WEBHOOK_SECRET) {
-      return json({ success: false, error: "Unauthorized" }, 401);
-    }
-  }
+  const webhookDenied = webhookAuthFailure(request, env);
+  if (webhookDenied) return webhookDenied;
   let body;
   try { body = await request.json(); }
   catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
