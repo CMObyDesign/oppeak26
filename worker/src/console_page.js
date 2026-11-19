@@ -966,6 +966,19 @@ async function runSolomon() {
     }];
   }
 
+  // A run with a contactId overwrites that real contact's customer-facing
+  // report in GHL. The worker refuses unless we confirm and echo the
+  // contact's name exactly as HighLevel has it (security review 2026-11-19).
+  let overwriteConfirm = {};
+  if (contactId) {
+    const typedName = window.prompt(
+      "This run will OVERWRITE the customer-facing report on a real HighLevel contact (" + contactId + ").\\n\\n" +
+      "To confirm, type the contact's full name exactly as it appears in HighLevel:"
+    );
+    if (!typedName || !typedName.trim()) return toast("Run cancelled — nothing was written.", "error");
+    overwriteConfirm = { confirmOverwrite: true, confirmContactName: typedName.trim() };
+  }
+
   const runBtn = document.getElementById("run-btn");
   const status = document.getElementById("run-status");
   runBtn.disabled = true; status.textContent = "Running…";
@@ -985,6 +998,7 @@ async function runSolomon() {
         answers,
         rubricOverride: rubricOverride || undefined,
         libraryIds: getSelectedLibraryIds(),
+        ...overwriteConfirm,
       }),
     });
 

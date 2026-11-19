@@ -5555,6 +5555,64 @@ function safeEqual(provided, expected) {
   return diff === 0;
 }
 
+// Guard for Lab writes to a REAL contact (security review 2026-11-19).
+//
+// /asksolomon/run (with a contactId) and /asksolomon/send-result overwrite
+// the contact's customer-facing report field (swot_free_report /
+// swot_full_report / business_playbook). A typo'd or pasted-wrong contactId
+// silently replaces a real customer's report. The server now refuses unless
+// the request carries BOTH:
+//   - confirmOverwrite: true
+//   - confirmContactName: the contact's name exactly as HighLevel has it
+//     (compared case- and whitespace-insensitively against firstName+lastName,
+//     name and contactName on the fetched GHL record).
+// A GHL read failure or unknown contact also refuses (fail closed).
+// Returns null when the write may proceed, else the Response to send.
+function normalizePersonName(v) {
+  return String(v || "").normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function ghlContactNames(contact) {
+  const names = new Set();
+  const full = [contact?.firstName, contact?.lastName].filter(Boolean).join(" ");
+  for (const n of [full, contact?.name, contact?.contactName]) {
+    const norm = normalizePersonName(n);
+    if (norm) names.add(norm);
+  }
+  return names;
+}
+
+async function realContactOverwriteRefusal(body, contactId, env) {
+  if (body?.confirmOverwrite !== true) {
+    return json({
+      success: false,
+      code: "confirm_overwrite_required",
+      error: "This would overwrite the customer-facing report on a real contact. Resend with confirmOverwrite:true and confirmContactName set to the contact's name as it appears in HighLevel.",
+    }, 409);
+  }
+  const typed = normalizePersonName(body?.confirmContactName);
+  if (!typed) {
+    return json({ success: false, code: "confirm_name_required", error: "confirmContactName is required." }, 409);
+  }
+  if (!env.GHL_API_KEY) {
+    return json({ success: false, error: "GHL not configured; cannot verify the contact." }, 503);
+  }
+  let contact = null;
+  try { contact = await fetchGHLContact(contactId, env); }
+  catch { contact = null; }
+  if (!contact) {
+    return json({ success: false, code: "contact_not_verified", error: "Could not load that contact from HighLevel; nothing was written." }, 409);
+  }
+  if (!ghlContactNames(contact).has(typed)) {
+    return json({
+      success: false,
+      code: "contact_name_mismatch",
+      error: "The name you typed does not match this contact in HighLevel; nothing was written. Check the contact ID.",
+    }, 409);
+  }
+  return null;
+}
+
 // POST /asksolomon/run — runs the SWOT assessment without GHL writeback.
 // Supports `rubricOverride` to test rubric variants ephemerally.
 // Probe requests (body.probe === true) just validate the password and return 200.
@@ -5579,6 +5637,14 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
   // other signal; the response carries dryRun:true so the caller knows.
   const dryRun = body.dry_run === true;
   if (!answers.length) return json({ success: false, error: "No answers provided" }, 400);
+
+  // A non-dry run with a contactId writes the customer-facing report field
+  // on that real contact. Check the overwrite confirmation BEFORE spending a
+  // Claude call.
+  if (contact.contactId && !dryRun) {
+    const refusal = await realContactOverwriteRefusal(body, String(contact.contactId), env);
+    if (refusal) return refusal;
+  }
 
   // Build the user prompt the normal way. Then call Claude with either the default
   // rubric (cache-eligible) or the override (cache-busted but still works).
@@ -5770,7 +5836,10 @@ async function handleConsoleSendResult(request, env, ctx, requestUrl) {
     return json({ success: false, error: "Missing agent output (path required)" }, 400);
   }
 
-  const contactId = contact.contactId; // trust the caller — no email resolution
+  const overwriteRefusal = await realContactOverwriteRefusal(body, String(contact.contactId), env);
+  if (overwriteRefusal) return overwriteRefusal;
+
+  const contactId = contact.contactId; // verified against HL name above
   const reportFieldKey =
     tier === "paid_297" ? "business_playbook"
     : tier === "paid_47" ? "swot_full_report"
@@ -8997,6 +9066,7 @@ export {
   // Security review 2026-11-19.
   safeEqual,
   checkConsolePassword,
+  normalizePersonName,
 };
 
 // Phase 2A: normalization layer. Re-exported from index so tests that
