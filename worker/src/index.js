@@ -5529,13 +5529,30 @@ async function upsertGHLContactByEmail(email, extras, env) {
 //   1. Password via x-console-password header (matches env.CONSOLE_PASSWORD) — normal login
 //   2. Embed token via x-console-password header (matches env.CONSOLE_EMBED_TOKEN) — for
 //      iframe embeds (e.g., inside GHL dashboard). Bypasses the gate when passed in the URL.
-// Constant-time-ish comparison: short strings, low risk for timing attacks at our volume.
+// Comparison is constant-time (safeEqual) — security review 2026-11-19.
+// Both candidates are always checked so timing doesn't reveal which matched.
 function checkConsolePassword(request, env) {
   const provided = request.headers.get("x-console-password");
   if (!provided) return false;
-  if (env.CONSOLE_PASSWORD && provided === env.CONSOLE_PASSWORD) return true;
-  if (env.CONSOLE_EMBED_TOKEN && provided === env.CONSOLE_EMBED_TOKEN) return true;
-  return false;
+  const pwOk = Boolean(env.CONSOLE_PASSWORD) && safeEqual(provided, env.CONSOLE_PASSWORD);
+  const embedOk = Boolean(env.CONSOLE_EMBED_TOKEN) && safeEqual(provided, env.CONSOLE_EMBED_TOKEN);
+  return pwOk || embedOk;
+}
+
+// Constant-time string compare for shared secrets. Runs over the full
+// length of the expected value whatever the input, and folds a length
+// mismatch into the result instead of returning early, so neither the
+// content nor the length of the secret leaks through response timing.
+function safeEqual(provided, expected) {
+  if (typeof provided !== "string" || typeof expected !== "string") return false;
+  const enc = new TextEncoder();
+  const a = enc.encode(provided);
+  const b = enc.encode(expected);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < b.length; i++) {
+    diff |= (i < a.length ? a[i] : 0) ^ b[i];
+  }
+  return diff === 0;
 }
 
 // POST /asksolomon/run — runs the SWOT assessment without GHL writeback.
@@ -6577,7 +6594,7 @@ function webhookAuthFailure(request, env) {
   // /payment-status and /reset-contact-tags before; keep accepting it.
   const bearerSecret = bearerMatch ? bearerMatch[1].trim() : (authHeader.trim() || null);
   const provided = headerSecret || bearerSecret;
-  if (!provided || provided !== env.WEBHOOK_SECRET) {
+  if (!provided || !safeEqual(provided, env.WEBHOOK_SECRET)) {
     return json({ success: false, error: "Unauthorized" }, 401);
   }
   return null;
@@ -8162,13 +8179,14 @@ export default {
         return json({ success: true, rubric: ASSESSMENT_RUBRIC });
       }
       // /asksolomon/diag — UNAUTHENTICATED diagnostic endpoint. Returns only whether
-      // CONSOLE_PASSWORD is configured and its character length. NEVER returns the value.
+      // CONSOLE_PASSWORD is configured. NEVER returns the value or its length
+      // (length was removed in the 2026-11-19 security review — it narrows a
+      // brute-force search).
       // Use during setup to confirm Cloudflare environment has the secret.
       if (path === "/asksolomon/diag") {
         const pw = env.CONSOLE_PASSWORD;
         return json({
           passwordConfigured: Boolean(pw),
-          passwordLength: typeof pw === "string" ? pw.length : 0,
           hint: "The deployed worker expects password header 'x-console-password' to match env.CONSOLE_PASSWORD exactly (case-sensitive, no trim). If passwordConfigured is false, the secret isn't in this environment.",
         });
       }
@@ -8187,7 +8205,7 @@ export default {
       const diagContactMatch = path.match(/^\/diag\/contact\/([A-Za-z0-9_-]+)$/);
       if (diagContactMatch) {
         const pwHeader = request.headers.get("x-console-password");
-        if (!env.CONSOLE_PASSWORD || pwHeader !== env.CONSOLE_PASSWORD) {
+        if (!env.CONSOLE_PASSWORD || !safeEqual(pwHeader, env.CONSOLE_PASSWORD)) {
           return json({
             error: "Unauthorized",
             hint: "Pass the console password in the x-console-password header, not the URL. The query-string form was removed to avoid credential leakage into request logs.",
@@ -8293,7 +8311,7 @@ export default {
       const diagTraceMatch = path.match(/^\/diag\/queue-trace\/([A-Za-z0-9_-]+)$/);
       if (diagTraceMatch) {
         const pwHeader = request.headers.get("x-console-password");
-        if (!env.CONSOLE_PASSWORD || pwHeader !== env.CONSOLE_PASSWORD) {
+        if (!env.CONSOLE_PASSWORD || !safeEqual(pwHeader, env.CONSOLE_PASSWORD)) {
           return json({ error: "Unauthorized" }, 401);
         }
         const traceCid = diagTraceMatch[1];
@@ -8383,7 +8401,6 @@ export default {
         const s = env.WEBHOOK_SECRET;
         return json({
           configured: Boolean(s),
-          length: typeof s === "string" ? s.length : 0,
           hint: "Accepted as either 'x-webhook-secret: <secret>' or 'Authorization: Bearer <secret>' — use whichever your webhook client (GHL uses Bearer) supports. If configured is false, add WEBHOOK_SECRET in Cloudflare → Workers → swot-engine → Settings → Variables and redeploy.",
         });
       }
@@ -8651,7 +8668,7 @@ export default {
     }
 
     // GET /diag/webhook-secret — verify WEBHOOK_SECRET is set without revealing its value.
-    // Returns { configured: true|false, length: N }. Use to confirm the secret exists on
+    // Returns { configured: true|false } (no length). Use to confirm the secret exists on
     // this deploy before firing test webhooks from GHL.
     // POST /from-ghl-survey — the "no more Vibe" bridge.
     // GHL workflow fires this webhook after a survey submits with { contactId, tier }.
@@ -8977,6 +8994,9 @@ export {
   // malformed-stream regression surfaces in tests rather than only in
   // a production 524-recovered run.
   _test_parseAnthropicSse,
+  // Security review 2026-11-19.
+  safeEqual,
+  checkConsolePassword,
 };
 
 // Phase 2A: normalization layer. Re-exported from index so tests that
