@@ -9009,6 +9009,34 @@ async function routeFetch(request, env, ctx) {
     if (contactId) {
       const reportBody = buildReportHtml(agent);
 
+      // Canonical D1 + R2 write. Historically the POST / React path skipped
+      // this — every free-tier run went to the browser, got written to GHL
+      // custom fields, and never landed in the submissions / report_versions
+      // tables. That left /strategist blind to all free output (confirmed
+      // Nov 14 2026: 71 paid_47 rows, 0 free rows in production D1). Mirror
+      // the shape that handleConsoleRun uses (no normalizedAnswers /
+      // derivedMetrics on this path — the POST body carries raw
+      // {question, answer} with no field-id stream to normalize from).
+      // Spread `contact` first so the resolved `contactId` wins if the
+      // JSON payload happened to carry its own `id`. Otherwise a caller
+      // could attribute the canonical submission and R2 artifact to a
+      // contact other than the one GHL writeback targets (Codex P2 on
+      // #173, finding 1).
+      const canonical = await writeCanonicalRecord(env, {
+        contact: { ...contact, id: contactId },
+        tier,
+        answers,
+        agent,
+        reportHtml: reportBody,
+        sourceEventId: null,
+        dryRun: false,
+      });
+      if (canonical && canonical.ok === false) {
+        console.warn(`[POST /] tier=${tier} contactId=${contactId} — canonical D1 write failed: ${canonical.error}`);
+      } else if (canonical && canonical.skipped) {
+        console.log(`[POST /] tier=${tier} contactId=${contactId} — canonical skipped: ${canonical.reason}`);
+      }
+
       // One report field per tier — no mirroring. Each tier has its own named deliverable:
       //   free     -> swot_free_report      (Free SWOT Report)
       //   paid_47  -> swot_full_report      (Full Diagnostic Report)
@@ -9077,6 +9105,16 @@ async function routeFetch(request, env, ctx) {
       ctx.waitUntil(
         Promise.allSettled([
           updateGHLContact(contactId, fields, env).then(async ok => {
+            // Log the GHL projection outcome against the canonical report
+            // id so the pending/failed sync log (`ghl_sync` D1 table)
+            // reflects POST / runs the same way the /from-ghl-survey and
+            // console paths do (Codex P2 on #173, finding 3).
+            await recordGhlWriteback(env, {
+              reportId: canonical?.reportId || null,
+              contactId,
+              status: ok ? "succeeded" : "failed",
+              error: ok ? null : "updateGHLContact returned false",
+            });
             if (ok) {
               const postWriteTags = [];
               if (reportReadyTag) postWriteTags.push(reportReadyTag);
