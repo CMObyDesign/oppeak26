@@ -11,7 +11,7 @@
  *
  * Endpoints:
  *   POST /                  — main assessment
- *   POST /upload            — multipart file upload to GHL Media Library
+ *   POST /upload            — multipart file upload to GHL Media Library (staff or paid contactId)
  *   POST /verify            — confirm a contact has paid for a tier
  *   GET  /report/{id}       — serve a contact's stored report as a styled standalone HTML page
  *   GET  /asksolomon        — internal training & testing console (password-protected)
@@ -4533,11 +4533,42 @@ async function releaseIdempotency(path, env) {
 
 // POST /upload — multipart/form-data with a "file" field.
 // Forwards to GHL Media Library and returns the hosted URL.
-// Optional form fields: contactId (for future per-contact organization).
+// Caller: the $297 Deep Dive survey (app/src/components/PaidTier297Survey.tsx)
+// where a customer attaches their P&L / financials.
+//
+// AUTH (security review 2026-11-19): this route used to be fully open, so
+// anyone could push 25 MB files into CFObD's GHL media library. Now one of:
+//   1. Staff: a valid x-console-password header (checkConsolePassword), or
+//   2. Customer: a `contactId` form field whose GHL contact carries one of
+//      UPLOAD_ALLOWED_TAGS — the same set /from-ghl-survey accepts for the
+//      $297 survey (the Deep Dive is sell-first, so swot_paid_297 may not be
+//      on the contact yet when they upload).
+// Unknown contact, missing tag, or a GHL read failure all refuse (fail closed).
 // Returns: { success, url, fileId, fileName, size }
+const UPLOAD_ALLOWED_TAGS = ["swot_paid_47", "swot_paid_297", "swot_solomon50_applied"];
+
+async function uploadCallerAuthorized(request, env, contactId) {
+  if (checkConsolePassword(request, env)) return true;
+  if (!contactId || !/^[A-Za-z0-9_-]{1,64}$/.test(contactId)) return false;
+  let contact = null;
+  try { contact = await fetchGHLContact(contactId, env); }
+  catch { return false; }
+  if (!contact) return false;
+  const tags = (contact.tags || []).map(t => String(t).toLowerCase());
+  return UPLOAD_ALLOWED_TAGS.some(t => tags.includes(t));
+}
+
 async function handleUpload(request, env) {
   if (!env.GHL_API_KEY) {
     return json({ success: false, error: "GHL not configured" }, 500);
+  }
+
+  // Cheap pre-check before buffering a large body: no staff header and
+  // a declared body over the limit → refuse without reading it.
+  const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
+  const declared = Number(request.headers.get("content-length") || 0);
+  if (declared > MAX_BYTES + 64 * 1024) {
+    return json({ success: false, error: "File too large (max 25 MB)" }, 413);
   }
 
   let formData;
@@ -4547,6 +4578,12 @@ async function handleUpload(request, env) {
     return json({ success: false, error: "Invalid multipart/form-data body" }, 400);
   }
 
+  const contactIdField = formData.get("contactId");
+  const contactId = typeof contactIdField === "string" ? contactIdField.trim() : "";
+  if (!(await uploadCallerAuthorized(request, env, contactId))) {
+    return json({ success: false, error: "Unauthorized" }, 401);
+  }
+
   const file = formData.get("file");
   // In Workers, file-typed parts come back as File. String would mean no file part.
   if (!file || typeof file === "string") {
@@ -4554,7 +4591,6 @@ async function handleUpload(request, env) {
   }
 
   // Conservative size limit — covers P&L PDFs, blocks accidental huge uploads.
-  const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
   if (file.size > MAX_BYTES) {
     return json({ success: false, error: "File too large (max 25 MB)" }, 413);
   }
@@ -5493,13 +5529,88 @@ async function upsertGHLContactByEmail(email, extras, env) {
 //   1. Password via x-console-password header (matches env.CONSOLE_PASSWORD) — normal login
 //   2. Embed token via x-console-password header (matches env.CONSOLE_EMBED_TOKEN) — for
 //      iframe embeds (e.g., inside GHL dashboard). Bypasses the gate when passed in the URL.
-// Constant-time-ish comparison: short strings, low risk for timing attacks at our volume.
+// Comparison is constant-time (safeEqual) — security review 2026-11-19.
+// Both candidates are always checked so timing doesn't reveal which matched.
 function checkConsolePassword(request, env) {
   const provided = request.headers.get("x-console-password");
   if (!provided) return false;
-  if (env.CONSOLE_PASSWORD && provided === env.CONSOLE_PASSWORD) return true;
-  if (env.CONSOLE_EMBED_TOKEN && provided === env.CONSOLE_EMBED_TOKEN) return true;
-  return false;
+  const pwOk = Boolean(env.CONSOLE_PASSWORD) && safeEqual(provided, env.CONSOLE_PASSWORD);
+  const embedOk = Boolean(env.CONSOLE_EMBED_TOKEN) && safeEqual(provided, env.CONSOLE_EMBED_TOKEN);
+  return pwOk || embedOk;
+}
+
+// Constant-time string compare for shared secrets. Runs over the full
+// length of the expected value whatever the input, and folds a length
+// mismatch into the result instead of returning early, so neither the
+// content nor the length of the secret leaks through response timing.
+function safeEqual(provided, expected) {
+  if (typeof provided !== "string" || typeof expected !== "string") return false;
+  const enc = new TextEncoder();
+  const a = enc.encode(provided);
+  const b = enc.encode(expected);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < b.length; i++) {
+    diff |= (i < a.length ? a[i] : 0) ^ b[i];
+  }
+  return diff === 0;
+}
+
+// Guard for Lab writes to a REAL contact (security review 2026-11-19).
+//
+// /asksolomon/run (with a contactId) and /asksolomon/send-result overwrite
+// the contact's customer-facing report field (swot_free_report /
+// swot_full_report / business_playbook). A typo'd or pasted-wrong contactId
+// silently replaces a real customer's report. The server now refuses unless
+// the request carries BOTH:
+//   - confirmOverwrite: true
+//   - confirmContactName: the contact's name exactly as HighLevel has it
+//     (compared case- and whitespace-insensitively against firstName+lastName,
+//     name and contactName on the fetched GHL record).
+// A GHL read failure or unknown contact also refuses (fail closed).
+// Returns null when the write may proceed, else the Response to send.
+function normalizePersonName(v) {
+  return String(v || "").normalize("NFKC").toLowerCase().replace(/\s+/g, " ").trim();
+}
+
+function ghlContactNames(contact) {
+  const names = new Set();
+  const full = [contact?.firstName, contact?.lastName].filter(Boolean).join(" ");
+  for (const n of [full, contact?.name, contact?.contactName]) {
+    const norm = normalizePersonName(n);
+    if (norm) names.add(norm);
+  }
+  return names;
+}
+
+async function realContactOverwriteRefusal(body, contactId, env) {
+  if (body?.confirmOverwrite !== true) {
+    return json({
+      success: false,
+      code: "confirm_overwrite_required",
+      error: "This would overwrite the customer-facing report on a real contact. Resend with confirmOverwrite:true and confirmContactName set to the contact's name as it appears in HighLevel.",
+    }, 409);
+  }
+  const typed = normalizePersonName(body?.confirmContactName);
+  if (!typed) {
+    return json({ success: false, code: "confirm_name_required", error: "confirmContactName is required." }, 409);
+  }
+  if (!env.GHL_API_KEY) {
+    return json({ success: false, error: "GHL not configured; cannot verify the contact." }, 503);
+  }
+  let contact = null;
+  try { contact = await fetchGHLContact(contactId, env); }
+  catch { contact = null; }
+  if (!contact) {
+    return json({ success: false, code: "contact_not_verified", error: "Could not load that contact from HighLevel; nothing was written." }, 409);
+  }
+  if (!ghlContactNames(contact).has(typed)) {
+    return json({
+      success: false,
+      code: "contact_name_mismatch",
+      error: "The name you typed does not match this contact in HighLevel; nothing was written. Check the contact ID.",
+    }, 409);
+  }
+  return null;
 }
 
 // POST /asksolomon/run — runs the SWOT assessment without GHL writeback.
@@ -5526,6 +5637,14 @@ async function handleConsoleRun(request, env, ctx, requestUrl) {
   // other signal; the response carries dryRun:true so the caller knows.
   const dryRun = body.dry_run === true;
   if (!answers.length) return json({ success: false, error: "No answers provided" }, 400);
+
+  // A non-dry run with a contactId writes the customer-facing report field
+  // on that real contact. Check the overwrite confirmation BEFORE spending a
+  // Claude call.
+  if (contact.contactId && !dryRun) {
+    const refusal = await realContactOverwriteRefusal(body, String(contact.contactId), env);
+    if (refusal) return refusal;
+  }
 
   // Build the user prompt the normal way. Then call Claude with either the default
   // rubric (cache-eligible) or the override (cache-busted but still works).
@@ -5717,7 +5836,10 @@ async function handleConsoleSendResult(request, env, ctx, requestUrl) {
     return json({ success: false, error: "Missing agent output (path required)" }, 400);
   }
 
-  const contactId = contact.contactId; // trust the caller — no email resolution
+  const overwriteRefusal = await realContactOverwriteRefusal(body, String(contact.contactId), env);
+  if (overwriteRefusal) return overwriteRefusal;
+
+  const contactId = contact.contactId; // verified against HL name above
   const reportFieldKey =
     tier === "paid_297" ? "business_playbook"
     : tier === "paid_47" ? "swot_full_report"
@@ -6519,17 +6641,37 @@ async function answersFromContactFields(contact, env) {
 //   2. For paid tiers, verify the contact ALREADY carries the matching swot_paid_*
 //      tag applied by the payment workflow. Free tier is unrestricted since it
 //      corresponds to an intake with no gate.
-async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
-  if (env.WEBHOOK_SECRET) {
-    const headerSecret = request.headers.get("x-webhook-secret");
-    const authHeader = request.headers.get("Authorization") || request.headers.get("authorization") || "";
-    const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
-    const bearerSecret = bearerMatch ? bearerMatch[1].trim() : null;
-    const provided = headerSecret || bearerSecret;
-    if (!provided || provided !== env.WEBHOOK_SECRET) {
-      return json({ success: false, error: "Unauthorized" }, 401);
-    }
+// Shared-secret check for the GHL webhooks (/from-ghl-survey,
+// /payment-status, /reset-contact-tags). Accepts the secret as either
+// `x-webhook-secret: <secret>` or `Authorization: Bearer <secret>` (GHL's
+// webhook UI sends Bearer).
+//
+// FAILS CLOSED (security review 2026-11-19): these routes used to skip the
+// check entirely when WEBHOOK_SECRET was unset, so a missing secret on a
+// deploy silently opened paid-report generation and tag writes to anyone.
+// Now an unset secret is a 500 and nothing runs.
+// Returns null when the request is authorized, else the Response to send.
+function webhookAuthFailure(request, env) {
+  if (!env.WEBHOOK_SECRET) {
+    console.error("[webhook] WEBHOOK_SECRET is not set on this deploy — refusing request");
+    return json({ success: false, error: "Webhook secret not configured" }, 500);
   }
+  const headerSecret = request.headers.get("x-webhook-secret");
+  const authHeader = request.headers.get("authorization") || "";
+  const bearerMatch = authHeader.match(/^Bearer\s+(.+)$/i);
+  // A bare `Authorization: <secret>` (no Bearer prefix) was accepted by
+  // /payment-status and /reset-contact-tags before; keep accepting it.
+  const bearerSecret = bearerMatch ? bearerMatch[1].trim() : (authHeader.trim() || null);
+  const provided = headerSecret || bearerSecret;
+  if (!provided || !safeEqual(provided, env.WEBHOOK_SECRET)) {
+    return json({ success: false, error: "Unauthorized" }, 401);
+  }
+  return null;
+}
+
+async function handleGHLSurveyWebhook(request, env, ctx, requestUrl) {
+  const webhookDenied = webhookAuthFailure(request, env);
+  if (webhookDenied) return webhookDenied;
 
   let body;
   try { body = await request.json(); }
@@ -7273,13 +7415,8 @@ async function finalizeSurveyWriteback({
 async function handlePaymentStatusWebhook(request, env, ctx) {
   // Same webhook secret as /from-ghl-survey. Accepted as either
   // 'x-webhook-secret' or 'Authorization: Bearer'.
-  if (env.WEBHOOK_SECRET) {
-    const auth = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-    const provided = request.headers.get("x-webhook-secret") || auth;
-    if (!provided || provided !== env.WEBHOOK_SECRET) {
-      return json({ success: false, error: "Unauthorized" }, 401);
-    }
-  }
+  const webhookDenied = webhookAuthFailure(request, env);
+  if (webhookDenied) return webhookDenied;
 
   let body;
   try { body = await request.json(); }
@@ -7585,13 +7722,8 @@ const TAG_PREFIXES_TO_RESET = ["swot_", "path_"];
 const TAG_SUFFIXES_TO_RESET = ["_opp"];
 
 async function handleResetContactTags(request, env) {
-  if (env.WEBHOOK_SECRET) {
-    const auth = (request.headers.get("authorization") || "").replace(/^Bearer\s+/i, "");
-    const provided = request.headers.get("x-webhook-secret") || auth;
-    if (!provided || provided !== env.WEBHOOK_SECRET) {
-      return json({ success: false, error: "Unauthorized" }, 401);
-    }
-  }
+  const webhookDenied = webhookAuthFailure(request, env);
+  if (webhookDenied) return webhookDenied;
   let body;
   try { body = await request.json(); }
   catch { return json({ success: false, error: "Invalid JSON body" }, 400); }
@@ -7797,6 +7929,75 @@ function corsHeaders() {
   };
 }
 
+// ----- Staff-route security headers + CORS (security review 2026-11-19) -----
+//
+// Staff surfaces (the Ask Solomon Lab, BGA Copilot case view, catalog admin,
+// strategist review, feedback queue, /diag/*) are served from this Worker and
+// call their APIs SAME-ORIGIN (relative fetch("/asksolomon/...")), so they
+// never needed `Access-Control-Allow-Origin: *`. That wildcard let any site
+// script these routes from a browser holding a pasted password/embed token.
+//
+// For staff paths this wrapper:
+//   - drops the wildcard CORS header; reflects the Origin only if it is in
+//     STAFF_CORS_ORIGINS (comma-separated env var, default empty = same-origin
+//     only). The future cfo-portal origin goes there when it starts calling.
+//   - sets Content-Security-Policy: frame-ancestors so the pages can only be
+//     iframed by HighLevel (the Miguel dashboard embed) and my.cfobydesign.com.
+//     Extra ancestors can be added with STAFF_FRAME_ANCESTORS (space-separated).
+//   - sets Referrer-Policy: no-referrer (the embed URL carries ?token=) and
+//     X-Content-Type-Options: nosniff.
+// Public routes (funnel at oppeak26.pages.dev, /report, /audit, /marketing,
+// /verify, /upload, /apply-solomon50, webhooks) are untouched.
+const STAFF_FRAME_ANCESTORS_DEFAULT = [
+  "'self'",
+  "https://my.cfobydesign.com",
+  "https://app.gohighlevel.com",
+  "https://*.gohighlevel.com",
+  "https://*.leadconnectorhq.com",
+  "https://*.msgsndr.com",
+];
+
+function isStaffPath(pathname) {
+  const p = String(pathname || "").replace(/\/+$/, "");
+  return p === "/asksolomon" || p.startsWith("/asksolomon/")
+    || p === "/strategist" || p.startsWith("/strategist/")
+    || p === "/feedback" || p.startsWith("/feedback/")
+    || p.startsWith("/diag/");
+}
+
+function staffAllowedOrigins(env) {
+  return String(env?.STAFF_CORS_ORIGINS || "")
+    .split(",").map(s => s.trim().replace(/\/+$/, "")).filter(Boolean);
+}
+
+function staffFrameAncestors(env) {
+  const extra = String(env?.STAFF_FRAME_ANCESTORS || "").split(/\s+/).filter(Boolean);
+  return [...STAFF_FRAME_ANCESTORS_DEFAULT, ...extra].join(" ");
+}
+
+function applyStaffRouteSecurity(request, env, response) {
+  let pathname;
+  try { pathname = new URL(request.url).pathname; } catch { return response; }
+  if (!isStaffPath(pathname) || !response) return response;
+
+  const res = new Response(response.body, response);
+  const h = res.headers;
+  h.delete("Access-Control-Allow-Origin");
+  h.delete("Access-Control-Allow-Methods");
+  h.delete("Access-Control-Allow-Headers");
+  const origin = request.headers.get("Origin");
+  if (origin && staffAllowedOrigins(env).includes(origin)) {
+    h.set("Access-Control-Allow-Origin", origin);
+    h.set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS");
+    h.set("Access-Control-Allow-Headers", "Content-Type, x-console-password");
+  }
+  h.append("Vary", "Origin");
+  h.set("Content-Security-Policy", `frame-ancestors ${staffFrameAncestors(env)}`);
+  h.set("Referrer-Policy", "no-referrer");
+  h.set("X-Content-Type-Options", "nosniff");
+  return res;
+}
+
 function htmlHeaders() {
   return {
     ...corsHeaders(),
@@ -7811,8 +8012,55 @@ function json(body, status = 200) {
   });
 }
 
-export default {
-  async fetch(request, env, ctx) {
+// ----- Per-IP rate limit for unauthenticated Claude-calling routes -----
+// (security review 2026-11-19). /audit/render, /marketing/render and
+// POST /audit|/marketing run a Claude call with no auth — worst abuse is
+// Anthropic spend. Fixed one-hour window per client IP, counted in the
+// existing SOLOMON_DB (D1) binding, table from migrations/0010_rate_limits.sql.
+// No new binding, no new paid product.
+// Limit: env.AUDIT_RATE_LIMIT_PER_HOUR (default 10).
+// Fails OPEN on missing binding/table or any D1 error (logged) so the
+// public audit page never breaks because the limiter is unavailable.
+const AUDIT_RATE_LIMIT_DEFAULT = 10;
+const AUDIT_RATE_WINDOW_SECONDS = 3600;
+
+function clientIp(request) {
+  return request.headers.get("CF-Connecting-IP")
+    || (request.headers.get("X-Forwarded-For") || "").split(",")[0].trim()
+    || "unknown";
+}
+
+async function checkAuditRateLimit(request, env, ctx) {
+  const db = dbFromEnv(env);
+  if (!db) return { limited: false, skipped: "no_db_binding" };
+  const parsed = Number.parseInt(env.AUDIT_RATE_LIMIT_PER_HOUR, 10);
+  const limit = Number.isFinite(parsed) && parsed > 0 ? parsed : AUDIT_RATE_LIMIT_DEFAULT;
+  const now = Math.floor(Date.now() / 1000);
+  const windowStart = now - (now % AUDIT_RATE_WINDOW_SECONDS);
+  const expiresAt = windowStart + AUDIT_RATE_WINDOW_SECONDS;
+  const key = `audit|${clientIp(request)}|${windowStart}`;
+  try {
+    const row = await db.prepare(
+      "INSERT INTO rate_limits (bucket_key, count, expires_at) VALUES (?1, 1, ?2) " +
+      "ON CONFLICT(bucket_key) DO UPDATE SET count = count + 1 RETURNING count"
+    ).bind(key, expiresAt).first();
+    const count = Number(row?.count || 0);
+    if (Math.random() < 0.02 && ctx && typeof ctx.waitUntil === "function") {
+      ctx.waitUntil(
+        db.prepare("DELETE FROM rate_limits WHERE expires_at < ?1").bind(now).run().catch(() => {})
+      );
+    }
+    if (count > limit) return { limited: true, retryAfter: Math.max(1, expiresAt - now), limit };
+    return { limited: false, count, limit };
+  } catch (err) {
+    console.warn(`[rate-limit] D1 check failed, failing open: ${err?.message || err}`);
+    return { limited: false, skipped: "d1_error" };
+  }
+}
+
+// Main router. Wrapped by export default.fetch, which applies the staff-route
+// security headers / CORS policy (applyStaffRouteSecurity) to every response.
+async function routeFetch(request, env, ctx) {
     if (request.method === "OPTIONS") return new Response(null, { headers: corsHeaders() });
 
     const url = new URL(request.url);
@@ -8069,7 +8317,7 @@ export default {
   var mount = document.getElementById('audit-mount');
   if (!mount) return;
   fetch(${JSON.stringify(renderUrl)}, { cache: 'no-store', headers: { 'Accept': 'text/html' } })
-    .then(function (r) { return r.ok ? r.text() : Promise.reject(new Error('HTTP ' + r.status)); })
+    .then(function (r) { return (r.ok || r.status === 429) ? r.text() : Promise.reject(new Error('HTTP ' + r.status)); })
     .then(function (html) { mount.outerHTML = html; })
     .catch(function (err) {
       mount.outerHTML = ${JSON.stringify(buildAuditErrorCard({ message: "The audit failed to load. Please refresh." }))};
@@ -8095,6 +8343,12 @@ export default {
           return new Response(buildAuditErrorCard({ message: "Missing url parameter." }),
             { status: 400, headers: { ...htmlHeaders(), "Cache-Control": "no-store" } });
         }
+        const rl = await checkAuditRateLimit(request, env, ctx);
+        if (rl.limited) {
+          return new Response(
+            buildAuditErrorCard({ message: "Too many audits from your network in the last hour. Please try again later." }),
+            { status: 429, headers: { ...htmlHeaders(), "Cache-Control": "no-store", "Retry-After": String(rl.retryAfter) } });
+        }
         try {
           const { agent, signals } = await runMarketingAudit(target, env, mode);
           const cardHtml = buildAuditCardBody(agent, signals, mode, env);
@@ -8116,13 +8370,14 @@ export default {
         return json({ success: true, rubric: ASSESSMENT_RUBRIC });
       }
       // /asksolomon/diag — UNAUTHENTICATED diagnostic endpoint. Returns only whether
-      // CONSOLE_PASSWORD is configured and its character length. NEVER returns the value.
+      // CONSOLE_PASSWORD is configured. NEVER returns the value or its length
+      // (length was removed in the 2026-11-19 security review — it narrows a
+      // brute-force search).
       // Use during setup to confirm Cloudflare environment has the secret.
       if (path === "/asksolomon/diag") {
         const pw = env.CONSOLE_PASSWORD;
         return json({
           passwordConfigured: Boolean(pw),
-          passwordLength: typeof pw === "string" ? pw.length : 0,
           hint: "The deployed worker expects password header 'x-console-password' to match env.CONSOLE_PASSWORD exactly (case-sensitive, no trim). If passwordConfigured is false, the secret isn't in this environment.",
         });
       }
@@ -8141,7 +8396,7 @@ export default {
       const diagContactMatch = path.match(/^\/diag\/contact\/([A-Za-z0-9_-]+)$/);
       if (diagContactMatch) {
         const pwHeader = request.headers.get("x-console-password");
-        if (!env.CONSOLE_PASSWORD || pwHeader !== env.CONSOLE_PASSWORD) {
+        if (!env.CONSOLE_PASSWORD || !safeEqual(pwHeader, env.CONSOLE_PASSWORD)) {
           return json({
             error: "Unauthorized",
             hint: "Pass the console password in the x-console-password header, not the URL. The query-string form was removed to avoid credential leakage into request logs.",
@@ -8247,7 +8502,7 @@ export default {
       const diagTraceMatch = path.match(/^\/diag\/queue-trace\/([A-Za-z0-9_-]+)$/);
       if (diagTraceMatch) {
         const pwHeader = request.headers.get("x-console-password");
-        if (!env.CONSOLE_PASSWORD || pwHeader !== env.CONSOLE_PASSWORD) {
+        if (!env.CONSOLE_PASSWORD || !safeEqual(pwHeader, env.CONSOLE_PASSWORD)) {
           return json({ error: "Unauthorized" }, 401);
         }
         const traceCid = diagTraceMatch[1];
@@ -8337,7 +8592,6 @@ export default {
         const s = env.WEBHOOK_SECRET;
         return json({
           configured: Boolean(s),
-          length: typeof s === "string" ? s.length : 0,
           hint: "Accepted as either 'x-webhook-secret: <secret>' or 'Authorization: Bearer <secret>' — use whichever your webhook client (GHL uses Bearer) supports. If configured is false, add WEBHOOK_SECRET in Cloudflare → Workers → swot-engine → Settings → Variables and redeploy.",
         });
       }
@@ -8561,6 +8815,12 @@ export default {
       const target = body.url;
       const mode = body.mode === "internal" ? "internal" : "public";
       if (!target) return json({ success: false, error: "url required" }, 400);
+      const rl = await checkAuditRateLimit(request, env, ctx);
+      if (rl.limited) {
+        const res = json({ success: false, error: "Too many audits from your network in the last hour. Please try again later." }, 429);
+        res.headers.set("Retry-After", String(rl.retryAfter));
+        return res;
+      }
       try {
         const { agent, signals } = await runMarketingAudit(target, env, mode);
         return json({ success: true, agent, signals, mode });
@@ -8605,7 +8865,7 @@ export default {
     }
 
     // GET /diag/webhook-secret — verify WEBHOOK_SECRET is set without revealing its value.
-    // Returns { configured: true|false, length: N }. Use to confirm the secret exists on
+    // Returns { configured: true|false } (no length). Use to confirm the secret exists on
     // this deploy before firing test webhooks from GHL.
     // POST /from-ghl-survey — the "no more Vibe" bridge.
     // GHL workflow fires this webhook after a survey submits with { contactId, tier }.
@@ -8855,6 +9115,12 @@ export default {
       : null;
 
     return json({ success: true, tier, ...agent, bookingLink });
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    const response = await routeFetch(request, env, ctx);
+    return applyStaffRouteSecurity(request, env, response);
   },
 
   // Queue consumer (2026-10-28 Codex P1 follow-up). Dispatched by the
@@ -8931,6 +9197,12 @@ export {
   // malformed-stream regression surfaces in tests rather than only in
   // a production 524-recovered run.
   _test_parseAnthropicSse,
+  // Security review 2026-11-19.
+  safeEqual,
+  checkConsolePassword,
+  normalizePersonName,
+  isStaffPath,
+  checkAuditRateLimit,
 };
 
 // Phase 2A: normalization layer. Re-exported from index so tests that
