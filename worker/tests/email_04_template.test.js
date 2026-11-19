@@ -72,21 +72,16 @@ describe("Email 04 — Deep Dive Part 2 template (PR 11)", () => {
         // what they're reading — a bare merge-field drop with no
         // header would read as a context-free paragraph if the field
         // ever contains plain prose.
-        //
-        // 2026-11-18: header copy updated to match PR #169's brand
-        // voice rework ("new copy and site branding for all 15 funnel
-        // emails"). Both headers remain visible — they render uppercase
-        // via CSS `text-transform:uppercase` — so the test's intent
-        // ("block is labeled") still holds. Previous literals
-        // ("NEXT STEPS FROM YOUR SESSION", "CFO BY DESIGN SERVICES
-        // SELECTED") were from PR 11 and became stale.
-        const html = readTemplate(relPath);
+        // #169 rewrote the copy: headers are now sentence case in source
+        // (rendered uppercase via CSS text-transform) and the services
+        // block is labeled "Support options discussed in your session".
+        const html = readTemplate(relPath).toLowerCase();
         assert.ok(
-          html.includes("Next steps from your session"),
+          html.includes("next steps from your session"),
           "next-steps block missing its header",
         );
         assert.ok(
-          html.includes("Support options discussed in your session"),
+          html.includes("support options discussed in your session"),
           "services-selected block missing its header",
         );
       });
