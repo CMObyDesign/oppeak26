@@ -7951,6 +7951,9 @@ function corsHeaders() {
 const STAFF_FRAME_ANCESTORS_DEFAULT = [
   "'self'",
   "https://my.cfobydesign.com",
+  // Spark Agency's white-label HighLevel domain: Miguel's dashboard embed
+  // is viewed here (CFObD's sub-accounts sit under Spark's agency).
+  "https://app.sparkmkting.com",
   "https://app.gohighlevel.com",
   "https://*.gohighlevel.com",
   "https://*.leadconnectorhq.com",
