@@ -32,6 +32,7 @@ describe("staff pages", () => {
     assert.match(csp, /^frame-ancestors /);
     assert.ok(csp.includes("'self'"));
     assert.ok(csp.includes("https://my.cfobydesign.com"));
+    assert.ok(csp.includes("https://app.sparkmkting.com"));
     assert.ok(csp.includes("https://*.gohighlevel.com"));
     assert.ok(csp.includes("https://*.leadconnectorhq.com"));
     assert.equal(res.headers.get("Referrer-Policy"), "no-referrer");
