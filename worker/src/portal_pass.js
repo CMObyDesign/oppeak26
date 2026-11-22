@@ -50,6 +50,7 @@ const EXACT = new Map([
   ["/asksolomon/catalog/publish", POST],
   // Ask Solomon panel: answers (run, no contact), its own history and bookmarks; library and
   // rubrics are read-only
+  ["/asksolomon/ask", POST],
   ["/asksolomon/run", POST],
   ["/asksolomon/history", GET_POST],
   ["/asksolomon/bookmarks", GET_POST],
