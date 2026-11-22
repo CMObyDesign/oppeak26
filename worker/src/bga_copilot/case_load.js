@@ -13,6 +13,7 @@
 // case_handlers.js, generate_roadmap_draft, match_services, etc.);
 // customer-facing delivery is the exclusive job of approve_and_send.js.
 
+import { isBgaCase, NOT_A_BGA_CASE } from "./bga_case.js";
 import {
   fetchGhlContact,
   readCustomField,
@@ -31,7 +32,6 @@ import {
 } from "../ghl_catalog.js";
 import { hashVerifiedFinancialsRaw } from "./vf_hash.js";
 
-const PAID_297_TAG = "swot_paid_297";
 const REHAB_TAG = "swot_rehab";
 
 /**
@@ -303,6 +303,9 @@ export function assembleCaseBundle(contact, idMap, { contactId, catalog } = { co
     rehab_flag: rehabFlag,
     opportunity_flags: opportunityFlags,
     tags,
+    // "funnel" (bought through the SWOT funnel, swot_paid_297) or "staff" (bga_staff_case only).
+    // Staff-started BGAs are delivered through the CFO Portal; approve-and-send is funnel-only.
+    case_source: tags.includes("swot_paid_297") ? "funnel" : "staff",
 
     intake: {
       business_playbook: businessPlaybook,
@@ -431,10 +434,10 @@ export async function handleCaseLoad(request, env, { checkPassword }) {
   if (!contact) return json({ success: false, error: error || "contact fetch failed" }, 503);
 
   const tags = Array.isArray(contact.tags) ? contact.tags : [];
-  if (!tags.includes(PAID_297_TAG)) {
+  if (!isBgaCase(tags)) {
     return json({
       success: false,
-      error: `contact is not tagged ${PAID_297_TAG}`,
+      error: NOT_A_BGA_CASE,
     }, 400);
   }
 

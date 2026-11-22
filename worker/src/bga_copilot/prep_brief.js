@@ -18,6 +18,7 @@
 //     prompt instructs Claude explicitly, and the matched signals
 //     are passed in so there's a correct value to use.
 
+import { isBgaCase, NOT_A_BGA_CASE } from "./bga_case.js";
 import {
   fetchGhlContact,
   readCustomField,
@@ -52,7 +53,6 @@ import {
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 const DRAFT_FIELD_KEY = "swot_growth_plan_draft";
 const PREP_BRIEF_FIELD_KEY = "swot_bga_prep_brief";
-const PAID_297_TAG = "swot_paid_297";
 
 export const PREP_BRIEF_BANNER =
   "📋 INTERNAL · PREP ONLY · NOT CUSTOMER-FACING 📋";
@@ -405,8 +405,8 @@ export async function handleGeneratePrepBrief(request, env, { checkPassword }) {
   if (!contact) return json({ success: false, error: error || "contact fetch failed" }, 503);
 
   const tags = Array.isArray(contact.tags) ? contact.tags : [];
-  if (!tags.includes(PAID_297_TAG)) {
-    return json({ success: false, error: `contact is not tagged ${PAID_297_TAG}` }, 400);
+  if (!isBgaCase(tags)) {
+    return json({ success: false, error: NOT_A_BGA_CASE }, 400);
   }
 
   let catalog = {};

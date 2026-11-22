@@ -12,6 +12,7 @@
 //   - Requires swot_growth_plan_draft to be present — critique on
 //     a non-existent draft is nonsense, refuse 400.
 
+import { isBgaCase, NOT_A_BGA_CASE } from "./bga_case.js";
 import {
   fetchGhlContact,
   readCustomField,
@@ -40,7 +41,6 @@ import {
 } from "./services_catalog.js";
 
 const DRAFT_FIELD_KEY = "swot_growth_plan_draft";
-const PAID_297_TAG = "swot_paid_297";
 
 /**
  * Builds the adversarial system prompt. Pins the specific "poke
@@ -291,8 +291,8 @@ export async function handleChallengeRoadmap(request, env, { checkPassword }) {
   if (!contact) return json({ success: false, error: error || "contact fetch failed" }, 503);
 
   const tags = Array.isArray(contact.tags) ? contact.tags : [];
-  if (!tags.includes(PAID_297_TAG)) {
-    return json({ success: false, error: `contact is not tagged ${PAID_297_TAG}` }, 400);
+  if (!isBgaCase(tags)) {
+    return json({ success: false, error: NOT_A_BGA_CASE }, 400);
   }
 
   let catalog = {};

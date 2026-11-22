@@ -1347,7 +1347,7 @@ function renderCase(bundle, auditData) {
   renderOverrides();
   renderPrepBrief(bundle);
   renderCallNotes();
-  renderApproveAndSend();
+  renderApproveAndSend(bundle);
   const intake = bundle.intake || {};
   renderContentPane("strategist-brief-pane", intake.strategist_brief);
   renderContentPane("business-playbook-pane", intake.business_playbook);
@@ -2132,12 +2132,22 @@ async function revokeOverride(overrideId) {
 let approveReportState = null;  // { blockers, warnings, acknowledged_warnings, run_at }
 let approveReviewed = false;
 
-function renderApproveAndSend() {
+function renderApproveAndSend(bundle) {
   const pane = document.getElementById("approve-and-send-pane");
   if (!pane) return;
   approveReportState = null;
   approveReviewed = false;
   const parts = [];
+  // Staff-started BGAs (bga_staff_case) can't use the funnel-only send: keep the QA, drop the send.
+  if (bundle && bundle.case_source === "staff") {
+    parts.push('<p style="color:#374151; margin:0 0 10px;">Staff-started BGA: run QA here, then review and publish the plan in the CFO Portal plan workspace. Approve &amp; Send is for funnel buyers only.</p>');
+    parts.push('<button class="primary" onclick="runRedTeamCheck()" id="run-red-team-btn">Run Pre-Send QA</button>');
+    parts.push(' <button onclick="toggleReviewed()" id="mark-reviewed-btn" disabled>Mark Reviewed</button>');
+    parts.push('<div id="red-team-error" class="error-banner hidden" style="margin-top:10px;"></div>');
+    parts.push('<div id="red-team-report" style="margin-top:12px;"></div>');
+    pane.innerHTML = parts.join("");
+    return;
+  }
   parts.push('<p style="color:#374151; margin:0 0 10px;">Required before every send: run QA → acknowledge any warnings → mark reviewed → send.</p>');
   parts.push('<button class="primary" onclick="runRedTeamCheck()" id="run-red-team-btn">Run Pre-Send QA</button>');
   parts.push(' <button onclick="toggleReviewed()" id="mark-reviewed-btn" disabled>Mark Reviewed</button>');

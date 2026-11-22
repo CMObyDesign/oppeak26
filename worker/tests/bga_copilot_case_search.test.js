@@ -191,6 +191,40 @@ describe("POST /asksolomon/case/search — tag filter is enforced", () => {
   });
 });
 
+describe("POST /asksolomon/case/search — staff-started BGAs", () => {
+  it("searches both BGA tags and merges them, newest first, without duplicates", async () => {
+    const funnel = makeContact({ id: "f", firstName: "Funnel", tags: ["swot_paid_297"], dateUpdated: "2026-11-01T00:00:00.000Z" });
+    const staff = makeContact({ id: "s", firstName: "Staff", tags: ["bga_staff_case"], dateUpdated: "2026-11-20T00:00:00.000Z" });
+    const both = makeContact({ id: "b", firstName: "Both", tags: ["swot_paid_297", "bga_staff_case"], dateUpdated: "2026-11-10T00:00:00.000Z" });
+    const { calls, restore } = stubFetch(routedResponder({
+      search: (url, init) => {
+        const tag = JSON.parse(init.body).filters[0].value;
+        return searchResponse(tag === "bga_staff_case" ? [staff, both] : [both, funnel]);
+      },
+    }));
+    try {
+      const res = await handleCaseSearch(post({ q: "" }), makeEnv(), { checkPassword });
+      assert.equal(res.status, 200);
+      const data = await res.json();
+      assert.deepEqual(data.contacts.map((c) => c.contactId), ["s", "b", "f"]);
+      const tags = calls.filter((c) => c.url.includes("/contacts/search")).map((c) => JSON.parse(c.body).filters[0].value).sort();
+      assert.deepEqual(tags, ["bga_staff_case", "swot_paid_297"]);
+    } finally { restore(); }
+  });
+
+  it("fails the whole read if either tag search fails (never a silently partial list)", async () => {
+    const { restore } = stubFetch(routedResponder({
+      search: (url, init) => JSON.parse(init.body).filters[0].value === "bga_staff_case"
+        ? new Response("boom", { status: 500 })
+        : searchResponse([makeContact({ id: "f" })]),
+    }));
+    try {
+      const res = await handleCaseSearch(post({ q: "" }), makeEnv(), { checkPassword });
+      assert.equal(res.status, 503);
+    } finally { restore(); }
+  });
+});
+
 describe("POST /asksolomon/case/search — free-text filter", () => {
   const CONTACTS = [
     makeContact({ id: "a", firstName: "Alice", lastName: "Anderson", email: "alice@acme.com", companyName: "Acme Plumbing" }),
