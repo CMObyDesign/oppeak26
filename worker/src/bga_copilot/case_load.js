@@ -303,6 +303,9 @@ export function assembleCaseBundle(contact, idMap, { contactId, catalog } = { co
     rehab_flag: rehabFlag,
     opportunity_flags: opportunityFlags,
     tags,
+    // "funnel" (bought through the SWOT funnel, swot_paid_297) or "staff" (bga_staff_case only).
+    // Staff-started BGAs are delivered through the CFO Portal; approve-and-send is funnel-only.
+    case_source: tags.includes("swot_paid_297") ? "funnel" : "staff",
 
     intake: {
       business_playbook: businessPlaybook,

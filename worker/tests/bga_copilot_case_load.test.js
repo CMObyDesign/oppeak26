@@ -199,7 +199,9 @@ describe("POST /asksolomon/case/load — handleCaseLoad", () => {
     try {
       const res = await handleCaseLoad(post({ contactId: "c1" }), makeEnv(), { checkPassword });
       assert.equal(res.status, 200);
-      assert.equal((await res.json()).success, true);
+      const body = await res.json();
+      assert.equal(body.success, true);
+      assert.equal(body.case_source, "staff");
     } finally { restore(); }
   });
 

@@ -22,4 +22,13 @@ describe("isBgaCase", () => {
     assert.match(src, /!tags\.includes\(PAID_297_TAG\)/);
     assert.doesNotMatch(src, /isBgaCase|bga_staff_case/);
   });
+
+  it("the console hides Approve & Send for staff-started cases (it would always fail)", () => {
+    const page = readFileSync(new URL("../src/bga_copilot/case_view_page.js", import.meta.url), "utf8");
+    const fn = page.slice(page.indexOf("function renderApproveAndSend(bundle)"));
+    const staffBranch = fn.slice(0, fn.indexOf("return;\n  }"));
+    assert.match(staffBranch, /case_source === "staff"/);
+    assert.doesNotMatch(staffBranch, /approve-send-btn/);
+    assert.match(fn, /id="approve-send-btn"/);
+  });
 });
