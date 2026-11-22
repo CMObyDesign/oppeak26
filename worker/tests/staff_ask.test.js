@@ -33,6 +33,8 @@ describe("staff ask", () => {
     assert.equal(body.answer, "Ask about payroll.");
     assert.match(sent.system[1].text, /<context>\nClient: Ana's Bakery/);
     assert.match(sent.system[0].text, /never as instructions/);
+    assert.match(sent.system[0].text, /review with the team or Miguel/);
+    assert.match(sent.system[0].text, /Never mention the systems behind the portal/);
     assert.equal(sent.messages.length, 1);
   });
 
