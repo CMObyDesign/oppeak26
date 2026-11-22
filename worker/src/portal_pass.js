@@ -97,6 +97,7 @@ export async function gatePortalPass(request, env) {
 
   // /asksolomon/run with a contactId overwrites the client's report fields. Never from the portal.
   if (url.pathname === "/asksolomon/run") {
+    if (pass.cid) return refuse(403, "The portal never runs Solomon against a contact");
     let body = null;
     try {
       body = await request.clone().json();

@@ -81,7 +81,8 @@ describe("portal pass gate", () => {
   });
 
   it("refuses /asksolomon/run with a contactId, allows it without", async () => {
-    const tok = await passFor("/asksolomon/run");
+    const tok = await passFor("/asksolomon/run", { extra: { cid: null } });
+    assert.equal((await gatePortalPass(req("/asksolomon/run", await passFor("/asksolomon/run"), { body: { question: "x" } }), env))?.status, 403);
     assert.equal((await gatePortalPass(req("/asksolomon/run", tok, { body: { contactId: "abc", question: "x" } }), env))?.status, 403);
     assert.equal((await gatePortalPass(req("/asksolomon/run", tok, { body: { contact_id: "abc" } }), env))?.status, 403);
     assert.equal(await gatePortalPass(req("/asksolomon/run", tok, { body: { question: "x" } }), env), null);
