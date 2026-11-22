@@ -97,6 +97,7 @@ import { normalizeContactFields, flatNormalized } from "./normalize.js";
 import { deriveMetrics } from "./derived.js";
 import { buildFactsForPrompt, validateStructuredFindings } from "./findings.js";
 import { claimsPaid47V2, validatePaid47V2, buildRegenerationNudge } from "./paid47_v2.js";
+import { gatePortalPass, portalPassFor } from "./portal_pass.js";
 
 // Versioning for canonical records (Phase 1 architecture — see
 // docs/SOLOMON_ARCHITECTURE.md and docs/CLOUDFLARE_DATA_MODEL.md). Each
@@ -5532,6 +5533,8 @@ async function upsertGHLContactByEmail(email, extras, env) {
 // Comparison is constant-time (safeEqual) — security review 2026-11-19.
 // Both candidates are always checked so timing doesn't reveal which matched.
 function checkConsolePassword(request, env) {
+  // A CFO Portal staff pass already verified (and allowlisted) by gatePortalPass for this request.
+  if (portalPassFor(request)) return true;
   const provided = request.headers.get("x-console-password");
   if (!provided) return false;
   const pwOk = Boolean(env.CONSOLE_PASSWORD) && safeEqual(provided, env.CONSOLE_PASSWORD);
@@ -9160,6 +9163,10 @@ async function routeFetch(request, env, ctx) {
 
 export default {
   async fetch(request, env, ctx) {
+    // CFO Portal staff passes are checked before any routing: a bad or non-allowlisted pass is
+    // refused here, so it can never reach the funnel or any route that writes to a client.
+    const refused = await gatePortalPass(request, env);
+    if (refused) return applyStaffRouteSecurity(request, env, refused);
     const response = await routeFetch(request, env, ctx);
     return applyStaffRouteSecurity(request, env, response);
   },
