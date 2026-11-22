@@ -98,6 +98,7 @@ import { deriveMetrics } from "./derived.js";
 import { buildFactsForPrompt, validateStructuredFindings } from "./findings.js";
 import { claimsPaid47V2, validatePaid47V2, buildRegenerationNudge } from "./paid47_v2.js";
 import { gatePortalPass, portalPassFor } from "./portal_pass.js";
+import { handleStaffAsk } from "./staff_ask.js";
 
 // Versioning for canonical records (Phase 1 architecture — see
 // docs/SOLOMON_ARCHITECTURE.md and docs/CLOUDFLARE_DATA_MODEL.md). Each
@@ -8667,6 +8668,10 @@ async function routeFetch(request, env, ctx) {
     // POST /asksolomon/case/load → assembles the case bundle for a swot_paid_297 contact.
     // (The GET /asksolomon/case HTML route lives inside the GET dispatcher above,
     // per Codex P1 on #94: the POST-only guard would otherwise make it unreachable.)
+    // Staff questions from the CFO Portal split panel. Answers only: no writes, no sends, no tags.
+    if (path === "/asksolomon/ask") {
+      return handleStaffAsk(request, env, { checkPassword: checkConsolePassword });
+    }
     if (path === "/asksolomon/case/load") {
       return handleCaseLoad(request, env, { checkPassword: checkConsolePassword });
     }
