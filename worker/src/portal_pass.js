@@ -15,54 +15,61 @@
 export const PASS_HEADER = "x-portal-pass";
 const MAX_LIFETIME_SEC = 120;
 
-// Exact paths. Every one was checked: it doesn't send, tag, or write to HighLevel.
-const EXACT = new Set([
-  // BGA workspace (Solomon's own case records only)
-  "/asksolomon/case/search",
-  "/asksolomon/case/load",
-  "/asksolomon/case/audit-gaps",
-  "/asksolomon/case/verified-financials",
-  "/asksolomon/case/extract-financials-from-document",
-  "/asksolomon/case/generate-roadmap-draft",
-  "/asksolomon/case/update-roadmap-section",
-  "/asksolomon/case/challenge-roadmap",
-  "/asksolomon/case/red-team-check",
-  "/asksolomon/case/match-services",
-  "/asksolomon/case/generate-prep-brief",
-  "/asksolomon/case/extract-call-decisions",
-  "/asksolomon/case/confirm-call-decisions",
-  "/asksolomon/case/acknowledge-warning",
-  "/asksolomon/case/override",
-  "/asksolomon/case/override/revoke",
-  "/asksolomon/case/overrides",
-  // Service catalog (reads; the two writes below are admin-only)
-  "/asksolomon/catalog/active",
-  "/asksolomon/catalog/versions",
-  "/asksolomon/catalog/version",
-  "/asksolomon/catalog/suggestions",
-  "/asksolomon/catalog/audit",
-  "/asksolomon/catalog/suggestion/decide",
-  "/asksolomon/catalog/publish",
-  // Ask Solomon panel (answers only; /run with a contactId is refused below)
-  "/asksolomon/run",
-  "/asksolomon/history",
-  "/asksolomon/library",
-  "/asksolomon/bookmarks",
-  "/asksolomon/rubrics",
+// Exact paths and the methods allowed on each. Every one was checked: it doesn't send, tag, or write to
+// HighLevel. The method is part of the rule: e.g. DELETE /asksolomon/history (wipe) and POST
+// /asksolomon/library (upload) or /asksolomon/rubrics (edit) are never allowed.
+const POST = new Set(["POST"]);
+const GET = new Set(["GET"]);
+const GET_POST = new Set(["GET", "POST"]);
+const EXACT = new Map([
+  // BGA workspace (Solomon's own case records only; these routes are POST-only)
+  ["/asksolomon/case/search", POST],
+  ["/asksolomon/case/load", POST],
+  ["/asksolomon/case/audit-gaps", POST],
+  ["/asksolomon/case/verified-financials", POST],
+  ["/asksolomon/case/extract-financials-from-document", POST],
+  ["/asksolomon/case/generate-roadmap-draft", POST],
+  ["/asksolomon/case/update-roadmap-section", POST],
+  ["/asksolomon/case/challenge-roadmap", POST],
+  ["/asksolomon/case/red-team-check", POST],
+  ["/asksolomon/case/match-services", POST],
+  ["/asksolomon/case/generate-prep-brief", POST],
+  ["/asksolomon/case/extract-call-decisions", POST],
+  ["/asksolomon/case/confirm-call-decisions", POST],
+  ["/asksolomon/case/acknowledge-warning", POST],
+  ["/asksolomon/case/override", POST],
+  ["/asksolomon/case/override/revoke", POST],
+  ["/asksolomon/case/overrides", POST],
+  // Service catalog (the two writes are admin-only, below)
+  ["/asksolomon/catalog/active", POST],
+  ["/asksolomon/catalog/versions", POST],
+  ["/asksolomon/catalog/version", POST],
+  ["/asksolomon/catalog/suggestions", POST],
+  ["/asksolomon/catalog/audit", POST],
+  ["/asksolomon/catalog/suggestion/decide", POST],
+  ["/asksolomon/catalog/publish", POST],
+  // Ask Solomon panel: answers (run, no contact), its own history and bookmarks; library and
+  // rubrics are read-only
+  ["/asksolomon/run", POST],
+  ["/asksolomon/history", GET_POST],
+  ["/asksolomon/bookmarks", GET_POST],
+  ["/asksolomon/library", GET],
+  ["/asksolomon/rubrics", GET],
+  // Reports to review
+  ["/strategist", GET],
 ]);
 
 // Prefixes for item reads, GET only.
 const GET_PREFIXES = ["/asksolomon/history/", "/asksolomon/library/", "/asksolomon/bookmarks/", "/asksolomon/rubrics/", "/strategist/report/"];
-const GET_EXACT = new Set(["/strategist"]);
 
 const ADMIN_ONLY = new Set(["/asksolomon/catalog/suggestion/decide", "/asksolomon/catalog/publish"]);
 
 const ROLES = new Set(["advisor", "accounting", "support", "admin"]);
 
 export function isAllowlisted(path, method) {
-  if (EXACT.has(path)) return true;
-  if (method === "GET" && (GET_EXACT.has(path) || GET_PREFIXES.some((p) => path.startsWith(p)))) return true;
-  return false;
+  const methods = EXACT.get(path);
+  if (methods) return methods.has(method);
+  return method === "GET" && GET_PREFIXES.some((p) => path.startsWith(p));
 }
 
 // Requests whose pass checked out. checkConsolePassword() consults this.
@@ -104,7 +111,11 @@ export async function gatePortalPass(request, env) {
     } catch {
       body = null;
     }
-    if (body && (body.contactId || body.contact_id)) return refuse(403, "The portal never runs Solomon against a contact");
+    // handleConsoleRun reads body.contact.contactId; refuse that and any top-level spelling too.
+    const c = body && typeof body.contact === "object" && body.contact ? body.contact : {};
+    if (body && (body.contactId || body.contact_id || c.contactId || c.contact_id || c.id)) {
+      return refuse(403, "The portal never runs Solomon against a contact");
+    }
   }
 
   verified.set(request, pass);

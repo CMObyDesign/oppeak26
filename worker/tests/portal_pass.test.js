@@ -85,6 +85,8 @@ describe("portal pass gate", () => {
     assert.equal((await gatePortalPass(req("/asksolomon/run", await passFor("/asksolomon/run"), { body: { question: "x" } }), env))?.status, 403);
     assert.equal((await gatePortalPass(req("/asksolomon/run", tok, { body: { contactId: "abc", question: "x" } }), env))?.status, 403);
     assert.equal((await gatePortalPass(req("/asksolomon/run", tok, { body: { contact_id: "abc" } }), env))?.status, 403);
+    assert.equal((await gatePortalPass(req("/asksolomon/run", tok, { body: { contact: { contactId: "abc" }, confirmOverwrite: true } }), env))?.status, 403);
+    assert.equal((await gatePortalPass(req("/asksolomon/run", tok, { body: { contact: { id: "abc" } } }), env))?.status, 403);
     assert.equal(await gatePortalPass(req("/asksolomon/run", tok, { body: { question: "x" } }), env), null);
   });
 
@@ -92,6 +94,18 @@ describe("portal pass gate", () => {
     const path = "/asksolomon/catalog/publish";
     assert.equal((await gatePortalPass(req(path, await passFor(path)), env))?.status, 403);
     assert.equal(await gatePortalPass(req(path, await passFor(path, { role: "admin" })), env), null);
+  });
+
+  it("ties each path to its methods: no history wipe, no library upload, no rubric edits", async () => {
+    assert.equal(isAllowlisted("/asksolomon/history", "DELETE"), false);
+    assert.equal(isAllowlisted("/asksolomon/library", "POST"), false);
+    assert.equal(isAllowlisted("/asksolomon/rubrics", "POST"), false);
+    assert.equal(isAllowlisted("/asksolomon/case/load", "GET"), false);
+    assert.equal(isAllowlisted("/asksolomon/history", "POST"), true);
+    assert.equal(isAllowlisted("/asksolomon/library", "GET"), true);
+    const del = await passFor("/asksolomon/history", { method: "DELETE" });
+    const res = await gatePortalPass(new Request("https://example.com/asksolomon/history", { method: "DELETE", headers: { "x-portal-pass": del } }), env);
+    assert.equal(res?.status, 403);
   });
 
   it("allows strategist reads by GET only", async () => {
