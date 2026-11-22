@@ -52,6 +52,7 @@
 // Acknowledging a warning does NOT re-check the inputs — a content
 // edit after acknowledgment still invalidates the report.
 
+import { isBgaCase, NOT_A_BGA_CASE } from "./bga_case.js";
 import {
   fetchGhlContact,
   readCustomField,
@@ -76,7 +77,6 @@ const DRAFT_FIELD_KEY = "swot_growth_plan_draft";
 const DECISIONS_FIELD_KEY = "swot_bga_decisions";
 const SERVICES_SELECTED_FIELD_KEY = "swot_bga_services_selected";
 const VF_FIELD_KEY = "swot_verified_financials";
-const PAID_297_TAG = "swot_paid_297";
 
 export {
   RED_TEAM_FIELD_KEY,
@@ -572,8 +572,8 @@ export async function handleRedTeamCheck(request, env, { checkPassword }) {
   if (!contact) return json({ success: false, error: error || "contact fetch failed" }, 503);
 
   const tags = Array.isArray(contact.tags) ? contact.tags : [];
-  if (!tags.includes(PAID_297_TAG)) {
-    return json({ success: false, error: `contact is not tagged ${PAID_297_TAG}` }, 400);
+  if (!isBgaCase(tags)) {
+    return json({ success: false, error: NOT_A_BGA_CASE }, 400);
   }
 
   let catalog = {};

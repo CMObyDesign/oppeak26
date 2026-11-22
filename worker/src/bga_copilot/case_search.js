@@ -23,7 +23,7 @@
 // badge-computation unchanged.
 //
 // Tags recognized today (see case_load.js, approve_and_send.js, etc.):
-//   - swot_paid_297          — BGA buyer. Required to appear in results.
+//   - swot_paid_297 or bga_staff_case — BGA buyer or staff-started BGA. One is required to appear.
 //   - swot_growth_plan_ready — Worker-applied at approve_and_send only.
 //                              Terminal "sent" state.
 // There is NO swot_bga_call_booked / swot_bga_call_completed tag in the
@@ -31,11 +31,11 @@
 // the strategist-generated artifacts (prep brief, red-team report)
 // rather than call-lifecycle tags.
 
+import { BGA_CASE_TAGS, isBgaCase } from "./bga_case.js";
 import { fetchGHLCustomFieldsCatalog, buildFieldKeyToIdMap } from "../ghl_catalog.js";
 
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 
-const PAID_297_TAG = "swot_paid_297";
 const SENT_TAG = "swot_growth_plan_ready";
 
 const VERIFIED_FINANCIALS_FIELD_KEY = "swot_verified_financials";
@@ -170,7 +170,7 @@ function matchesQuery(card, q) {
 }
 
 /**
- * Fetch the full swot_paid_297 page from GHL. Returns {contacts, error}.
+ * Fetch the BGA cohort (swot_paid_297 funnel buyers + bga_staff_case) from GHL. Returns {contacts, error}.
  *
  * The GHL endpoint we call here is POST /contacts/search (v2021-07-28).
  * We filter server-side by the tag so the Worker never sees non-BGA
@@ -182,11 +182,24 @@ async function fetchBgaCohort(env) {
   const locationId = env.GHL_LOCATION_ID;
   if (!locationId) return { contacts: null, error: "GHL_LOCATION_ID not configured" };
 
+  // One search per BGA tag (funnel buyers and staff-started cases), merged by contact id and
+  // re-sorted newest first. Either search failing fails the whole read, so a GHL hiccup never
+  // shows a silently partial cohort.
+  const results = await Promise.all(BGA_CASE_TAGS.map((tag) => searchByTag(env, locationId, tag)));
+  const failed = results.find((r) => r.error);
+  if (failed) return { contacts: null, error: failed.error };
+  const byId = new Map();
+  for (const r of results) for (const c of r.contacts) if (c && c.id && !byId.has(c.id)) byId.set(c.id, c);
+  const contacts = [...byId.values()].sort((a, b) => String(b.dateUpdated || "").localeCompare(String(a.dateUpdated || "")));
+  return { contacts, error: null };
+}
+
+async function searchByTag(env, locationId, tag) {
   const body = {
     locationId,
     pageLimit: 100,
     filters: [
-      { field: "tags", operator: "contains", value: PAID_297_TAG },
+      { field: "tags", operator: "contains", value: tag },
     ],
     sort: [{ field: "dateUpdated", direction: "desc" }],
   };
@@ -275,7 +288,7 @@ export async function handleCaseSearch(request, env, { checkPassword }) {
   // non-BGA contact into the strategist console.
   const bgaOnly = contacts.filter((c) => {
     const tags = Array.isArray(c?.tags) ? c.tags : [];
-    return tags.includes(PAID_297_TAG);
+    return isBgaCase(tags);
   });
 
   const cards = bgaOnly.map((c) => toCard(c, idMap));

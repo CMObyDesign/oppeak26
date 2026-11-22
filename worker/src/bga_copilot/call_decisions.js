@@ -17,6 +17,7 @@
 //     against the catalog — a hand-edited unknown id is rejected,
 //     not silently stored.
 
+import { isBgaCase, NOT_A_BGA_CASE } from "./bga_case.js";
 import {
   fetchGhlContact,
   readCustomField,
@@ -38,7 +39,6 @@ import {
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 const DECISIONS_FIELD_KEY = "swot_bga_decisions";
 const SERVICES_SELECTED_FIELD_KEY = "swot_bga_services_selected";
-const PAID_297_TAG = "swot_paid_297";
 
 /**
  * The 11 sections per spec §4.7, in order. The structured record
@@ -210,8 +210,8 @@ export async function handleExtractCallDecisions(request, env, { checkPassword }
   if (!contact) return json({ success: false, error: error || "contact fetch failed" }, 503);
 
   const tags = Array.isArray(contact.tags) ? contact.tags : [];
-  if (!tags.includes(PAID_297_TAG)) {
-    return json({ success: false, error: `contact is not tagged ${PAID_297_TAG}` }, 400);
+  if (!isBgaCase(tags)) {
+    return json({ success: false, error: NOT_A_BGA_CASE }, 400);
   }
 
   const catalogServiceIds = (_effectiveCatalog() || [])
@@ -326,8 +326,8 @@ export async function handleConfirmCallDecisions(request, env, { checkPassword }
   if (!contact) return json({ success: false, error: error || "contact fetch failed" }, 503);
 
   const tags = Array.isArray(contact.tags) ? contact.tags : [];
-  if (!tags.includes(PAID_297_TAG)) {
-    return json({ success: false, error: `contact is not tagged ${PAID_297_TAG}` }, 400);
+  if (!isBgaCase(tags)) {
+    return json({ success: false, error: NOT_A_BGA_CASE }, 400);
   }
 
   // Keep the services_selected field in the saved decisions record

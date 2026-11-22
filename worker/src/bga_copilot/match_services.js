@@ -15,6 +15,7 @@
 //     signal=slug]` tag per §3.1 bound to a canonical signal — never
 //     a free-form string.
 
+import { isBgaCase, NOT_A_BGA_CASE } from "./bga_case.js";
 import {
   fetchGhlContact,
   readCustomField,
@@ -52,7 +53,6 @@ import {
 
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 const DRAFT_FIELD_KEY = "swot_growth_plan_draft";
-const PAID_297_TAG = "swot_paid_297";
 
 /**
  * Pure matcher. Takes an `activeSignals` + `activeDisqualifiers`
@@ -224,8 +224,8 @@ export async function handleMatchServices(request, env, { checkPassword }) {
   if (!contact) return json({ success: false, error: error || "contact fetch failed" }, 503);
 
   const tags = Array.isArray(contact.tags) ? contact.tags : [];
-  if (!tags.includes(PAID_297_TAG)) {
-    return json({ success: false, error: `contact is not tagged ${PAID_297_TAG}` }, 400);
+  if (!isBgaCase(tags)) {
+    return json({ success: false, error: NOT_A_BGA_CASE }, 400);
   }
 
   const idMap = await resolveFieldIdMap(env);

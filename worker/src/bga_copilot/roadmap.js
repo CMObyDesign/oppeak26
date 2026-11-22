@@ -27,6 +27,7 @@
 // rubric; this module makes its own Claude call so a BGA prompt
 // change can't shift the diagnostic path.
 
+import { isBgaCase, NOT_A_BGA_CASE } from "./bga_case.js";
 import {
   fetchGhlContact,
   readCustomField,
@@ -52,7 +53,6 @@ import {
 const GHL_API_BASE = "https://services.leadconnectorhq.com";
 const DRAFT_FIELD_KEY = "swot_growth_plan_draft";
 const DRAFTED_TAG = "swot_growth_plan_drafted";
-const PAID_297_TAG = "swot_paid_297";
 
 export const DRAFT_BANNER =
   "⚠️ DRAFT · INTERNAL PREP ONLY · NOT FOR CUSTOMER DELIVERY ⚠️";
@@ -417,8 +417,8 @@ export async function handleGenerateRoadmapDraft(request, env, { checkPassword }
   if (!contact) return json({ success: false, error: error || "contact fetch failed" }, 503);
 
   const tags = Array.isArray(contact.tags) ? contact.tags : [];
-  if (!tags.includes(PAID_297_TAG)) {
-    return json({ success: false, error: `contact is not tagged ${PAID_297_TAG}` }, 400);
+  if (!isBgaCase(tags)) {
+    return json({ success: false, error: NOT_A_BGA_CASE }, 400);
   }
 
   // Build the bundle the same way /case/load does, so the prompt
@@ -516,8 +516,8 @@ export async function handleUpdateRoadmapSection(request, env, { checkPassword }
   if (!contact) return json({ success: false, error: error || "contact fetch failed" }, 503);
 
   const tags = Array.isArray(contact.tags) ? contact.tags : [];
-  if (!tags.includes(PAID_297_TAG)) {
-    return json({ success: false, error: `contact is not tagged ${PAID_297_TAG}` }, 400);
+  if (!isBgaCase(tags)) {
+    return json({ success: false, error: NOT_A_BGA_CASE }, 400);
   }
 
   const idMap = await resolveFieldIdMap(env);

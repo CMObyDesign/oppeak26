@@ -192,6 +192,17 @@ describe("POST /asksolomon/case/load — handleCaseLoad", () => {
     } finally { restore(); }
   });
 
+  it("200 for a staff-started BGA (bga_staff_case, no funnel purchase)", async () => {
+    const { restore } = stubFetch(routedResponder({
+      contact: ghlContact({ tags: ["bga_staff_case"] }),
+    }));
+    try {
+      const res = await handleCaseLoad(post({ contactId: "c1" }), makeEnv(), { checkPassword });
+      assert.equal(res.status, 200);
+      assert.equal((await res.json()).success, true);
+    } finally { restore(); }
+  });
+
   it("200 happy path: returns full bundle shape (fieldKey-stubbed contact)", async () => {
     const customFields = [
       { fieldKey: "contact.business_playbook", value: "## Playbook content" },

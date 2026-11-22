@@ -27,6 +27,7 @@
 //     are handled. XLSX is explicitly refused (don't want to run a
 //     heavy xlsx parser inside a Workers isolate).
 
+import { isBgaCase, NOT_A_BGA_CASE } from "./bga_case.js";
 import {
   fetchGhlContact,
   json,
@@ -38,7 +39,6 @@ import {
 } from "./metrics.js";
 
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
-const PAID_297_TAG = "swot_paid_297";
 const DEFAULT_MODEL = "claude-sonnet-4-6";
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB per document
 
@@ -328,8 +328,8 @@ export async function handleExtractFinancialsFromDocument(request, env, { checkP
   const { contact, error } = await fetchGhlContact(contactId, env);
   if (!contact) return json({ success: false, error: error || "contact fetch failed" }, 503);
   const tags = Array.isArray(contact.tags) ? contact.tags : [];
-  if (!tags.includes(PAID_297_TAG)) {
-    return json({ success: false, error: `contact is not tagged ${PAID_297_TAG}` }, 400);
+  if (!isBgaCase(tags)) {
+    return json({ success: false, error: NOT_A_BGA_CASE }, 400);
   }
 
   const systemText = buildExtractionSystemPrompt();
