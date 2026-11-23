@@ -24,6 +24,15 @@ export const CANONICAL_SIGNALS = Object.freeze([
   "pricing_review_opportunity",
   "tax_filings_current_but_strategy_absent",
   "growth_capital_question",
+  // Added Nov 22, 2026 (Liz): so every CFO by Design service line can be recommended.
+  "personal_credit_blocks_funding",
+  "business_credit_absent",
+  "stacked_short_term_debt",
+  "unfiled_or_owed_tax_years",
+  "takes_electronic_payments",
+  "weak_online_presence",
+  "nonprofit_status_or_grant_need",
+  "coverage_review_due",
 ]);
 
 export const CANONICAL_DISQUALIFIERS = Object.freeze([
@@ -122,6 +131,8 @@ export function verifiedFinancialsToSignals(entries) {
 
   const tax = byId.tax_status?.value;
   if (tax === "in_default") disqualifiers.add("active_tax_default");
+  // Returns behind or a balance in default both mean past years to catch up.
+  if (tax === "behind" || tax === "in_default") signals.add("unfiled_or_owed_tax_years");
 
   // (Codex P2 on #97) Materiality threshold: a $1 stale receivable on
   // a multi-million-dollar business shouldn't fire the signal. Require
@@ -236,6 +247,46 @@ export function intakeToSignals(answers) {
       slug: "tax_filings_current_but_strategy_absent",
       topic: ["tax", "taxes"],
       condition: ["no strategy", "no planning", "just file", "only file", "no tax plan", "nothing proactive"],
+    },
+    {
+      slug: "personal_credit_blocks_funding",
+      topic: ["credit"],
+      condition: ["poor credit", "bad credit", "low credit", "damaged credit", "credit is poor", "credit is bad", "credit score is low", "low credit score", "credit was denied", "denied because of credit", "turned down", "credit is hurting"],
+    },
+    {
+      slug: "business_credit_absent",
+      topic: ["business credit", "paydex", "duns", "credit profile"],
+      condition: ["no business credit", "don't have", "do not have", "none", "haven't built", "have not built", "no credit history"],
+    },
+    {
+      slug: "stacked_short_term_debt",
+      topic: ["merchant cash advance", "cash advance", "mca", "short-term loan", "short term loan"],
+      condition: ["several", "multiple", "stack", "daily", "weekly", "two ", "three ", "more than one"],
+    },
+    {
+      slug: "unfiled_or_owed_tax_years",
+      topic: ["tax return", "irs", "taxes", "tax "],
+      condition: ["unfiled", "not filed", "haven't filed", "have not filed", " owe ", " owe.", "owed", "balance due", "lien", "behind on"],
+    },
+    {
+      slug: "takes_electronic_payments",
+      topic: ["credit card", "card payment", "card processing", "merchant processing", "merchant services", "stripe", "square"],
+      condition: ["accept", "take", "fees", "rate", "pay by"],
+    },
+    {
+      slug: "weak_online_presence",
+      topic: ["website", "online", "google", "seo", "social media", "marketing", "leads"],
+      condition: ["no website", "outdated", "not getting", "few leads", "no leads", "don't have a", "weak", "word of mouth", "nobody finds"],
+    },
+    {
+      slug: "nonprofit_status_or_grant_need",
+      topic: ["501(c)", "501c", "nonprofit", "non-profit", "grant"],
+      condition: ["apply", "need", "lapsed", "revoked", "reinstat", "seeking", "looking for", "write"],
+    },
+    {
+      slug: "coverage_review_due",
+      topic: ["insurance", "coverage", "policy", "liability", "workers comp", "workers' comp"],
+      condition: ["not sure", "haven't reviewed", "have not reviewed", "expired", "outdated", "underinsured", "years ago", "no coverage", "don't have"],
     },
     {
       slug: "growth_capital_question",

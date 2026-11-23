@@ -15,14 +15,17 @@ import {
 } from "../src/bga_copilot/signals.js";
 
 describe("CANONICAL_SIGNALS / CANONICAL_DISQUALIFIERS — pinned vocabularies", () => {
-  it("signals: exactly 11 and expected contents (append-only tracker)", () => {
-    assert.equal(CANONICAL_SIGNALS.length, 11);
+  it("signals: exactly 19 and expected contents (append-only tracker)", () => {
+    assert.equal(CANONICAL_SIGNALS.length, 19);
     for (const s of [
       "low_margin_visibility", "ar_concentration_risk", "ar_aging_90_plus_present",
       "no_13_week_cash_forecast", "monthly_close_absent_or_late", "debt_service_pressure",
       "bookkeeping_cleanup_needed", "hiring_plan_not_supportable",
       "pricing_review_opportunity", "tax_filings_current_but_strategy_absent",
       "growth_capital_question",
+      "personal_credit_blocks_funding", "business_credit_absent", "stacked_short_term_debt",
+      "unfiled_or_owed_tax_years", "takes_electronic_payments", "weak_online_presence",
+      "nonprofit_status_or_grant_need", "coverage_review_due",
     ]) assert.ok(CANONICAL_SIGNALS.includes(s), `missing signal: ${s}`);
   });
 
@@ -262,7 +265,8 @@ describe("deriveCaseSignals — combines tag + VF + intake derivation", () => {
         { metric_id: "tax_status", value: "in_default" },
       ],
     });
-    assert.deepEqual(r.signals.sort(), ["ar_aging_90_plus_present", "low_margin_visibility"].sort());
+    // tax_status in_default also means past years to catch up (unfiled_or_owed_tax_years).
+    assert.deepEqual(r.signals.sort(), ["ar_aging_90_plus_present", "low_margin_visibility", "unfiled_or_owed_tax_years"].sort());
     assert.deepEqual(r.disqualifiers.sort(), ["active_tax_default", "revenue_band_below_500k"].sort());
   });
 

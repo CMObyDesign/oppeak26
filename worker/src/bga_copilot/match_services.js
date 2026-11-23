@@ -134,7 +134,46 @@ export function matchServices({ activeSignals, activeDisqualifiers, catalog } = 
  *   - When nothing matched, says so plainly instead of leaving the
  *     section empty.
  */
-export function formatSection7Body(matches, { catalogVersion } = {}) {
+// Words that show a plan line is about a given service. Used to point each recommended service at the
+// 90-day commitment (Section 4) or the goal (Sections 5-6) it supports (Liz, Nov 22, 2026: Solomon's
+// job is the services that carry out the 90-day plan and support future goals and scaling).
+export const SERVICE_PLAN_WORDS = Object.freeze({
+  capital: ["fund", "capital", "loan", "line of credit", "bridge", "financ", "equipment"],
+  debt_management: ["debt", "consolidat", "refinanc", "restructur", "payment", "lender", "cash advance"],
+  consulting_planning: ["forecast", "budget", "margin", "pricing", "kpi", "dashboard", "cash flow", "scorecard", "per project", "profitab"],
+  accounting_tax: ["books", "bookkeeping", "monthly close", "month-end close", "reconcil", "accounting", "tax", "catch-up", "catch up", "payroll"],
+  merchant_services: ["processing", "card", "merchant", "payment fee"],
+  coaching: ["hire", "hiring", "team", "accountab", "leader", "delegat"],
+  credit_repair: ["credit score", "credit report", "personal credit", "business credit", "credit"],
+  nonprofit_services: ["nonprofit", "non-profit", "501", "grant"],
+  marketing: ["marketing", "website", "leads", "seo", "online", "social"],
+  risk_management: ["insurance", "coverage", "risk", "protect", "liability"],
+});
+
+const stripTags = (line) => line.replace(/\s*\[(?:VF|CS|SJ|SM):[^\]]*\]/g, "").replace(/^[-*•\d.)\s]+/, "").trim();
+
+/**
+ * Finds the plan line a service supports: first a 90-day commitment (Section 4), else a 6-month or
+ * 12-month goal (Sections 5-6). Returns { where, line } or null.
+ */
+export function planLineFor(serviceId, planSections) {
+  const words = SERVICE_PLAN_WORDS[serviceId];
+  if (!words || !planSections) return null;
+  const look = [[4, "90-day plan"], [5, "6-month direction"], [6, "12-month goal"]];
+  for (const [n, where] of look) {
+    const body = planSections[n];
+    if (typeof body !== "string") continue;
+    for (const raw of body.split("\n")) {
+      const line = stripTags(raw);
+      if (line.length < 8) continue;
+      const low = line.toLowerCase();
+      if (words.some((w) => low.includes(w))) return { where, line: line.length > 180 ? line.slice(0, 177) + "…" : line };
+    }
+  }
+  return null;
+}
+
+export function formatSection7Body(matches, { catalogVersion, planSections } = {}) {
   const parts = [];
   if (catalogVersion) {
     parts.push(`_Catalog version: \`${catalogVersion}\`_`);
@@ -153,6 +192,10 @@ export function formatSection7Body(matches, { catalogVersion } = {}) {
     for (const r of matches.included) {
       const primary = r.matched_signals[0];
       parts.push(`- **${r.name}** — ${r.problem_solved || "_(no problem_solved on catalog entry)_"} [SM: ${r.service_id}, signal=${primary}]`);
+      if (planSections) {
+        const hit = planLineFor(r.service_id, planSections);
+        parts.push(hit ? `  - Supports the ${hit.where}: ${hit.line}` : "  - Not yet tied to a 90-day step or goal. Add the step it supports in Section 4, or remove it.");
+      }
       if (r.matched_signals.length > 1) {
         parts.push(`  - Additional matched signals: ${r.matched_signals.slice(1).join(", ")}`);
       }
@@ -282,7 +325,8 @@ export async function handleMatchServices(request, env, { checkPassword }) {
     }, 404);
   }
 
-  const section7Body = formatSection7Body(matches, { catalogVersion });
+  const planSections = Object.fromEntries(sections.filter((x) => x.n >= 4 && x.n <= 6).map((x) => [x.n, x.body]));
+  const section7Body = formatSection7Body(matches, { catalogVersion, planSections });
   const nextDraft = replaceSectionBody(currentDraft, 7, section7Body);
   if (nextDraft === null) {
     return json({ success: false, error: "section 7 replace failed" }, 500);

@@ -41,7 +41,8 @@
     "name": "Debt Management",
     "problem_solved": "Debt payments are taking too much of the cash the business needs to run and grow. CFO by Design reviews the debt and restructures or consolidates it so more cash stays in the business.",
     "signals_relevant": [
-      "debt_service_pressure"
+      "debt_service_pressure",
+      "stacked_short_term_debt"
     ],
     "when_not_to_recommend": [],
     "deliverables": [
@@ -117,7 +118,8 @@
     "signals_relevant": [
       "bookkeeping_cleanup_needed",
       "monthly_close_absent_or_late",
-      "tax_filings_current_but_strategy_absent"
+      "tax_filings_current_but_strategy_absent",
+      "unfiled_or_owed_tax_years"
     ],
     "when_not_to_recommend": [],
     "deliverables": [
@@ -153,6 +155,7 @@
     "name": "Merchant Services",
     "problem_solved": "Payment processing solutions that help businesses accept payments, streamline transactions, and explore opportunities to reduce processing costs. It's about savings: suggest it whenever the business takes card or electronic payments.",
     "signals_relevant": [
+      "takes_electronic_payments",
       "low_margin_visibility"
     ],
     "when_not_to_recommend": [],
@@ -214,6 +217,144 @@
     "talking_points": [
       "Tie it to the 90-day step or growth goal it serves.",
       "Includes (Services Included): culture_organization_management"
+    ]
+  },
+  {
+    "service_id": "credit_repair",
+    "name": "Credit Rehab",
+    "problem_solved": "Personal and business credit improvement programs designed to help clients strengthen their financial foundation.",
+    "signals_relevant": [
+      "personal_credit_blocks_funding",
+      "business_credit_absent"
+    ],
+    "when_not_to_recommend": [],
+    "deliverables": [
+      "Personal and business credit program options.",
+      "Review of credit challenges and opportunities for improvement.",
+      "Ongoing guidance, reviews, and coaching based on the selected program."
+    ],
+    "client_responsibility": [],
+    "cfobd_responsibility": [],
+    "pricing": {
+      "model": "custom",
+      "amount_usd": 0,
+      "min_term_months": 0,
+      "note": "Not set yet. Pricing isn't part of the catalog for now; never quote a price."
+    },
+    "bundle_eligibility": {
+      "included_in_bundles": [],
+      "pairs_well_with": [
+        "capital"
+      ],
+      "replaces": []
+    },
+    "dependencies": [],
+    "talking_points": [
+      "Tie it to the 90-day step or growth goal it serves.",
+      "Often the step before funding: better credit opens more loan programs.",
+      "Includes (Services Included): personal_credit_rehab, business_credit_rehab, partner_credit_rehab"
+    ]
+  },
+  {
+    "service_id": "nonprofit_services",
+    "name": "Nonprofit Services",
+    "problem_solved": "Nonprofit formation, compliance support, and funding guidance to help mission-driven organizations build a stronger foundation.",
+    "signals_relevant": [
+      "nonprofit_status_or_grant_need"
+    ],
+    "when_not_to_recommend": [],
+    "deliverables": [
+      "Nonprofit formation and filing assistance.",
+      "Guidance on organizational requirements and ongoing compliance.",
+      "Support evaluating funding readiness and available opportunities."
+    ],
+    "client_responsibility": [],
+    "cfobd_responsibility": [],
+    "pricing": {
+      "model": "custom",
+      "amount_usd": 0,
+      "min_term_months": 0,
+      "note": "Not set yet. Pricing isn't part of the catalog for now; never quote a price."
+    },
+    "bundle_eligibility": {
+      "included_in_bundles": [],
+      "pairs_well_with": [
+        "accounting_tax"
+      ],
+      "replaces": []
+    },
+    "dependencies": [],
+    "talking_points": [
+      "Tie it to the 90-day step or growth goal it serves.",
+      "Includes (Services Included): grant_writing, funding_resourcing"
+    ]
+  },
+  {
+    "service_id": "marketing",
+    "name": "Marketing",
+    "problem_solved": "Websites, social media, and marketing campaigns designed to help businesses attract customers and increase sales opportunities.",
+    "signals_relevant": [
+      "weak_online_presence"
+    ],
+    "when_not_to_recommend": [],
+    "deliverables": [
+      "Review of current marketing efforts and business goals.",
+      "Website, social media, and campaign service options.",
+      "Recommendations for improving visibility, engagement, and lead generation."
+    ],
+    "client_responsibility": [],
+    "cfobd_responsibility": [],
+    "pricing": {
+      "model": "custom",
+      "amount_usd": 0,
+      "min_term_months": 0,
+      "note": "Not set yet. Pricing isn't part of the catalog for now; never quote a price."
+    },
+    "bundle_eligibility": {
+      "included_in_bundles": [],
+      "pairs_well_with": [
+        "consulting_planning"
+      ],
+      "replaces": []
+    },
+    "dependencies": [],
+    "talking_points": [
+      "Tie it to the 90-day step or growth goal it serves.",
+      "Includes (Services Included): marketing_manager, database_management"
+    ]
+  },
+  {
+    "service_id": "risk_management",
+    "name": "Risk Management",
+    "problem_solved": "Insurance and risk management solutions designed to help protect businesses, owners, and the wealth they're building.",
+    "signals_relevant": [
+      "coverage_review_due"
+    ],
+    "when_not_to_recommend": [],
+    "deliverables": [
+      "Review of existing coverage and potential exposures.",
+      "Discussion of business, personal, and wealth protection needs.",
+      "Recommendations for appropriate coverage options."
+    ],
+    "client_responsibility": [],
+    "cfobd_responsibility": [],
+    "pricing": {
+      "model": "custom",
+      "amount_usd": 0,
+      "min_term_months": 0,
+      "note": "Not set yet. Pricing isn't part of the catalog for now; never quote a price."
+    },
+    "bundle_eligibility": {
+      "included_in_bundles": [],
+      "pairs_well_with": [
+        "consulting_planning"
+      ],
+      "replaces": []
+    },
+    "dependencies": [],
+    "talking_points": [
+      "Tie it to the 90-day step or growth goal it serves.",
+      "Includes (Services Included): risk_management"
     ]
   }
 ]

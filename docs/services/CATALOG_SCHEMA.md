@@ -186,7 +186,15 @@ touches `worker/data/service_catalog.json`.
         "hiring_plan_not_supportable",
         "pricing_review_opportunity",
         "tax_filings_current_but_strategy_absent",
-        "growth_capital_question"
+        "growth_capital_question",
+        "personal_credit_blocks_funding",
+        "business_credit_absent",
+        "stacked_short_term_debt",
+        "unfiled_or_owed_tax_years",
+        "takes_electronic_payments",
+        "weak_online_presence",
+        "nonprofit_status_or_grant_need",
+        "coverage_review_due"
       ],
       "description": "The canonical signal vocabulary from §4.1. Append-only: new signals require a schema PR that adds the enum entry AND lands a `match_services` detector AND a regression test in the same diff."
     },

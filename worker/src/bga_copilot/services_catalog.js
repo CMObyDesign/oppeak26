@@ -148,6 +148,14 @@ async function _loadActiveVersion(env) {
       // module-import loader.
       versionId = await _seedFromBundledJson(db);
       if (!versionId) return null;
+    } else {
+      // The active version came from the bundled JSON (published_by 'seed') and a deploy has since
+      // changed that JSON: seed it as a new version. A version an admin published is never replaced.
+      const active = await db.prepare("SELECT published_by, services_sha FROM bga_catalog_versions WHERE id = ? LIMIT 1").bind(versionId).first();
+      if (active && active.published_by === "seed" && active.services_sha !== (await _computeShortSha(BUNDLED_JSON_CATALOG))) {
+        const next = await _seedFromBundledJson(db);
+        if (next) versionId = next;
+      }
     }
 
     const rows = await db

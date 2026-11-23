@@ -79,7 +79,7 @@ function makeFakeDb({
           first: async () => {
             state.reads++;
             const v = state.versions.find(r => r.id === vid);
-            return v ? { services_sha: v.services_sha } : null;
+            return v ? { services_sha: v.services_sha, published_by: v.published_by } : null;
           },
         }),
       };
@@ -304,3 +304,23 @@ function makeRow(version_id, service_id, name) {
     customer_value_points_json: "[]",
   };
 }
+
+describe("services_catalog refresh after a deploy (Nov 22, 2026)", () => {
+  beforeEach(() => {
+    _setCatalogForTests(null);
+    _resetCacheForTests();
+  });
+
+  it("re-seeds when the bundled catalog changed and the active version was a seed", async () => {
+    const db = makeFakeDb({ activeVersionId: 5, versions: [{ id: 5, published_at: "2026-11-23T00:00:00Z", published_by: "seed", services_sha: "0000oldseed0" }] });
+    await primeServicesCatalog({ SOLOMON_DB: db });
+    assert.notEqual(db._state.activeVersionId, 5, "a new seed version became active");
+    assert.ok(db._state.services.filter((r) => r.version_id === db._state.activeVersionId).length >= 1);
+  });
+
+  it("never replaces a version an admin published", async () => {
+    const db = makeFakeDb({ activeVersionId: 7, versions: [{ id: 7, published_at: "2026-11-23T00:00:00Z", published_by: "liz@example.com", services_sha: "0000admin000" }] });
+    await primeServicesCatalog({ SOLOMON_DB: db });
+    assert.equal(db._state.activeVersionId, 7);
+  });
+});
