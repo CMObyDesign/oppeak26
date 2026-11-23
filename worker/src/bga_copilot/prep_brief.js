@@ -243,7 +243,7 @@ export function extractSmTags(sectionBody) {
  */
 export function validateGeneratedPrepBrief(text, stopReason, { matches } = {}) {
   if (stopReason === "max_tokens") {
-    return { ok: false, error: "Claude hit the max_tokens limit — prep brief truncated; re-run" };
+    return { ok: false, error: "The prep brief ran longer than Solomon's limit and was cut off, so nothing was saved. Run it again." };
   }
   const brief = wrapGeneratedPrepBrief(text);
   if (!brief.startsWith(PREP_BRIEF_BANNER)) {
@@ -350,7 +350,7 @@ export async function callClaudeForPrepBrief(systemText, userText, env) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 3000,
+        max_tokens: 6000,
         system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: userText }],
       }),

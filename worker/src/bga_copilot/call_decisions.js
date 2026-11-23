@@ -104,7 +104,7 @@ export function buildCallDecisionsUserPrompt({ notes, catalogServiceIds } = {}) 
  */
 export function parseAndValidateExtracted(text, stopReason) {
   if (stopReason === "max_tokens") {
-    return { ok: false, error: "Claude hit the max_tokens limit — notes truncated; re-run" };
+    return { ok: false, error: "Reading the call notes ran longer than Solomon's limit and was cut off. Run it again, or paste shorter notes." };
   }
   let raw = String(text || "").trim();
   // Strip a leading / trailing ```json fence if present.
@@ -163,7 +163,7 @@ async function callClaudeForCallDecisions(systemText, userText, env) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 2500,
+        max_tokens: 5000,
         system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: userText }],
       }),

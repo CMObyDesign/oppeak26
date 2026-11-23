@@ -312,7 +312,7 @@ export async function callClaudeForRoadmap(systemText, userText, env) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 4000,
+        max_tokens: 12000,
         system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: userText }],
       }),
@@ -342,7 +342,7 @@ export async function callClaudeForRoadmap(systemText, userText, env) {
  */
 export function validateGeneratedDraft(text, stopReason) {
   if (stopReason === "max_tokens") {
-    return { ok: false, error: "Claude hit the max_tokens limit — draft truncated; re-run" };
+    return { ok: false, error: "The draft ran longer than Solomon's limit and was cut off, so nothing was saved. Run it again." };
   }
   const draft = wrapGeneratedDraft(text);
   if (!draft.startsWith(DRAFT_BANNER)) {

@@ -138,7 +138,7 @@ describe("parseAndValidateExtracted", () => {
   it("rejects stop_reason=max_tokens", () => {
     const r = parseAndValidateExtracted(JSON.stringify(sampleGoodRecord()), "max_tokens");
     assert.equal(r.ok, false);
-    assert.match(r.error, /max_tokens/);
+    assert.match(r.error, /cut off/);
   });
 
   it("rejects non-JSON", () => {

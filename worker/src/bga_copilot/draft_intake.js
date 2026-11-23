@@ -128,7 +128,7 @@ export async function handleDraftIntake(request, env, { checkPassword, fetchImpl
       headers: { "content-type": "application/json", "x-api-key": env.ANTHROPIC_API_KEY, "anthropic-version": env.ANTHROPIC_VERSION || "2023-06-01" },
       body: JSON.stringify({
         model: env.CLAUDE_MODEL || "claude-sonnet-4-6",
-        max_tokens: 4000,
+        max_tokens: 8000,
         system: DRAFT_INTAKE_SYSTEM,
         messages: [{ role: "user", content: buildDraftIntakeContent(clean.questions, clean.documents) }],
       }),
