@@ -54,6 +54,9 @@ describe("draft-intake", () => {
       { key: "Q_M", answer: "", sources: [], confidence: null },
     ]);
     assert.equal(out.notes, "Bank only.");
+    // No validated source: the answer is dropped.
+    const ungrounded = parseDraftIntakeReply('{"answers":[{"key":"Q_D","answer":"Lots of cash.","sources":["invented.pdf"],"confidence":"high"},{"key":"Q_M","answer":"Grow.","confidence":"low"}]}', Q, docs);
+    assert.deepEqual(ungrounded.answers.map((a) => [a.answer, a.confidence]), [["", null], ["", null]]);
     assert.equal(parseDraftIntakeReply("no json here", Q, docs), null);
   });
 

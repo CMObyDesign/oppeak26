@@ -95,9 +95,11 @@ export function parseDraftIntakeReply(text, questions, documents) {
   const byKey = new Map((Array.isArray(parsed.answers) ? parsed.answers : []).map((a) => [String(a?.key ?? ""), a]));
   const answers = questions.map((q) => {
     const a = byKey.get(q.key) || {};
-    const answer = typeof a.answer === "string" ? a.answer.trim().slice(0, 5000) : "";
     const sources = (Array.isArray(a.sources) ? a.sources : []).map(String).filter((s) => names.has(s));
-    const confidence = ["high", "medium", "low"].includes(a.confidence) ? a.confidence : answer ? "low" : null;
+    // An answer must be grounded in a document that was actually sent; otherwise drop it.
+    const raw = typeof a.answer === "string" ? a.answer.trim().slice(0, 5000) : "";
+    const answer = sources.length ? raw : "";
+    const confidence = answer ? (["high", "medium", "low"].includes(a.confidence) ? a.confidence : "low") : null;
     return { key: q.key, answer, sources, confidence };
   });
   return { answers, notes: typeof parsed.notes === "string" ? parsed.notes.slice(0, 1000) : "" };
