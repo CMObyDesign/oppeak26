@@ -232,9 +232,11 @@ export function checkMissingProvenanceFinancial(ctx) {
     if (!matches || matches.length === 0) continue;
     // Window: this line + 1 above + 1 below
     const window = [lines[i - 1] || "", line, lines[i + 1] || ""].join("\n");
-    if (PROVENANCE_TAG_RE.test(window)) continue;
-    // A figure read from a document but not verified yet still blocks a send: verify it first.
-    const fromDoc = /\[DOC:[^\]]*\]/i.test(window);
+    // A figure read from a document but not verified yet blocks a send, even when a neighboring line
+    // carries a verified tag: the claim line itself decides.
+    const docOnLine = /\[DOC:[^\]]*\]/i.test(line) && !PROVENANCE_TAG_RE.test(line);
+    if (!docOnLine && PROVENANCE_TAG_RE.test(window)) continue;
+    const fromDoc = docOnLine || /\[DOC:[^\]]*\]/i.test(window);
     out.push({
       id: "missing_provenance_financial",
       where: `line ${i + 1}: "${line.slice(0, 80)}"`,

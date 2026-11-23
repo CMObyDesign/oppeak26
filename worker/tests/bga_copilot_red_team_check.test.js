@@ -562,4 +562,12 @@ describe("red-team: figures read from documents (Nov 23, 2026)", () => {
     assert.equal(out.length, 1);
     assert.match(out[0].detail, /come from a document and aren't verified yet/);
   });
+
+  it("a document figure next to a verified line is still flagged", async () => {
+    const { checkMissingProvenanceFinancial } = await import("../src/bga_copilot/red_team_check.js");
+    const out = checkMissingProvenanceFinancial({ customer_visible: "- Revenue $3.1M [VF: revenue_ttm = 3100000, period=2025, source=PL]\n- Cash is $42K [DOC: Chase.pdf, \"$42,118\"]" });
+    assert.equal(out.length, 1);
+    assert.match(out[0].where, /line 2/);
+  });
 });
+

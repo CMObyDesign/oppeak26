@@ -135,7 +135,9 @@ export function renderGrowthPlanFromDraft(draft) {
   const parts = [];
   for (const s of parsed.sections) {
     if (!CUSTOMER_VISIBLE_SECTION_NUMBERS.includes(s.n)) continue;
-    parts.push(`## Section ${s.n} — ${s.title}\n\n${(s.body || "").trim()}`);
+    // [DOC: file, "quote"] tags are internal (file names, quoted source text): never sent to the client.
+    const body = (s.body || "").replace(/\s*\[DOC:[^\]]*\]/gi, "").trim();
+    parts.push(`## Section ${s.n} — ${s.title}\n\n${body}`);
   }
   return parts.join("\n\n");
 }
