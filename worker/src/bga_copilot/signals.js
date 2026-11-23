@@ -266,7 +266,8 @@ export function intakeToSignals(answers) {
     {
       slug: "unfiled_or_owed_tax_years",
       topic: ["tax return", "irs", "taxes", "tax "],
-      condition: ["unfiled", "not filed", "haven't filed", "have not filed", " owe ", " owe.", "owed", "balance due", "lien", "behind on"],
+      // Whole words only for owe/owed ("showed" must not match).
+      condition: ["unfiled", "not filed", "haven't filed", "have not filed", " owe ", " owe.", " owe,", " owed ", " owed.", " owed,", "balance due", "lien", "behind on"],
     },
     {
       slug: "takes_electronic_payments",

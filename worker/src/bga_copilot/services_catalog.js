@@ -153,8 +153,13 @@ async function _loadActiveVersion(env) {
       // changed that JSON: seed it as a new version. A version an admin published is never replaced.
       const active = await db.prepare("SELECT published_by, services_sha FROM bga_catalog_versions WHERE id = ? LIMIT 1").bind(versionId).first();
       if (active && active.published_by === "seed" && active.services_sha !== (await _computeShortSha(BUNDLED_JSON_CATALOG))) {
-        const next = await _seedFromBundledJson(db);
+        const next = await _seedFromBundledJson(db, versionId);
         if (next) versionId = next;
+        else {
+          // Not activated (e.g. an admin published meanwhile): serve whatever is active now.
+          const now2 = await db.prepare("SELECT active_version_id FROM bga_catalog_active WHERE singleton = 1 LIMIT 1").first();
+          if (now2 && now2.active_version_id) versionId = now2.active_version_id;
+        }
       }
     }
 
@@ -203,7 +208,7 @@ async function _loadActiveVersion(env) {
  * caller falls back to JSON for THIS request; the next request will
  * retry the seed.
  */
-async function _seedFromBundledJson(db) {
+async function _seedFromBundledJson(db, replacingVersionId = null) {
   const nowIso = new Date().toISOString();
   const servicesSha = await _computeShortSha(BUNDLED_JSON_CATALOG);
   const bundlesSha  = await _computeShortSha([]); // no bundle data in the legacy JSON
@@ -279,17 +284,30 @@ async function _seedFromBundledJson(db) {
     // batch. D1's batch is all-or-nothing at the API level — any
     // statement failing rejects the whole call, so the activation only
     // sticks if every insert also stuck.
-    const activate = db
-      .prepare(
-        `UPDATE bga_catalog_active
-         SET active_version_id = ?, activated_at = ?, activated_by = 'seed'
-         WHERE singleton = 1`
-      )
-      .bind(versionId, nowIso);
+    // When replacing an older seed, activate only if the pointer still names that seed, so an admin
+    // publish that lands in between is never overwritten.
+    const activate = replacingVersionId
+      ? db
+          .prepare(
+            `UPDATE bga_catalog_active
+             SET active_version_id = ?, activated_at = ?, activated_by = 'seed'
+             WHERE singleton = 1 AND active_version_id = ?`
+          )
+          .bind(versionId, nowIso, replacingVersionId)
+      : db
+          .prepare(
+            `UPDATE bga_catalog_active
+             SET active_version_id = ?, activated_at = ?, activated_by = 'seed'
+             WHERE singleton = 1`
+          )
+          .bind(versionId, nowIso);
+    let activationChanges = null;
 
     if (typeof db.batch === "function") {
       try {
-        await db.batch([...inserts, activate]);
+        const results = await db.batch([...inserts, activate]);
+        const last = Array.isArray(results) ? results[results.length - 1] : null;
+        activationChanges = last && last.meta ? last.meta.changes : null;
       } catch (err) {
         console.warn(`[services_catalog] seed batch failed; NOT activating partial version ${versionId}: ${err && err.message}`);
         return null;
@@ -307,13 +325,18 @@ async function _seedFromBundledJson(db) {
         }
       }
       try {
-        await activate.run();
+        const r = await activate.run();
+        activationChanges = r && r.meta ? r.meta.changes : null;
       } catch (err) {
         console.warn(`[services_catalog] seed activation failed for version ${versionId}: ${err && err.message}`);
         return null;
       }
     }
 
+    if (replacingVersionId && activationChanges === 0) {
+      console.warn(`[services_catalog] re-seed ${versionId} not activated: the active version changed (an admin published)`);
+      return null;
+    }
     console.log(`[services_catalog] seeded D1 from bundled JSON as version ${versionId} (${BUNDLED_JSON_CATALOG.length} services)`);
     return versionId;
   } catch (err) {

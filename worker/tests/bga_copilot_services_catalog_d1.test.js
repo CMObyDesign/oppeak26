@@ -79,6 +79,7 @@ function makeFakeDb({
           first: async () => {
             state.reads++;
             const v = state.versions.find(r => r.id === vid);
+            if (state.onVersionRead) state.onVersionRead(state);
             return v ? { services_sha: v.services_sha, published_by: v.published_by } : null;
           },
         }),
@@ -133,11 +134,13 @@ function makeFakeDb({
     }
     if (/UPDATE bga_catalog_active/i.test(sql)) {
       return {
-        bind: (versionId) => ({
+        bind: (versionId, _at, expected) => ({
           run: async () => {
+            // Honors "AND active_version_id = ?" when the loader passes an expected pointer.
+            if (expected !== undefined && state.activeVersionId !== expected) return { meta: { changes: 0 } };
             state.writes++;
             state.activeVersionId = versionId;
-            return { meta: {} };
+            return { meta: { changes: 1 } };
           },
         }),
       };
@@ -322,5 +325,13 @@ describe("services_catalog refresh after a deploy (Nov 22, 2026)", () => {
     const db = makeFakeDb({ activeVersionId: 7, versions: [{ id: 7, published_at: "2026-11-23T00:00:00Z", published_by: "liz@example.com", services_sha: "0000admin000" }] });
     await primeServicesCatalog({ SOLOMON_DB: db });
     assert.equal(db._state.activeVersionId, 7);
+  });
+
+  it("doesn't overwrite an admin publish that lands while it re-seeds", async () => {
+    const db = makeFakeDb({ activeVersionId: 5, versions: [{ id: 5, published_at: "2026-11-23T00:00:00Z", published_by: "seed", services_sha: "0000oldseed0" }, { id: 9, published_at: "2026-11-23T00:01:00Z", published_by: "liz@example.com", services_sha: "0000admin009" }] });
+    // An admin publishes version 9 right after the loader reads the old seed.
+    db._state.onVersionRead = (st) => { if (st.activeVersionId === 5) st.activeVersionId = 9; st.onVersionRead = null; };
+    await primeServicesCatalog({ SOLOMON_DB: db });
+    assert.equal(db._state.activeVersionId, 9);
   });
 });

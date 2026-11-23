@@ -48,7 +48,7 @@ describe("new trigger detectors", () => {
   });
 
   it("stay quiet on healthy or unrelated answers", () => {
-    const quiet = ["Our credit is excellent.", "We process orders the same day.", "Taxes are filed and current.", "Product returns are low.", "We lowered costs."];
+    const quiet = ["Our credit is excellent.", "We process orders the same day.", "Taxes are filed and current.", "Product returns are low.", "We lowered costs.", "The tax report showed every return is filed and current."];
     for (const text of quiet) {
       const got = intakeToSignals(ans(text)).signals.filter((x) => ["personal_credit_blocks_funding", "takes_electronic_payments", "unfiled_or_owed_tax_years"].includes(x));
       assert.deepEqual(got, [], text);
@@ -72,6 +72,7 @@ describe("Section 7 points each service at the plan", () => {
     assert.equal(planLineFor("accounting_tax", plan).line, "Set up per project budgets in the books");
     assert.deepEqual(planLineFor("coaching", plan), { where: "6-month direction", line: "Hire a project manager once margins hold" });
     assert.equal(planLineFor("nonprofit_services", plan), null);
+    assert.equal(planLineFor("debt_management", { 4: "- Reduce card payment fees" }), null, "card payments aren't debt");
   });
 
   it("writes a Supports line, or says it isn't tied yet", () => {

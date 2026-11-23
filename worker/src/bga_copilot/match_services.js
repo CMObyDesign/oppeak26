@@ -139,7 +139,7 @@ export function matchServices({ activeSignals, activeDisqualifiers, catalog } = 
 // job is the services that carry out the 90-day plan and support future goals and scaling).
 export const SERVICE_PLAN_WORDS = Object.freeze({
   capital: ["fund", "capital", "loan", "line of credit", "bridge", "financ", "equipment"],
-  debt_management: ["debt", "consolidat", "refinanc", "restructur", "payment", "lender", "cash advance"],
+  debt_management: ["debt", "consolidat", "refinanc", "restructur", "loan payment", "lender", "cash advance"],
   consulting_planning: ["forecast", "budget", "margin", "pricing", "kpi", "dashboard", "cash flow", "scorecard", "per project", "profitab"],
   accounting_tax: ["books", "bookkeeping", "monthly close", "month-end close", "reconcil", "accounting", "tax", "catch-up", "catch up", "payroll"],
   merchant_services: ["processing", "card", "merchant", "payment fee"],
