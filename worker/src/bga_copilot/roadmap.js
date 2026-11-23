@@ -28,6 +28,7 @@
 // change can't shift the diagnostic path.
 
 import { isBgaCase, NOT_A_BGA_CASE } from "./bga_case.js";
+import { callClaudeStreamed } from "./claude_stream.js";
 import {
   fetchGhlContact,
   readCustomField,
@@ -301,33 +302,16 @@ export async function callClaudeForRoadmap(systemText, userText, env) {
     return { ok: false, error: "ANTHROPIC_API_KEY not configured" };
   }
   const model = env.CLAUDE_MODEL || "claude-sonnet-4-6";
-  let res;
-  try {
-    res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": env.ANTHROPIC_API_KEY,
-        "anthropic-version": env.ANTHROPIC_VERSION || "2023-06-01",
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: 12000,
-        system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
-        messages: [{ role: "user", content: userText }],
-      }),
-    });
-  } catch (err) {
-    return { ok: false, error: `Claude fetch failed: ${err?.message || err}` };
-  }
-  if (!res.ok) {
-    const detail = await res.text().catch(() => "");
-    return { ok: false, error: `Claude API ${res.status}: ${detail.slice(0, 300)}` };
-  }
-  const data = await res.json().catch(() => null);
-  const text = data?.content?.[0]?.text;
-  if (!text) return { ok: false, error: "Claude response missing content[0].text" };
-  return { ok: true, text, stop_reason: data?.stop_reason || null };
+  // Streamed: a full 8-section draft can take two or three minutes (see claude_stream.js).
+  return callClaudeStreamed({
+    env,
+    body: {
+      model,
+      max_tokens: 12000,
+      system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: userText }],
+    },
+  });
 }
 
 /**
