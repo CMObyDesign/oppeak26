@@ -554,3 +554,12 @@ describe("POST /asksolomon/case/acknowledge-warning — handler", () => {
     } finally { cap.restore(); }
   });
 });
+
+describe("red-team: figures read from documents (Nov 23, 2026)", () => {
+  it("flags an unverified document figure with a 'verify it' message", async () => {
+    const { checkMissingProvenanceFinancial } = await import("../src/bga_copilot/red_team_check.js");
+    const out = checkMissingProvenanceFinancial({ customer_visible: "Cash on hand is about $42K [DOC: Chase March.pdf, \"$42,118\"]." });
+    assert.equal(out.length, 1);
+    assert.match(out[0].detail, /come from a document and aren't verified yet/);
+  });
+});
