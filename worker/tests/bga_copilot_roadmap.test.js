@@ -267,7 +267,7 @@ describe("validateGeneratedDraft — Codex P2 on #96 finding 1", () => {
   it("rejects truncated responses (stop_reason=max_tokens)", () => {
     const r = validateGeneratedDraft(sampleGoodDraft(), "max_tokens");
     assert.equal(r.ok, false);
-    assert.match(r.error, /max_tokens/);
+    assert.match(r.error, /cut off/);
   });
 
   it("rejects a response that parses to < 8 sections", () => {
@@ -464,7 +464,7 @@ describe("POST /asksolomon/case/generate-roadmap-draft — handleGenerateRoadmap
       const res = await handleGenerateRoadmapDraft(post({ contactId: "c1" }), makeEnv(), { checkPassword });
       assert.equal(res.status, 502);
       const body = await res.json();
-      assert.match(body.error, /max_tokens/);
+      assert.match(body.error, /cut off/);
       assert.equal(putFired, false, "must not write a truncated draft");
       assert.equal(tagFired, false, "must not apply the call-ready tag on a truncated draft");
     } finally { cap.restore(); }

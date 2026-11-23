@@ -162,7 +162,7 @@ describe("validateChallengeOutput", () => {
   it("rejects max_tokens truncation", () => {
     const r = validateChallengeOutput(sampleCritique(), "max_tokens");
     assert.equal(r.ok, false);
-    assert.match(r.error, /max_tokens/);
+    assert.match(r.error, /cut off/);
   });
 
   it("rejects a critique missing a lens heading", () => {

@@ -208,7 +208,7 @@ describe("validateGeneratedPrepBrief", () => {
   it("rejects stop_reason=max_tokens", () => {
     const r = validateGeneratedPrepBrief(sampleGoodBrief(), "max_tokens");
     assert.equal(r.ok, false);
-    assert.match(r.error, /max_tokens/);
+    assert.match(r.error, /cut off/);
   });
 
   it("rejects a brief that parses to != 9 sections", () => {

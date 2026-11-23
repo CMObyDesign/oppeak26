@@ -174,7 +174,7 @@ const REQUIRED_LENS_HEADINGS = Object.freeze([
 
 export function validateChallengeOutput(text, stopReason) {
   if (stopReason === "max_tokens") {
-    return { ok: false, error: "Claude hit the max_tokens limit — critique truncated; re-run" };
+    return { ok: false, error: "The challenge ran longer than Solomon's limit and was cut off. Run it again." };
   }
   const t = String(text || "");
   if (!t.includes("## Lenses")) {
@@ -239,7 +239,7 @@ export async function callClaudeForChallenge(systemText, userText, env) {
       },
       body: JSON.stringify({
         model,
-        max_tokens: 2500,
+        max_tokens: 5000,
         system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: userText }],
       }),
