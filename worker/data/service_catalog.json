@@ -1,93 +1,219 @@
 [
   {
-    "service_id": "placeholder_fractional_cfo_core",
-    "name": "PLACEHOLDER — Fractional CFO (Core) — replace with real service",
-    "problem_solved": "Owner has no forward cash visibility and no monthly rhythm for financial review, and keeps making decisions from a bank balance instead of a plan.",
+    "service_id": "capital",
+    "name": "Business Capital",
+    "problem_solved": "Business funding solutions matched to the owner's goals, financial position, and ability to repay. Many loan programs with different criteria: describe how the business looks on paper (credit, cash flow, collateral, time in business, tax status); never rule a client out.",
     "signals_relevant": [
-      "low_margin_visibility",
-      "no_13_week_cash_forecast",
-      "monthly_close_absent_or_late"
+      "growth_capital_question",
+      "debt_service_pressure"
     ],
-    "when_not_to_recommend": [
-      "active_tax_default",
-      "legal_distress",
-      "revenue_band_below_500k",
-      "books_not_closable"
-    ],
+    "when_not_to_recommend": [],
     "deliverables": [
-      "PLACEHOLDER — Monthly close review with CFO By Design strategist",
-      "PLACEHOLDER — 13-week rolling cash forecast maintained by CFOBD",
-      "PLACEHOLDER — Quarterly strategy session"
+      "Review of business financials and funding readiness.",
+      "Guidance on potential financing options based on qualifications.",
+      "Support navigating the funding process."
     ],
-    "client_responsibility": [
-      "PLACEHOLDER — Bookkeeper closes books by day 7 of each month",
-      "PLACEHOLDER — Owner attends monthly review"
-    ],
-    "cfobd_responsibility": [
-      "PLACEHOLDER — Review and interpret monthly financials",
-      "PLACEHOLDER — Maintain 13-week cash forecast",
-      "PLACEHOLDER — Flag material deviations and recommend adjustments"
-    ],
+    "client_responsibility": [],
+    "cfobd_responsibility": [],
     "pricing": {
-      "model": "monthly_retainer",
+      "model": "custom",
       "amount_usd": 0,
       "min_term_months": 0,
-      "note": "PLACEHOLDER — pricing TBD by Miguel"
-    },
-    "bundle_eligibility": {
-      "included_in_bundles": ["placeholder_premium_cfo_bundle"],
-      "pairs_well_with": [],
-      "replaces": []
-    },
-    "dependencies": [
-      "PLACEHOLDER — Must have reliable bookkeeping (if books are >60 days behind, recommend placeholder_bookkeeping_cleanup first)."
-    ],
-    "talking_points": [
-      "PLACEHOLDER — This is the ongoing rhythm, not a one-time fix.",
-      "PLACEHOLDER — You keep day-to-day operations; we hold you to the plan."
-    ]
-  },
-  {
-    "service_id": "placeholder_bookkeeping_cleanup",
-    "name": "PLACEHOLDER — Bookkeeping Cleanup — replace with real service",
-    "problem_solved": "Books are behind or miscategorized to the point where no meaningful financial decision can be made from them. The business needs a one-time reset before any ongoing CFO engagement can work.",
-    "signals_relevant": [
-      "bookkeeping_cleanup_needed"
-    ],
-    "when_not_to_recommend": [
-      "legal_distress"
-    ],
-    "deliverables": [
-      "PLACEHOLDER — Reconcile last 12 months of transactions",
-      "PLACEHOLDER — Categorize all uncategorized expenses",
-      "PLACEHOLDER — Deliver clean trial balance and P&L"
-    ],
-    "client_responsibility": [
-      "PLACEHOLDER — Provide access to accounting software and bank feeds",
-      "PLACEHOLDER — Respond to classification questions within 48 hours"
-    ],
-    "cfobd_responsibility": [
-      "PLACEHOLDER — Reconcile and categorize transactions",
-      "PLACEHOLDER — Flag and resolve classification ambiguities with the owner",
-      "PLACEHOLDER — Deliver clean financials ready for Fractional CFO work"
-    ],
-    "pricing": {
-      "model": "project_fee",
-      "amount_usd": 0,
-      "min_term_months": 0,
-      "note": "PLACEHOLDER — scoped per-engagement by Miguel"
+      "note": "Not set yet. Pricing isn't part of the catalog for now; never quote a price."
     },
     "bundle_eligibility": {
       "included_in_bundles": [],
-      "pairs_well_with": ["placeholder_fractional_cfo_core"],
+      "pairs_well_with": [
+        "debt_management",
+        "consulting_planning"
+      ],
       "replaces": []
     },
-    "dependencies": [
-      "PLACEHOLDER — Access to accounting software and bank feeds required to begin."
-    ],
+    "dependencies": [],
     "talking_points": [
-      "PLACEHOLDER — This is a reset, not a replacement for your bookkeeper.",
-      "PLACEHOLDER — Clean books are a prerequisite for every other engagement — we don't recommend starting Fractional CFO work without them."
+      "Tie it to the 90-day step or growth goal it serves.",
+      "Pre-approval doesn't put a hard inquiry on the client's credit.",
+      "Includes (Services Included): funding_resourcing"
+    ]
+  },
+  {
+    "service_id": "debt_management",
+    "name": "Debt Management",
+    "problem_solved": "Debt payments are taking too much of the cash the business needs to run and grow. CFO by Design reviews the debt and restructures or consolidates it so more cash stays in the business.",
+    "signals_relevant": [
+      "debt_service_pressure"
+    ],
+    "when_not_to_recommend": [],
+    "deliverables": [
+      "Review of every debt: balances, payments, rates and terms.",
+      "A restructuring or consolidation plan.",
+      "Help moving to the new terms, often with a bridge (see Business Capital)."
+    ],
+    "client_responsibility": [],
+    "cfobd_responsibility": [],
+    "pricing": {
+      "model": "custom",
+      "amount_usd": 0,
+      "min_term_months": 0,
+      "note": "Not set yet. Pricing isn't part of the catalog for now; never quote a price."
+    },
+    "bundle_eligibility": {
+      "included_in_bundles": [],
+      "pairs_well_with": [
+        "capital",
+        "consulting_planning"
+      ],
+      "replaces": []
+    },
+    "dependencies": [],
+    "talking_points": [
+      "Tie it to the 90-day step or growth goal it serves.",
+      "Includes (Services Included): business_debt_management, personal_debt_management"
+    ]
+  },
+  {
+    "service_id": "consulting_planning",
+    "name": "Business Financial Analysis",
+    "problem_solved": "Business financial analysis and strategic insights that help owners understand performance, identify opportunities, and make informed decisions.",
+    "signals_relevant": [
+      "low_margin_visibility",
+      "no_13_week_cash_forecast",
+      "hiring_plan_not_supportable",
+      "pricing_review_opportunity",
+      "ar_concentration_risk"
+    ],
+    "when_not_to_recommend": [],
+    "deliverables": [
+      "Review of relevant business financial information.",
+      "Identification of financial strengths, challenges, and opportunities.",
+      "Recommendations based on business size and financial situation."
+    ],
+    "client_responsibility": [],
+    "cfobd_responsibility": [],
+    "pricing": {
+      "model": "custom",
+      "amount_usd": 0,
+      "min_term_months": 0,
+      "note": "Not set yet. Pricing isn't part of the catalog for now; never quote a price."
+    },
+    "bundle_eligibility": {
+      "included_in_bundles": [],
+      "pairs_well_with": [
+        "accounting_tax",
+        "capital"
+      ],
+      "replaces": []
+    },
+    "dependencies": [],
+    "talking_points": [
+      "Tie it to the 90-day step or growth goal it serves.",
+      "Includes (Services Included): financial_forecasting, budget_management, strategic_planning, financial_reporting, business_plan_pitch_deck"
+    ]
+  },
+  {
+    "service_id": "accounting_tax",
+    "name": "Accounting & Tax",
+    "problem_solved": "Bookkeeping, accounting cleanup, and tax services that help business owners organize their finances and stay on top of their obligations.",
+    "signals_relevant": [
+      "bookkeeping_cleanup_needed",
+      "monthly_close_absent_or_late",
+      "tax_filings_current_but_strategy_absent"
+    ],
+    "when_not_to_recommend": [],
+    "deliverables": [
+      "Review of current accounting records and needs.",
+      "Bookkeeping, cleanup, and tax service options.",
+      "A recommended scope of work and quote based on the business's situation."
+    ],
+    "client_responsibility": [],
+    "cfobd_responsibility": [],
+    "pricing": {
+      "model": "custom",
+      "amount_usd": 0,
+      "min_term_months": 0,
+      "note": "Not set yet. Pricing isn't part of the catalog for now; never quote a price."
+    },
+    "bundle_eligibility": {
+      "included_in_bundles": [],
+      "pairs_well_with": [
+        "consulting_planning"
+      ],
+      "replaces": []
+    },
+    "dependencies": [],
+    "talking_points": [
+      "Tie it to the 90-day step or growth goal it serves.",
+      "Catch-up means reviewing past years' books or returns and correcting them where needed.",
+      "The team's recurring tasks (bookkeeping, payroll, sales tax, state quarterly filings, tax preparation, IRS/state notices) set the fees; never quote them.",
+      "Includes (Services Included): accounting, accounting_oversight, catch_up_accounting, business_tax_returns, personal_tax_returns, catch_up_tax, compliance_oversight, financial_reporting"
+    ]
+  },
+  {
+    "service_id": "merchant_services",
+    "name": "Merchant Services",
+    "problem_solved": "Payment processing solutions that help businesses accept payments, streamline transactions, and explore opportunities to reduce processing costs. It's about savings: suggest it whenever the business takes card or electronic payments.",
+    "signals_relevant": [
+      "low_margin_visibility"
+    ],
+    "when_not_to_recommend": [],
+    "deliverables": [
+      "Review of their current payment processing setup and fees.",
+      "Evaluation of available merchant service solutions.",
+      "Recommendations for payment processing based on their business needs."
+    ],
+    "client_responsibility": [],
+    "cfobd_responsibility": [],
+    "pricing": {
+      "model": "custom",
+      "amount_usd": 0,
+      "min_term_months": 0,
+      "note": "Not set yet. Pricing isn't part of the catalog for now; never quote a price."
+    },
+    "bundle_eligibility": {
+      "included_in_bundles": [],
+      "pairs_well_with": [
+        "consulting_planning"
+      ],
+      "replaces": []
+    },
+    "dependencies": [],
+    "talking_points": [
+      "Tie it to the 90-day step or growth goal it serves.",
+      "Lower processing costs go straight to margin."
+    ]
+  },
+  {
+    "service_id": "coaching",
+    "name": "Coaching",
+    "problem_solved": "Structured coaching programs in English and Spanish that help entrepreneurs develop skills, strengthen their businesses, and pursue their goals.",
+    "signals_relevant": [
+      "hiring_plan_not_supportable"
+    ],
+    "when_not_to_recommend": [],
+    "deliverables": [
+      "Review of business goals and coaching needs.",
+      "Access to available structured coaching programs.",
+      "Practical guidance, education, and accountability based on their program."
+    ],
+    "client_responsibility": [],
+    "cfobd_responsibility": [],
+    "pricing": {
+      "model": "custom",
+      "amount_usd": 0,
+      "min_term_months": 0,
+      "note": "Not set yet. Pricing isn't part of the catalog for now; never quote a price."
+    },
+    "bundle_eligibility": {
+      "included_in_bundles": [],
+      "pairs_well_with": [
+        "consulting_planning"
+      ],
+      "replaces": []
+    },
+    "dependencies": [],
+    "talking_points": [
+      "Tie it to the 90-day step or growth goal it serves.",
+      "Includes (Services Included): culture_organization_management"
     ]
   }
 ]
