@@ -620,3 +620,39 @@ describe("POST /asksolomon/case/update-roadmap-section — handleUpdateRoadmapSe
     } finally { cap.restore(); }
   });
 });
+
+describe("roadmap draft reads attached documents (Nov 23, 2026)", () => {
+  it("prompt allows [DOC:] tags and says document-only numbers aren't verified", () => {
+    const sys = buildRoadmapSystemPrompt();
+    assert.match(sys, /\[DOC: <file name>/);
+    assert.match(sys, /NOT verified/);
+  });
+
+  it("sends the documents as blocks before the case data and reports which were read", async () => {
+    let claudeBody = null;
+    const cap = stubFetch((url, init) => {
+      const u = String(url);
+      if (u.includes("api.anthropic.com")) { claudeBody = JSON.parse(init.body); return claudeRes(sampleGoodDraft()); }
+      if (u.includes("/customFields") && !u.includes("/contacts/")) return emptyCatalogRes();
+      if (u.includes("/contacts/") && u.endsWith("/tags")) return new Response("", { status: 200 });
+      if (u.includes("/contacts/") && init?.method === "PUT") return new Response("", { status: 200 });
+      if (u.includes("/contacts/")) return ghlContactRes();
+      return new Response("not stubbed", { status: 500 });
+    });
+    try {
+      const documents = [{ filename: "Chase March.pdf", mime_type: "application/pdf", document_base64: btoa("%PDF-1") }];
+      const res = await handleGenerateRoadmapDraft(post({ contactId: "c1", documents }), makeEnv(), { checkPassword });
+      assert.equal(res.status, 200);
+      assert.deepEqual((await res.json()).documents_read, ["Chase March.pdf"]);
+      const content = claudeBody.messages[0].content;
+      assert.ok(Array.isArray(content));
+      assert.equal(content.find((b) => b.type === "document").title, "Chase March.pdf");
+      assert.match(content[content.length - 1].text, /ATTACHED DOCUMENTS: Chase March\.pdf/);
+      assert.equal(claudeBody.stream, true);
+    } finally { cap.restore(); }
+  });
+
+  it("without documents the request is unchanged (plain text) and a bad document is refused", async () => {
+    assert.equal((await handleGenerateRoadmapDraft(post({ contactId: "c1", documents: [{ filename: "x.png", mime_type: "image/png" }] }), makeEnv(), { checkPassword })).status, 400);
+  });
+});

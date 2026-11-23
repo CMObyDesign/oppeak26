@@ -36,21 +36,14 @@ Reply with JSON only, no prose before or after:
  "notes":"<one or two sentences: what the documents cover and what is missing>"}
 Include every question key exactly once, in the order given.`;
 
-export function cleanDraftIntakeBody(body) {
-  if (!body || typeof body !== "object") return { error: "Invalid body" };
-  const contactId = typeof body.contactId === "string" ? body.contactId.trim() : "";
-  if (!contactId) return { error: "contactId required" };
-  const questions = (Array.isArray(body.questions) ? body.questions : [])
-    .slice(0, MAX_QUESTIONS)
-    .map((q) => ({ key: String(q?.key ?? "").slice(0, 40), label: String(q?.label ?? "").slice(0, 500) }))
-    .filter((q) => q.key && q.label);
-  if (!questions.length) return { error: "questions required" };
-  const raw = Array.isArray(body.documents) ? body.documents : [];
-  if (!raw.length) return { error: "documents required" };
-  if (raw.length > MAX_DOCS) return { error: `At most ${MAX_DOCS} documents at a time` };
+/** Shared by draft-intake and the roadmap draft: PDFs and CSVs only, at most 8, 20 MB together. */
+export function cleanDocuments(raw, { required = false } = {}) {
+  const list = Array.isArray(raw) ? raw : [];
+  if (!list.length) return required ? { error: "documents required" } : { documents: [] };
+  if (list.length > MAX_DOCS) return { error: `At most ${MAX_DOCS} documents at a time` };
   let total = 0;
   const documents = [];
-  for (const d of raw) {
+  for (const d of list) {
     const filename = String(d?.filename ?? "document").slice(0, 200);
     if (d?.mime_type === "application/pdf" && typeof d.document_base64 === "string" && d.document_base64) {
       total += Math.floor(d.document_base64.length * 0.75);
@@ -63,16 +56,37 @@ export function cleanDraftIntakeBody(body) {
     }
   }
   if (total > MAX_TOTAL_BYTES) return { error: "The documents are over 20 MB together. Pick fewer." };
-  return { contactId, questions, documents };
+  return { documents };
 }
 
-export function buildDraftIntakeContent(questions, documents) {
+/** Claude content blocks for the documents, each labeled with its file name. */
+export function documentBlocks(documents) {
   const content = [];
   for (const d of documents) {
     content.push({ type: "text", text: `Document: ${d.filename}` });
     if (d.kind === "pdf") content.push({ type: "document", source: { type: "base64", media_type: "application/pdf", data: d.data }, title: d.filename });
     else content.push({ type: "text", text: `<csv name="${d.filename.replace(/"/g, "'")}">\n${d.data}\n</csv>` });
   }
+  return content;
+}
+
+export function cleanDraftIntakeBody(body) {
+  if (!body || typeof body !== "object") return { error: "Invalid body" };
+  const contactId = typeof body.contactId === "string" ? body.contactId.trim() : "";
+  if (!contactId) return { error: "contactId required" };
+  const questions = (Array.isArray(body.questions) ? body.questions : [])
+    .slice(0, MAX_QUESTIONS)
+    .map((q) => ({ key: String(q?.key ?? "").slice(0, 40), label: String(q?.label ?? "").slice(0, 500) }))
+    .filter((q) => q.key && q.label);
+  if (!questions.length) return { error: "questions required" };
+  const docs = cleanDocuments(body.documents, { required: true });
+  if (docs.error) return { error: docs.error };
+  const documents = docs.documents;
+  return { contactId, questions, documents };
+}
+
+export function buildDraftIntakeContent(questions, documents) {
+  const content = documentBlocks(documents);
   content.push({
     type: "text",
     text: `Intake questions (key: question):\n${questions.map((q) => `${q.key}: ${q.label}`).join("\n")}\n\nAnswer as JSON only.`,

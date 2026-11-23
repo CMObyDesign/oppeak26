@@ -29,6 +29,7 @@
 
 import { isBgaCase, NOT_A_BGA_CASE } from "./bga_case.js";
 import { callClaudeStreamed } from "./claude_stream.js";
+import { cleanDocuments, documentBlocks } from "./draft_intake.js";
 import {
   fetchGhlContact,
   readCustomField,
@@ -121,6 +122,7 @@ ${sectionList}
    - [CS: <question_slug>, from <field_key>, "<short quote or paraphrase>"] — the client's own words from the paid_297 intake narrative.
    - [SJ: <YYYY-MM-DDTHH:MM>, "<the judgment>"] — a conclusion the strategist entered (none for a fresh draft; use these only when the strategist's brief says one).
    - [SM: <service_id>, signal=<signal_slug>] — a service-catalog match. Reserve these for Section 7.
+   - [DOC: <file name>, "<short quote or figure>"] — something read directly in one of the client's attached documents (only when documents are attached). A number taken only from a document is NOT verified: say so in the sentence ("per the bank statements, not yet verified"), and prefer the VERIFIED FINANCIALS figure when both exist. Never invent a file name.
 
 4. If a claim does not have an inline provenance tag, it is wrong by construction. When you cannot ground a claim, say so plainly ("not yet validated"), rather than inventing a tag.
 
@@ -297,7 +299,7 @@ export function replaceSectionBody(draft, sectionNumber, newBody) {
  * a dedicated max_tokens budget so a change here doesn't shift the
  * SWOT diagnostic path.
  */
-export async function callClaudeForRoadmap(systemText, userText, env) {
+export async function callClaudeForRoadmap(systemText, userContent, env) {
   if (!env.ANTHROPIC_API_KEY) {
     return { ok: false, error: "ANTHROPIC_API_KEY not configured" };
   }
@@ -309,7 +311,7 @@ export async function callClaudeForRoadmap(systemText, userText, env) {
       model,
       max_tokens: 12000,
       system: [{ type: "text", text: systemText, cache_control: { type: "ephemeral" } }],
-      messages: [{ role: "user", content: userText }],
+      messages: [{ role: "user", content: userContent }],
     },
   });
 }
@@ -396,6 +398,9 @@ export async function handleGenerateRoadmapDraft(request, env, { checkPassword }
 
   const contactId = typeof body.contactId === "string" ? body.contactId.trim() : "";
   if (!contactId) return json({ success: false, error: "contactId required" }, 400);
+  // Optional: the client's documents (PDF/CSV) for Solomon to read while drafting (CFO Portal).
+  const docs = cleanDocuments(body.documents);
+  if (docs.error) return json({ success: false, error: docs.error }, 400);
 
   const { contact, error } = await fetchGhlContact(contactId, env);
   if (!contact) return json({ success: false, error: error || "contact fetch failed" }, 503);
@@ -421,8 +426,14 @@ export async function handleGenerateRoadmapDraft(request, env, { checkPassword }
 
   const systemText = buildRoadmapSystemPrompt();
   const userText = buildRoadmapUserPrompt(bundle, { catalogVersion });
+  const userContent = docs.documents.length
+    ? [
+        ...documentBlocks(docs.documents),
+        { type: "text", text: `ATTACHED DOCUMENTS: ${docs.documents.map((d) => d.filename).join("; ")}. Read them and tag anything you take from them with [DOC: file name, "..."].\n\n${userText}` },
+      ]
+    : userText;
 
-  const claude = await callClaudeForRoadmap(systemText, userText, env);
+  const claude = await callClaudeForRoadmap(systemText, userContent, env);
   if (!claude.ok) return json({ success: false, error: claude.error }, 503);
 
   // Codex P2 on #96: validate before any writeback. A truncated or
@@ -465,6 +476,7 @@ export async function handleGenerateRoadmapDraft(request, env, { checkPassword }
     contactId,
     draft,
     drafted_tag_applied: taggedOk,
+    documents_read: docs.documents.map((d) => d.filename),
   });
 }
 

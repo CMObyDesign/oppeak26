@@ -150,7 +150,7 @@ export const SERVICE_PLAN_WORDS = Object.freeze({
   risk_management: ["insurance", "coverage", "risk", "protect", "liability"],
 });
 
-const stripTags = (line) => line.replace(/\s*\[(?:VF|CS|SJ|SM):[^\]]*\]/g, "").replace(/^[-*•\d.)\s]+/, "").trim();
+const stripTags = (line) => line.replace(/\s*\[(?:VF|CS|SJ|SM|DOC):[^\]]*\]/g, "").replace(/^[-*•\d.)\s]+/, "").trim();
 
 /**
  * Finds the plan line a service supports: first a 90-day commitment (Section 4), else a 6-month or

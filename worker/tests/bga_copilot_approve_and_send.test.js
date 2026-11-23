@@ -888,3 +888,13 @@ describe("§9/16 — no finalize_and_send endpoint or handler exists in the Work
     assert.deepEqual(offenders, [], `Found banned finalize_and_send references: ${offenders.join("; ")}`);
   });
 });
+
+describe("renderGrowthPlanFromDraft strips document tags (Nov 23, 2026)", () => {
+  it("never sends [DOC:] tags, file names or quotes to the client", async () => {
+    const { renderGrowthPlanFromDraft } = await import("../src/bga_copilot/approve_and_send.js");
+    const draft = "## Section 1 — Where You Are Now\n\nCash is tight [DOC: Chase March.pdf, \"$42,118\"].\n\n## Section 8 — Open Questions\n\nx";
+    const out = renderGrowthPlanFromDraft(draft);
+    assert.doesNotMatch(out, /DOC:|Chase March/);
+    assert.match(out, /Cash is tight\./);
+  });
+});
