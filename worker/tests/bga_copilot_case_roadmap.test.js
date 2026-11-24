@@ -112,6 +112,8 @@ describe("case workspace roadmap", () => {
     assert.equal(claimFits("Margins fell to 40%", "gross margin 64%"), false);
     assert.equal(claimFits("Call 2 or 3 lenders by Week 12", ""), true); // no figures to check
     assert.equal(claimFits("Revenue is $2,025", "$535K 2025"), false); // a year isn't an amount
+    assert.equal(claimFits("Revenue is $535", "Revenue is $535 thousand"), false); // thousand is scaled
+    assert.equal(claimFits("Revenue is $535,000", "Revenue is $535 thousand"), true);
     assert.equal(claimFits("Revenue in 2025 was $535K", "$535K 2025"), true);
     const c = cleanRoadmapBody(BODY);
     const out = parseRoadmapReply(JSON.stringify({ ...REPLY, findings: [
@@ -133,6 +135,14 @@ describe("case workspace roadmap", () => {
     assert.equal(out.actions[0].target, "[from the lender] at [from the lender] over 7 years");
     assert.equal(out.actions[1].start, "$535K"); // the verified revenue
     assert.equal(out.actions[1].target, "$600K"); // a goal, not a loan figure
+  });
+
+  it("the client preview keeps only confirmed figures", () => {
+    const c = cleanRoadmapBody(BODY);
+    const out = parseRoadmapReply(JSON.stringify({ ...REPLY, client_view: { title: "Your path", intro: "Revenue was $535K last year. You could grow to $4M.", steps: ["Secure the suggested $2M loan.", "Keep 40% margins."], closing: "We'll check in at Week 4." } }), c, CATALOG);
+    assert.equal(out.client_view.intro, "Revenue was $535K last year. You could grow to [to confirm].");
+    assert.deepEqual(out.client_view.steps, ["Secure the suggested [from the lender] loan.", "Keep [to confirm] margins."]);
+    assert.equal(out.client_view.closing, "We'll check in at Week 4.");
   });
 
   it("redacts labelled account numbers in any common shape", () => {

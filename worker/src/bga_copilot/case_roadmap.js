@@ -34,7 +34,13 @@ export function redact(text) {
 }
 
 // Every amount or percentage in a claim must match a figure in what the source actually says.
-const MULT = { k: 1e3, m: 1e6, b: 1e9 };
+export function unitScale(unit) {
+  const u = String(unit || "").toLowerCase();
+  if (u === "k" || u === "thousand") return 1e3;
+  if (u === "m" || u === "mm" || u === "million") return 1e6;
+  if (u === "b" || u === "billion") return 1e9;
+  return 1;
+}
 export function figures(text) {
   const out = [];
   const re = /(\$)?\s?(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s?(k|m|mm|million|thousand|b|billion|%)?(?![\w])/gi;
@@ -46,7 +52,7 @@ export function figures(text) {
     if (!m[1] && !unit && n < 1000) continue; // a bare small number ("2 lenders", "Week 4") isn't a figure
     if (!m[1] && !unit && !m[2].includes(",") && n >= 1900 && n <= 2100) continue; // a year, not an amount
     if (unit === "%") out.push({ n, pct: true });
-    else out.push({ n: n * (MULT[unit[0]] && unit !== "%" ? (unit.startsWith("mil") || unit === "mm" ? 1e6 : unit.startsWith("th") ? 1e3 : MULT[unit[0]]) : 1), pct: false });
+    else out.push({ n: n * unitScale(unit), pct: false });
   }
   return out;
 }
@@ -279,12 +285,16 @@ export function parseRoadmapReply(text, c, catalog) {
   }
 
   const path = (Array.isArray(p.path) ? p.path : []).map((s) => ({ when: clean(s?.when, 40), what: clean(s?.what, 300) })).filter((s) => s.when && s.what).slice(0, 5);
+  // The client preview may only carry figures a person confirmed or verified; any other figure is marked
+  // for the advisor to fix, and lender figures are never stated.
+  const confirmedKnown = [...c.numbers.map((n) => `${n.value} ${n.period}`), ...c.confirmed.map((f) => f.answer), c.goal].join(" ");
+  const forClient = (t) => noLenderFigures(t).replace(AMT, (m) => (claimFits(m, confirmedKnown) ? m : "[to confirm]"));
   const cv = p.client_view && typeof p.client_view === "object" ? p.client_view : {};
   const client_view = {
-    title: clean(cv.title, 160),
-    intro: clean(cv.intro, 600),
-    steps: (Array.isArray(cv.steps) ? cv.steps : []).map((s) => clean(s, 300)).filter(Boolean).slice(0, 6),
-    closing: clean(cv.closing, 300),
+    title: forClient(clean(cv.title, 160)),
+    intro: forClient(clean(cv.intro, 600)),
+    steps: (Array.isArray(cv.steps) ? cv.steps : []).map((s) => forClient(clean(s, 300))).filter(Boolean).slice(0, 6),
+    closing: forClient(clean(cv.closing, 300)),
   };
   return { findings: findings.slice(0, 8), path, actions, client_view, dropped };
 }
