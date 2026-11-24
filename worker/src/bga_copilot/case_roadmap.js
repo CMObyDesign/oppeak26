@@ -47,14 +47,18 @@ export function unitScale(unit) {
 }
 export function figures(text) {
   const out = [];
-  const re = /(\$)?\s?(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s?(k|m|mm|million|thousand|b|billion|%)?(?![\w])/gi;
+  // A leading minus or an opening parenthesis (accounting style) makes it negative: a loss stays a loss.
+  // (A hyphen after a word or number is a range or a dash, not a minus: "2024-2025", "$400K-$500K".)
+  const re = /((?<![\w$%)])\s?-|−|\()?\s?(\$)?\s?((?<=\$)-|−)?(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s?(k|m|mm|million|thousand|b|billion|%)?(?![\w])/gi;
   let m;
   while ((m = re.exec(String(text)))) {
+    const neg = Boolean(m[1] || m[3]);
+    m = [m[0], m[2], m[4], m[5]]; // money sign, digits, unit (as before)
     const unit = (m[3] || "").toLowerCase();
-    const n = Number(m[2].replace(/,/g, ""));
+    const n = (neg ? -1 : 1) * Number(m[2].replace(/,/g, ""));
     if (!Number.isFinite(n)) continue;
-    if (!m[1] && !unit && n < 1000) continue; // a bare small number ("2 lenders", "Week 4") isn't a figure
-    if (!m[1] && !unit && !m[2].includes(",") && n >= 1900 && n <= 2100) continue; // a year, not an amount
+    if (!m[1] && !unit && Math.abs(n) < 1000) continue; // a bare small number ("2 lenders", "Week 4") isn't a figure
+    if (!m[1] && !unit && !neg && !m[2].includes(",") && n >= 1900 && n <= 2100) continue; // a year, not an amount
     // A number followed by a counted thing ("5,000 customers") is a count, never money.
     const after = String(text).slice(re.lastIndex, re.lastIndex + 24).toLowerCase();
     const count = !m[1] && unit !== "%" && COUNT_WORDS.test(after);
@@ -203,8 +207,13 @@ export function parseRoadmapReply(text, c, catalog) {
     if (/^team note/i.test(v) && c.notes.length) return "Team note";
     const vm = v.match(/^verified:\s*(.+)$/i);
     if (vm && numberNames.has(vm[1].trim().toLowerCase())) return `Verified: ${vm[1].trim()}`;
+    // A confirmed fact is named by its full question (or its first 30 characters), and must name exactly one.
     const cm = v.match(/^confirmed:\s*(.+)$/i);
-    if (cm && factQs.some((q) => q.startsWith(cm[1].trim().toLowerCase().slice(0, 30)))) return `Confirmed: ${cm[1].trim()}`;
+    if (cm) {
+      const want = cm[1].trim().toLowerCase();
+      const hits = factQs.filter((q) => q === want || (want.length >= Math.min(30, q.length) && q.startsWith(want)));
+      if (hits.length === 1) return `Confirmed: ${c.confirmed[factQs.indexOf(hits[0])].question}`;
+    }
     return "";
   };
 
@@ -265,8 +274,7 @@ export function parseRoadmapReply(text, c, catalog) {
       const n = c.numbers.find((x) => x.name.toLowerCase() === source.slice(10).toLowerCase());
       known = n ? `${n.value} ${n.period}` : "";
     } else if (source.startsWith("Confirmed: ")) {
-      const q = source.slice(11).toLowerCase().slice(0, 30);
-      known = c.confirmed.filter((x) => x.question.toLowerCase().startsWith(q)).map((x) => x.answer).join(" ");
+      known = c.confirmed.find((x) => x.question === source.slice(11))?.answer ?? "";
     }
     if (doc && (!quote || !norm(known).includes(norm(quote)))) quote = "";
     if (doc && !quote) unconfirmed = true;

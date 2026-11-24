@@ -115,6 +115,10 @@ describe("case workspace roadmap", () => {
     assert.equal(claimFits("Revenue is $535", "Revenue is $535 thousand"), false); // thousand is scaled
     assert.equal(claimFits("Revenue is $535,000", "Revenue is $535 thousand"), true);
     assert.equal(claimFits("Debt is $5,000", "5,000 customers"), false); // a count isn't money
+    assert.equal(claimFits("Profit was $5,000", "Loss was -$5,000"), false); // a loss stays a loss
+    assert.equal(claimFits("Profit was $5,000", "Net income ($5,000)"), false);
+    assert.equal(claimFits("A loss of -$5,000", "Net income ($5,000)"), true);
+    assert.equal(claimFits("Between $400K and $500K", "range $400K-$500K"), true); // a range, not a negative
     assert.equal(claimFits("Owes $155,621", "Amount you owe 155,621"), true); // an unlabelled amount still counts
     assert.equal(claimFits("Revenue in 2025 was $535K", "$535K 2025"), true);
     const c = cleanRoadmapBody(BODY);
@@ -137,6 +141,13 @@ describe("case workspace roadmap", () => {
     assert.equal(out.actions[0].target, "[from the lender] at [from the lender] over 7 years");
     assert.equal(out.actions[1].start, "$535K"); // the verified revenue
     assert.equal(out.actions[1].target, "$600K"); // a goal, not a loan figure
+  });
+
+  it("a confirmed-fact source must name exactly one confirmed question", () => {
+    const c = cleanRoadmapBody({ ...BODY, confirmed: [...BODY.confirmed, { question: "Who signs for the loan?", answer: "Brandon." }] });
+    const f = (source) => parseRoadmapReply(JSON.stringify({ ...REPLY, findings: [{ kind: "strength", vital_sign: "People", text: "One owner", evidence: "Owner", source, feeds: "6 months" }] }), c, CATALOG).findings;
+    assert.equal(f("Confirmed: W").length, 0); // too short: could be either question
+    assert.equal(f("Confirmed: Who owns the business?")[0].source, "Confirmed: Who owns the business?");
   });
 
   it("path figures must come from a source", () => {
