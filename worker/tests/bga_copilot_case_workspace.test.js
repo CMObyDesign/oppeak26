@@ -41,12 +41,13 @@ const READING = JSON.stringify({
   key_facts: [{ fact: "Amount owed $155,621", quote: "Amount you owe 155,621" }, { fact: "" }],
   candidates: [
     { metric_id: "revenue_ttm", value: "$535,120", period: "2025", confidence: "high", quote: "Gross receipts 535,120" },
-    { metric_id: "revenue_ttm", value: 535120, period: "2025", confidence: "high" },
-    { metric_id: "tax_status", value: "behind", period: "2025", confidence: "medium" },
-    { metric_id: "tax_status", value: "owed", period: "2025" },
-    { metric_id: "made_up", value: 1, period: "2025" },
-    { metric_id: "cash_on_hand", value: 53000, period: "Aug 2026", as_of: "2026-08-06", confidence: "maybe" },
-    { metric_id: "revenue_ttm", value: 1640000, period: "Year 1", is_projection: true },
+    { metric_id: "revenue_ttm", value: 535120, period: "2025", confidence: "high", quote: "535,120" },
+    { metric_id: "tax_status", value: "behind", period: "2025", confidence: "medium", quote: "Amount you owe" },
+    { metric_id: "tax_status", value: "owed", period: "2025", quote: "x" },
+    { metric_id: "made_up", value: 1, period: "2025", quote: "x" },
+    { metric_id: "cash_on_hand", value: 53000, period: "Aug 2026", as_of: "2026-08-06", confidence: "maybe", quote: "Balance 53,000" },
+    { metric_id: "net_profit_pct", value: 44, period: "2025" },
+    { metric_id: "revenue_ttm", value: 1640000, period: "Year 1", is_projection: true, quote: "Year 1 1,640,000" },
   ],
 });
 
@@ -63,6 +64,11 @@ describe("case workspace: read-doc", () => {
     assert.match(cleanReadDocBody({ contactId: "c" }).error, /documents required/);
     assert.match(cleanReadDocBody({ contactId: "c", document: { filename: "a.png", mime_type: "image/png" } }).error, /PDF and CSV/);
     assert.equal(cleanReadDocBody({ contactId: "c", document: PDF }).document.kind, "pdf");
+  });
+
+  it("reads formatted dollar strings, and drops a figure with no quote", () => {
+    const r = parseReadDocReply('{"candidates":[{"metric_id":"revenue_ttm","value":"$1,535,120","period":"2025","quote":"Gross receipts 1,535,120"},{"metric_id":"cash_on_hand","value":5,"period":"x","quote":""}]}');
+    assert.deepEqual(r.candidates.map((c) => c.value), [1535120]);
   });
 
   it("keeps only figures that fit their metric, once each, and marks projections", () => {
@@ -144,6 +150,9 @@ describe("case workspace: build-base", () => {
     const wolf = out.facts.find((f) => f.key === "wolf");
     assert.deepEqual([wolf.suggested, wolf.source], ["", ""]); // ungrounded → open question
     assert.equal(out.facts.filter((f) => f.key === "cost").length, 1);
+    // A fact staff confirmed keeps its answer even though the model gave it no document source.
+    const owner = out.facts.find((f) => f.key === "owner");
+    assert.deepEqual([owner.suggested, owner.source], ["Brandon, 100%", "Confirmed by staff"]);
     assert.deepEqual(out.story.steps.map((s) => s.source), ["Bill of sale.pdf", ""]);
     assert.equal(out.warnings.length, 1);
     assert.deepEqual(Object.keys(out.number_flags), ["revenue_ttm"]);

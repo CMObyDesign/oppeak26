@@ -29,6 +29,7 @@ export const DOC_KINDS = [
 ];
 const CONFIDENCE = ["high", "medium", "low"];
 const NOTE_SOURCE = "Team note";
+const CONFIRMED_SOURCE = "Confirmed by staff";
 export const FIXED_FACTS = [
   { key: "goal", question: "The goal" },
   { key: "challenge", question: "The main challenge" },
@@ -97,6 +98,9 @@ export function parseReadDocReply(text) {
     let value = c.value;
     if (CANONICAL_METRICS[metric_id].shape === "number" && typeof value === "string") value = Number(value.replace(/[$,%\s]/g, ""));
     if (!validateMetricValue(metric_id, value).ok) continue;
+    // Every figure needs its evidence: no quote from the document, no candidate.
+    const quote = str(c.quote, 300);
+    if (!quote) continue;
     const period = str(c.period, 80);
     const key = `${metric_id}|${period}|${JSON.stringify(value)}`;
     if (seen.has(key)) continue;
@@ -109,7 +113,7 @@ export function parseReadDocReply(text) {
       as_of: /^\d{4}-\d{2}-\d{2}$/.test(asOf) ? asOf : "",
       is_projection: c.is_projection === true,
       confidence: CONFIDENCE.includes(c.confidence) ? c.confidence : "low",
-      quote: str(c.quote, 300),
+      quote,
     });
   }
   return {
@@ -271,6 +275,12 @@ export function parseBuildBaseReply(text, clean) {
     facts.push({ key, question, suggested, source: suggested ? source : "" });
   }
   for (const fx of FIXED_FACTS) if (!keys.has(fx.key)) facts.unshift({ key: fx.key, question: fx.question, suggested: "", source: "" });
+  // Facts staff already confirmed keep their answer, whatever the model returned for them.
+  for (const cf of clean.confirmed) {
+    const existing = facts.find((f) => f.key === cf.key);
+    if (existing) Object.assign(existing, { suggested: cf.answer, source: CONFIRMED_SOURCE });
+    else facts.push({ key: cf.key, question: cf.question || cf.key, suggested: cf.answer, source: CONFIRMED_SOURCE });
+  }
   const fixed = FIXED_FACTS.map((fx) => facts.find((f) => f.key === fx.key));
   const rest = facts.filter((f) => !FIXED_FACTS.some((fx) => fx.key === f.key));
   const number_flags = {};
