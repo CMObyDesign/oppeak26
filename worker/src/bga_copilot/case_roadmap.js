@@ -44,6 +44,7 @@ export function figures(text) {
     const n = Number(m[2].replace(/,/g, ""));
     if (!Number.isFinite(n)) continue;
     if (!m[1] && !unit && n < 1000) continue; // a bare small number ("2 lenders", "Week 4") isn't a figure
+    if (!m[1] && !unit && !m[2].includes(",") && n >= 1900 && n <= 2100) continue; // a year, not an amount
     if (unit === "%") out.push({ n, pct: true });
     else out.push({ n: n * (MULT[unit[0]] && unit !== "%" ? (unit.startsWith("mil") || unit === "mm" ? 1e6 : unit.startsWith("th") ? 1e3 : MULT[unit[0]]) : 1), pct: false });
   }
@@ -192,22 +193,36 @@ export function parseRoadmapReply(text, c, catalog) {
     return "";
   };
 
+  // Everything the sources actually say, for checking an action's starting point.
+  const allKnown = [
+    ...c.numbers.map((n) => `${n.value} ${n.period}`),
+    ...c.confirmed.map((f) => f.answer),
+    c.goal,
+    ...c.notes.map((n) => n.text),
+    ...c.documents.flatMap((d) => [d.summary, ...d.key_facts.flatMap((k) => [k.fact, k.quote])]),
+  ].join(" ");
+  // Loan size, rate and term come from a lender, never from the plan.
+  const FIN = /\b(loan|line of credit|loc|credit line|rate|apr|interest|term|financ\w*|lender|sba)\b/i;
+  const AMT = /\$\s?\d[\d,.]*\s?(?:k|m|mm|million|thousand|b|billion)?\b|\b\d+(?:\.\d+)?\s?%/gi;
+  const noLenderFigures = (t, context = t) => (FIN.test(context) ? t.replace(AMT, "[from the lender]") : t);
   const dropped = { findings: 0, actions: 0 };
   const actions = [];
   for (const a of Array.isArray(p.actions) ? p.actions : []) {
     const due = str(a?.due, 20).match(/^week\s*(\d{1,2})$/i);
     const week = due ? Number(due[1]) : 0;
     const item = {
-      what: clean(a?.what, 300),
+      what: noLenderFigures(clean(a?.what, 300)),
       vital_sign: VITAL_SIGNS.includes(a?.vital_sign) ? a.vital_sign : "",
       from_finding: clean(a?.from_finding, 300),
       owner: OWNERS.includes(a?.owner) ? a.owner : "",
       due: week >= 1 && week <= 13 ? `Week ${week}` : "",
       number: clean(a?.number, 160),
       start: clean(a?.start, 160),
-      target: clean(a?.target, 160),
+      target: noLenderFigures(clean(a?.target, 160), `${str(a?.what, 300)} ${str(a?.number, 160)} ${str(a?.target, 160)}`),
       service_id: services.has(a?.service_id) ? a.service_id : "",
     };
+    // Where it is now must come from a source; otherwise say so instead of inventing a baseline.
+    if (item.start && !claimFits(item.start, allKnown)) item.start = "Not confirmed yet";
     // Handoff §6: an action with no owner, date or number is dropped.
     if (!item.what || !item.vital_sign || !item.owner || !item.due || !item.number || !item.start || !item.target) {
       dropped.actions++;

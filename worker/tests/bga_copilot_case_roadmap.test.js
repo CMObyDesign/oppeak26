@@ -111,6 +111,8 @@ describe("case workspace roadmap", () => {
     assert.equal(claimFits("About $310K owed", "Owes $155,621 for 2024 and $155,000 for 2025, about $310K"), true);
     assert.equal(claimFits("Margins fell to 40%", "gross margin 64%"), false);
     assert.equal(claimFits("Call 2 or 3 lenders by Week 12", ""), true); // no figures to check
+    assert.equal(claimFits("Revenue is $2,025", "$535K 2025"), false); // a year isn't an amount
+    assert.equal(claimFits("Revenue in 2025 was $535K", "$535K 2025"), true);
     const c = cleanRoadmapBody(BODY);
     const out = parseRoadmapReply(JSON.stringify({ ...REPLY, findings: [
       { kind: "threat", vital_sign: "Money", text: "A $2M revenue threat", evidence: "Return", source: "Verified: Revenue", feeds: "6 months" },
@@ -118,6 +120,19 @@ describe("case workspace roadmap", () => {
       { kind: "weak_spot", vital_sign: "Money", text: "Loses $90K a month", evidence: "Liz's note", source: "Team note", feeds: "6 months" },
     ] }), c, CATALOG);
     assert.deepEqual(out.findings.map((f) => f.unconfirmed), [true, false, true]);
+  });
+
+  it("an action's starting point must come from a source; lender figures are left blank", () => {
+    const c = cleanRoadmapBody(BODY);
+    const out = parseRoadmapReply(JSON.stringify({ ...REPLY, actions: [
+      { id: "A1", what: "Apply for a $1M equipment loan at 7%", vital_sign: "Money", owner: "Advisor", due: "Week 10", number: "Term sheets", start: "$2M in pipeline", target: "$1M at 2% over 7 years" },
+      { id: "A2", what: "Grow revenue", vital_sign: "Money", owner: "Advisor", due: "Week 12", number: "Revenue", start: "$535K", target: "$600K" },
+    ] }), c, CATALOG);
+    assert.equal(out.actions[0].start, "Not confirmed yet");
+    assert.equal(out.actions[0].what, "Apply for a [from the lender] equipment loan at [from the lender]");
+    assert.equal(out.actions[0].target, "[from the lender] at [from the lender] over 7 years");
+    assert.equal(out.actions[1].start, "$535K"); // the verified revenue
+    assert.equal(out.actions[1].target, "$600K"); // a goal, not a loan figure
   });
 
   it("redacts labelled account numbers in any common shape", () => {
