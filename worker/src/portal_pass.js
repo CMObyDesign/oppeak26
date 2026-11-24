@@ -29,6 +29,8 @@ const EXACT = new Map([
   ["/asksolomon/case/verified-financials", POST],
   ["/asksolomon/case/extract-financials-from-document", POST],
   ["/asksolomon/case/draft-intake", POST],
+  ["/asksolomon/case/read-doc", POST],
+  ["/asksolomon/case/build-base", POST],
   ["/asksolomon/case/generate-roadmap-draft", POST],
   ["/asksolomon/case/update-roadmap-section", POST],
   ["/asksolomon/case/challenge-roadmap", POST],

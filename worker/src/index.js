@@ -99,6 +99,7 @@ import { buildFactsForPrompt, validateStructuredFindings } from "./findings.js";
 import { claimsPaid47V2, validatePaid47V2, buildRegenerationNudge } from "./paid47_v2.js";
 import { gatePortalPass, portalPassFor } from "./portal_pass.js";
 import { handleDraftIntake } from "./bga_copilot/draft_intake.js";
+import { handleReadDoc, handleBuildBase } from "./bga_copilot/case_workspace.js";
 import { handleStaffAsk } from "./staff_ask.js";
 
 // Versioning for canonical records (Phase 1 architecture — see
@@ -8673,6 +8674,13 @@ async function routeFetch(request, env, ctx) {
     // Draft the BGA intake from the client's documents (staff-started BGAs). Read-only.
     if (path === "/asksolomon/case/draft-intake") {
       return handleDraftIntake(request, env, { checkPassword: checkConsolePassword });
+    }
+    // Case workspace (CFO Portal): read one document, then build the base from every reading. Read-only.
+    if (path === "/asksolomon/case/read-doc") {
+      return handleReadDoc(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/case/build-base") {
+      return handleBuildBase(request, env, { checkPassword: checkConsolePassword });
     }
     if (path === "/asksolomon/ask") {
       return handleStaffAsk(request, env, { checkPassword: checkConsolePassword });
