@@ -101,6 +101,7 @@ import { gatePortalPass, portalPassFor } from "./portal_pass.js";
 import { handleDraftIntake } from "./bga_copilot/draft_intake.js";
 import { handleReadDoc, handleBuildBase } from "./bga_copilot/case_workspace.js";
 import { handleWorkspaceRoadmap } from "./bga_copilot/case_roadmap.js";
+import { handleWorkspaceRedteam, handleWorkspacePrep } from "./bga_copilot/case_deliver.js";
 import { handleStaffAsk } from "./staff_ask.js";
 
 // Versioning for canonical records (Phase 1 architecture — see
@@ -8685,6 +8686,12 @@ async function routeFetch(request, env, ctx) {
     }
     if (path === "/asksolomon/case/workspace-roadmap") {
       return handleWorkspaceRoadmap(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/case/workspace-redteam") {
+      return handleWorkspaceRedteam(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/case/workspace-prep") {
+      return handleWorkspacePrep(request, env, { checkPassword: checkConsolePassword });
     }
     if (path === "/asksolomon/ask") {
       return handleStaffAsk(request, env, { checkPassword: checkConsolePassword });

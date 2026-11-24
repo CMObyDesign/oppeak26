@@ -32,6 +32,8 @@ const EXACT = new Map([
   ["/asksolomon/case/read-doc", POST],
   ["/asksolomon/case/build-base", POST],
   ["/asksolomon/case/workspace-roadmap", POST],
+  ["/asksolomon/case/workspace-redteam", POST],
+  ["/asksolomon/case/workspace-prep", POST],
   ["/asksolomon/case/generate-roadmap-draft", POST],
   ["/asksolomon/case/update-roadmap-section", POST],
   ["/asksolomon/case/challenge-roadmap", POST],
