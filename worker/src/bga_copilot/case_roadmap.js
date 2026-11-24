@@ -79,7 +79,7 @@ export function cleanRoadmapBody(body) {
   const contactId = str(body.contactId, 60);
   if (!contactId) return { error: "contactId required" };
   const list = (v, n) => (Array.isArray(v) ? v.slice(0, n) : []);
-  const confirmed = list(body.confirmed, 30).map((f) => ({ question: str(f?.question, 300), answer: str(f?.answer, 2000) })).filter((f) => f.question && f.answer);
+  const confirmed = list(body.confirmed, 30).map((f) => ({ question: str(f?.question, 300), answer: str(f?.answer, 2000), source: str(f?.source, 200) })).filter((f) => f.question && f.answer);
   const goal = str(body.goal, 1000);
   if (!goal) return { error: "Confirm the goal first." };
   const unconfirmed = list(body.unconfirmed, 30).map((f) => ({ question: str(f?.question, 300), suggested: str(f?.suggested, 1000), source: str(f?.source, 200) })).filter((f) => f.question);
@@ -107,7 +107,7 @@ export function buildRoadmapContent(c, catalog) {
   const L = [];
   L.push(`THE GOAL (confirmed): ${c.goal}`);
   L.push("\nCONFIRMED FACTS:");
-  for (const f of c.confirmed) L.push(`- ${f.question} → ${f.answer}`);
+  for (const f of c.confirmed) L.push(`- ${f.question} → ${f.answer}${f.source ? ` (from ${f.source})` : ""}`);
   L.push("\nVERIFIED NUMBERS:");
   if (!c.numbers.length) L.push("(none verified yet)");
   for (const n of c.numbers) L.push(`- ${n.name}: ${n.value}${n.period ? ` (${n.period})` : ""} · source: ${n.source}`);

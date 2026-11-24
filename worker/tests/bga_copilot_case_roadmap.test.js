@@ -13,7 +13,7 @@ const CATALOG = [{ service_id: "accounting_tax", name: "Accounting & Tax", probl
 const BODY = {
   contactId: "c1",
   goal: "A loan against the paid-off equipment, plus a line of credit.",
-  confirmed: [{ question: "Who owns the business?", answer: "Brandon, 100%." }],
+  confirmed: [{ question: "Who owns the business?", answer: "Brandon, 100%.", source: "2025 return.pdf" }],
   numbers: [{ name: "Revenue", value: "$535K", period: "2025", source: "2025 return.pdf" }, { name: "Cash on hand", value: "$26K", period: "Oct", source: "" }],
   unconfirmed: [{ question: "Is the waiting list signed?", suggested: "", source: "" }],
   documents: [
@@ -60,6 +60,7 @@ describe("case workspace roadmap", () => {
   it("labels what is confirmed, verified and unconfirmed, and sends the catalog without prices", () => {
     const t = buildRoadmapContent(cleanRoadmapBody(BODY), CATALOG);
     assert.ok(t.includes("THE GOAL (confirmed): A loan"));
+    assert.ok(t.includes("- Who owns the business? → Brandon, 100%. (from 2025 return.pdf)"));
     assert.ok(t.includes("- Revenue: $535K (2025) · source: 2025 return.pdf"));
     assert.ok(t.includes("Is the waiting list signed? → open question for the client"));
     assert.ok(t.includes("(self-prepared / related party)"));
