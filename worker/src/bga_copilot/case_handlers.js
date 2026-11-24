@@ -251,8 +251,14 @@ export async function handleVerifiedFinancialsPanel(request, env, { checkPasswor
   const contactId = typeof body.contactId === "string" ? body.contactId.trim() : "";
   if (!contactId) return json({ success: false, error: "contactId required" }, 400);
 
+  // Removing a verified metric (the CFO Portal case workspace's "undo" on a pick): same hash guard,
+  // same history wrapper, the entry for that metric is dropped instead of upserted.
+  const removeId = typeof body.remove_metric_id === "string" ? body.remove_metric_id.trim() : "";
+  if (removeId && !isCanonicalMetric(removeId)) {
+    return json({ success: false, error: `unknown metric_id: ${JSON.stringify(removeId)}` }, 400);
+  }
   const incoming = body.entry;
-  if (!incoming || typeof incoming !== "object") {
+  if (!removeId && (!incoming || typeof incoming !== "object")) {
     return json({ success: false, error: "entry required" }, 400);
   }
 
@@ -267,7 +273,7 @@ export async function handleVerifiedFinancialsPanel(request, env, { checkPasswor
   }
 
   // Build the entry we'll store. Force provenance; stamp recorded_at.
-  const entry = {
+  const entry = removeId ? null : {
     metric_id: incoming.metric_id,
     value: incoming.value,
     period: incoming.period,
@@ -276,8 +282,10 @@ export async function handleVerifiedFinancialsPanel(request, env, { checkPasswor
     provenance: "verified",
     recorded_at: new Date().toISOString(),
   };
-  const check = validateVerifiedFinancialEntry(entry);
-  if (!check.ok) return json({ success: false, error: check.error }, 400);
+  if (entry) {
+    const check = validateVerifiedFinancialEntry(entry);
+    if (!check.ok) return json({ success: false, error: check.error }, 400);
+  }
 
   // Read current entries, upsert, write back.
   const { contact, error } = await fetchGhlContact(contactId, env);
@@ -304,7 +312,7 @@ export async function handleVerifiedFinancialsPanel(request, env, { checkPasswor
   }
 
   const current = parseVerifiedFinancials(currentRaw);
-  const next = upsertEntry(current, entry);
+  const next = entry ? upsertEntry(current, entry) : current.filter((e) => e?.metric_id !== removeId);
   const nextRaw = JSON.stringify(next);
 
   // Route through the shared version-history wrapper (§8 / PR 10):
@@ -332,7 +340,7 @@ export async function handleVerifiedFinancialsPanel(request, env, { checkPasswor
     contactId,
     entries: next,
     entries_hash: nextHash,
-    added_or_updated: entry.metric_id,
+    ...(entry ? { added_or_updated: entry.metric_id } : { removed: removeId }),
   });
 }
 

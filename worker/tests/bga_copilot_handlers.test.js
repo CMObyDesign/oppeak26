@@ -401,6 +401,32 @@ describe("POST /asksolomon/case/verified-financials — handleVerifiedFinancials
     }
   });
 
+  it("removes one metric (CFO Portal undo), keeps the rest, same hash guard", async () => {
+    const existing = [
+      { metric_id: "cash_on_hand", value: 100, provenance: "verified" },
+      { metric_id: "revenue_ttm", value: 535000, provenance: "verified" },
+    ];
+    const existingRaw = JSON.stringify(existing);
+    const existingHash = await hashVerifiedFinancialsRaw(existingRaw);
+    const cap = stubFetch((url, init) => {
+      if (init?.method === "PUT") return new Response("", { status: 200 });
+      return ghlContactResponse([{ fieldKey: "contact.swot_verified_financials", value: existingRaw }]);
+    });
+    try {
+      let res = await handleVerifiedFinancialsPanel(post({ contactId: "c1", remove_metric_id: "nope", expected_entries_hash: existingHash }), makeEnv(), { checkPassword });
+      assert.equal(res.status, 400);
+      res = await handleVerifiedFinancialsPanel(post({ contactId: "c1", remove_metric_id: "cash_on_hand", expected_entries_hash: "0".repeat(64) }), makeEnv(), { checkPassword });
+      assert.equal(res.status, 409);
+      res = await handleVerifiedFinancialsPanel(post({ contactId: "c1", remove_metric_id: "cash_on_hand", expected_entries_hash: existingHash }), makeEnv(), { checkPassword });
+      const body = await res.json();
+      assert.equal(res.status, 200);
+      assert.equal(body.removed, "cash_on_hand");
+      assert.deepEqual(body.entries.map((e) => e.metric_id), ["revenue_ttm"]);
+    } finally {
+      cap.restore();
+    }
+  });
+
   it("(PR 5a) 409 when expected_entries_hash does not match current", async () => {
     const existing = [{ metric_id: "revenue_ttm", value: 1800000, provenance: "verified" }];
     const existingRaw = JSON.stringify(existing);
