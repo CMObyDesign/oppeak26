@@ -2,7 +2,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { handleWorkspaceRoadmap, cleanRoadmapBody, buildRoadmapContent, parseRoadmapReply, redact, roadmapGaps } from "../src/bga_copilot/case_roadmap.js";
+import { handleWorkspaceRoadmap, cleanRoadmapBody, buildRoadmapContent, parseRoadmapReply, redact, roadmapGaps, claimFits } from "../src/bga_copilot/case_roadmap.js";
 import { _setCatalogForTests } from "../src/bga_copilot/services_catalog.js";
 import { isAllowlisted } from "../src/portal_pass.js";
 
@@ -79,7 +79,7 @@ describe("case workspace roadmap", () => {
     assert.ok(!out.actions[1].what.includes("12-3456789"));
     assert.ok(!out.actions[1].what.includes("123456789012"));
     assert.deepEqual(out.findings.map((f) => [f.source, f.feeds, f.unconfirmed, f.quote]), [
-      ["2025 return.pdf", "A2", false, "Amount you owe 155,621"],
+      ["2025 return.pdf", "A2", true, "Amount you owe 155,621"], // "$310K" isn't a figure this document states
       ["Team note", "", false, ""],
       ["Verified: Revenue", "6 months", false, ""],
       ["return-[ID removed].pdf", "6 months", false, "Receipts of $549K"], // the file name's EIN is redacted
@@ -103,6 +103,26 @@ describe("case workspace roadmap", () => {
     const full = { findings: [{}], path: [{}, {}], actions: [{}, {}], client_view: { title: "t", intro: "i", steps: ["s"] } };
     assert.deepEqual(roadmapGaps(full), []);
     assert.deepEqual(roadmapGaps({ ...full, findings: [], path: [{}], client_view: { title: "", intro: "", steps: [] } }), ["findings with a source", "the path from now to 12 months", "the client preview"]);
+  });
+
+  it("a claim's figures must match its source, or it's marked unconfirmed", () => {
+    assert.equal(claimFits("Revenue held at $535K", "$535K 2025"), true);
+    assert.equal(claimFits("Revenue of $2M is at risk", "$535K 2025"), false);
+    assert.equal(claimFits("About $310K owed", "Owes $155,621 for 2024 and $155,000 for 2025, about $310K"), true);
+    assert.equal(claimFits("Margins fell to 40%", "gross margin 64%"), false);
+    assert.equal(claimFits("Call 2 or 3 lenders by Week 12", ""), true); // no figures to check
+    const c = cleanRoadmapBody(BODY);
+    const out = parseRoadmapReply(JSON.stringify({ ...REPLY, findings: [
+      { kind: "threat", vital_sign: "Money", text: "A $2M revenue threat", evidence: "Return", source: "Verified: Revenue", feeds: "6 months" },
+      { kind: "strength", vital_sign: "Money", text: "Revenue of $535K", evidence: "Return", source: "Verified: Revenue", feeds: "6 months" },
+      { kind: "weak_spot", vital_sign: "Money", text: "Loses $90K a month", evidence: "Liz's note", source: "Team note", feeds: "6 months" },
+    ] }), c, CATALOG);
+    assert.deepEqual(out.findings.map((f) => f.unconfirmed), [true, false, true]);
+  });
+
+  it("redacts labelled account numbers in any common shape", () => {
+    assert.equal(redact("acct 12345678, account # 1234-5678, routing number 021000021, card ending in 4242 9999, Week 12"), "acct [number removed], account [number removed], routing [number removed], card [number removed], Week 12");
+    assert.equal(redact("card 4111 1111 1111 1111"), "card [number removed]");
   });
 
   it("redacts ID shapes but keeps ordinary amounts", () => {

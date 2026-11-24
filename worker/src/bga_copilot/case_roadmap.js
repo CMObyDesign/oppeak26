@@ -27,7 +27,33 @@ export function redact(text) {
   return String(text)
     .replace(/\b\d{2}-\d{7}\b/g, "[ID removed]")
     .replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[ID removed]")
+    .replace(/\b\d{4}[- ]\d{4}[- ]\d{4}[- ]\d{1,7}\b/g, "[number removed]")
+    // An account, routing or card number in any common shape, when labelled as one.
+    .replace(/\b(acct|account|a\/c|routing|aba|card|loan|policy)(\s*(?:#|no\.?|number|num\.?|ending(?: in)?))?\s*[:#]?\s*\d[\d -]{2,}\d\b/gi, (_m, label) => `${label} [number removed]`)
     .replace(/\b\d{9,}\b/g, "[number removed]");
+}
+
+// Every amount or percentage in a claim must match a figure in what the source actually says.
+const MULT = { k: 1e3, m: 1e6, b: 1e9 };
+export function figures(text) {
+  const out = [];
+  const re = /(\$)?\s?(\d{1,3}(?:,\d{3})+|\d+(?:\.\d+)?)\s?(k|m|mm|million|thousand|b|billion|%)?(?![\w])/gi;
+  let m;
+  while ((m = re.exec(String(text)))) {
+    const unit = (m[3] || "").toLowerCase();
+    const n = Number(m[2].replace(/,/g, ""));
+    if (!Number.isFinite(n)) continue;
+    if (!m[1] && !unit && n < 1000) continue; // a bare small number ("2 lenders", "Week 4") isn't a figure
+    if (unit === "%") out.push({ n, pct: true });
+    else out.push({ n: n * (MULT[unit[0]] && unit !== "%" ? (unit.startsWith("mil") || unit === "mm" ? 1e6 : unit.startsWith("th") ? 1e3 : MULT[unit[0]]) : 1), pct: false });
+  }
+  return out;
+}
+export function claimFits(claim, known) {
+  const want = figures(claim);
+  if (!want.length) return true;
+  const have = figures(known);
+  return want.every((w) => have.some((h) => h.pct === w.pct && Math.abs(h.n - w.n) <= Math.max(Math.abs(h.n), 1) * 0.05));
 }
 // Prices for CFO by Design services are kept out by the prompt and by an advisor's review; a regex here
 // would also strip the client's own debt payments ("$202/mo"), which the plan needs.
@@ -200,14 +226,21 @@ export function parseRoadmapReply(text, c, catalog) {
     // only as unconfirmed, without the quote.
     let quote = source ? str(f?.quote, 300) : "";
     let unconfirmed = f?.unconfirmed === true;
+    // What the source actually says. A claim whose figures aren't in it is kept only as unconfirmed.
     const doc = c.documents.find((d) => d.filename === source);
-    if (doc) {
-      const known = norm([doc.summary, ...doc.key_facts.flatMap((k) => [k.fact, k.quote])].join(" "));
-      if (!quote || !known.includes(norm(quote))) {
-        quote = "";
-        unconfirmed = true;
-      }
+    let known = "";
+    if (doc) known = [doc.label, doc.summary, ...doc.key_facts.flatMap((k) => [k.fact, k.quote])].join(" ");
+    else if (source === "Team note") known = c.notes.map((n) => n.text).join(" ");
+    else if (source.startsWith("Verified: ")) {
+      const n = c.numbers.find((x) => x.name.toLowerCase() === source.slice(10).toLowerCase());
+      known = n ? `${n.value} ${n.period}` : "";
+    } else if (source.startsWith("Confirmed: ")) {
+      const q = source.slice(11).toLowerCase().slice(0, 30);
+      known = c.confirmed.filter((x) => x.question.toLowerCase().startsWith(q)).map((x) => x.answer).join(" ");
     }
+    if (doc && (!quote || !norm(known).includes(norm(quote)))) quote = "";
+    if (doc && !quote) unconfirmed = true;
+    if (!claimFits(`${str(f?.text, 300)} ${str(f?.evidence, 300)}`, `${known} ${quote}`)) unconfirmed = true;
     const item = {
       kind: FINDING_KINDS.includes(f?.kind) ? f.kind : "",
       vital_sign: VITAL_SIGNS.includes(f?.vital_sign) ? f.vital_sign : "",
