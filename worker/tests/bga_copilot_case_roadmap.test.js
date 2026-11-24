@@ -114,6 +114,8 @@ describe("case workspace roadmap", () => {
     assert.equal(claimFits("Revenue is $2,025", "$535K 2025"), false); // a year isn't an amount
     assert.equal(claimFits("Revenue is $535", "Revenue is $535 thousand"), false); // thousand is scaled
     assert.equal(claimFits("Revenue is $535,000", "Revenue is $535 thousand"), true);
+    assert.equal(claimFits("Debt is $5,000", "5,000 customers"), false); // a count isn't money
+    assert.equal(claimFits("Owes $155,621", "Amount you owe 155,621"), true); // an unlabelled amount still counts
     assert.equal(claimFits("Revenue in 2025 was $535K", "$535K 2025"), true);
     const c = cleanRoadmapBody(BODY);
     const out = parseRoadmapReply(JSON.stringify({ ...REPLY, findings: [
@@ -137,6 +139,11 @@ describe("case workspace roadmap", () => {
     assert.equal(out.actions[1].target, "$600K"); // a goal, not a loan figure
   });
 
+  it("path figures must come from a source", () => {
+    const out = parseRoadmapReply(JSON.stringify({ ...REPLY, path: [{ when: "Now to day 90", what: "Debt is $9M today; revenue $535K." }, { when: "Then", what: "A $1M equipment loan." }] }), cleanRoadmapBody(BODY), CATALOG);
+    assert.deepEqual(out.path.map((x) => x.what), ["Debt is [to confirm] today; revenue $535K.", "A [from the lender] equipment loan."]);
+  });
+
   it("the client preview keeps only confirmed figures", () => {
     const c = cleanRoadmapBody(BODY);
     const out = parseRoadmapReply(JSON.stringify({ ...REPLY, client_view: { title: "Your path", intro: "Revenue was $535K last year. You could grow to $4M.", steps: ["Secure the suggested $2M loan.", "Keep 40% margins."], closing: "We'll check in at Week 4." } }), c, CATALOG);
@@ -148,6 +155,7 @@ describe("case workspace roadmap", () => {
   it("redacts labelled account numbers in any common shape", () => {
     assert.equal(redact("acct 12345678, account # 1234-5678, routing number 021000021, card ending in 4242 9999, Week 12"), "acct [number removed], account [number removed], routing [number removed], card [number removed], Week 12");
     assert.equal(redact("card 4111 1111 1111 1111"), "card [number removed]");
+    assert.equal(redact("SSN 123 45 6789, EIN 12 3456789"), "SSN [ID removed], EIN [ID removed]");
   });
 
   it("redacts ID shapes but keeps ordinary amounts", () => {

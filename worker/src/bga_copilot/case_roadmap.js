@@ -27,6 +27,8 @@ export function redact(text) {
   return String(text)
     .replace(/\b\d{2}-\d{7}\b/g, "[ID removed]")
     .replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[ID removed]")
+    .replace(/\b\d{3} \d{2} \d{4}\b/g, "[ID removed]")
+    .replace(/\b\d{2} \d{7}\b/g, "[ID removed]")
     .replace(/\b\d{4}[- ]\d{4}[- ]\d{4}[- ]\d{1,7}\b/g, "[number removed]")
     // An account, routing or card number in any common shape, when labelled as one.
     .replace(/\b(acct|account|a\/c|routing|aba|card|loan|policy)(\s*(?:#|no\.?|number|num\.?|ending(?: in)?))?\s*[:#]?\s*\d[\d -]{2,}\d\b/gi, (_m, label) => `${label} [number removed]`)
@@ -34,6 +36,8 @@ export function redact(text) {
 }
 
 // Every amount or percentage in a claim must match a figure in what the source actually says.
+const COUNT_WORDS = /^\s*(?:customers?|clients?|units?|orders?|jobs?|projects?|employees?|people|staff|transactions?|items?|users?|members?|accounts?|locations?|stores?|homes?|sq\.? ?ft|square feet|cubic|hours?|days?|miles?|students?|patients?|visits?|leads?|calls?)\b/;
+
 export function unitScale(unit) {
   const u = String(unit || "").toLowerCase();
   if (u === "k" || u === "thousand") return 1e3;
@@ -51,8 +55,11 @@ export function figures(text) {
     if (!Number.isFinite(n)) continue;
     if (!m[1] && !unit && n < 1000) continue; // a bare small number ("2 lenders", "Week 4") isn't a figure
     if (!m[1] && !unit && !m[2].includes(",") && n >= 1900 && n <= 2100) continue; // a year, not an amount
-    if (unit === "%") out.push({ n, pct: true });
-    else out.push({ n: n * unitScale(unit), pct: false });
+    // A number followed by a counted thing ("5,000 customers") is a count, never money.
+    const after = String(text).slice(re.lastIndex, re.lastIndex + 24).toLowerCase();
+    const count = !m[1] && unit !== "%" && COUNT_WORDS.test(after);
+    if (unit === "%") out.push({ n, pct: true, money: false, count: false });
+    else out.push({ n: n * unitScale(unit), pct: false, money: Boolean(m[1]), count });
   }
   return out;
 }
@@ -60,7 +67,9 @@ export function claimFits(claim, known) {
   const want = figures(claim);
   if (!want.length) return true;
   const have = figures(known);
-  return want.every((w) => have.some((h) => h.pct === w.pct && Math.abs(h.n - w.n) <= Math.max(Math.abs(h.n), 1) * 0.05));
+  return want.every((w) =>
+    have.some((h) => h.pct === w.pct && !(w.money && h.count) && !(w.count && h.money) && Math.abs(h.n - w.n) <= Math.max(Math.abs(h.n), 1) * 0.05),
+  );
 }
 // Prices for CFO by Design services are kept out by the prompt and by an advisor's review; a regex here
 // would also strip the client's own debt payments ("$202/mo"), which the plan needs.
@@ -284,7 +293,9 @@ export function parseRoadmapReply(text, c, catalog) {
     findings.push(item);
   }
 
-  const path = (Array.isArray(p.path) ? p.path : []).map((s) => ({ when: clean(s?.when, 40), what: clean(s?.what, 300) })).filter((s) => s.when && s.what).slice(0, 5);
+  // The path: any figure must come from a source, and loan figures come from the lender.
+  const groundPath = (t) => noLenderFigures(t).replace(AMT, (m) => (claimFits(m, allKnown) ? m : "[to confirm]"));
+  const path = (Array.isArray(p.path) ? p.path : []).map((s) => ({ when: clean(s?.when, 40), what: groundPath(clean(s?.what, 300)) })).filter((s) => s.when && s.what).slice(0, 5);
   // The client preview may only carry figures a person confirmed or verified; any other figure is marked
   // for the advisor to fix, and lender figures are never stated.
   const confirmedKnown = [...c.numbers.map((n) => `${n.value} ${n.period}`), ...c.confirmed.map((f) => f.answer), c.goal].join(" ");
