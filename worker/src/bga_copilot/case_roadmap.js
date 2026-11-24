@@ -20,6 +20,7 @@ export const OWNERS = ["Advisor", "Accounting", "Client", "Advisor and client"];
 const MAX_ACTIONS = 7;
 
 const str = (v, n) => (typeof v === "string" ? v.trim().slice(0, n) : "");
+const norm = (t) => String(t).toLowerCase().replace(/[^a-z0-9$%.]+/g, " ").replace(/\s+/g, " ").trim();
 
 // No tax IDs or account numbers in a draft (handoff §7): EIN/SSN shapes and long digit runs.
 export function redact(text) {
@@ -81,9 +82,21 @@ export function cleanRoadmapBody(body) {
   const confirmed = list(body.confirmed, 30).map((f) => ({ question: str(f?.question, 300), answer: str(f?.answer, 2000) })).filter((f) => f.question && f.answer);
   const goal = str(body.goal, 1000);
   if (!goal) return { error: "Confirm the goal first." };
-  const numbers = list(body.numbers, 10).map((n) => ({ name: str(n?.name, 60), value: str(n?.value, 120), period: str(n?.period, 80), source: str(n?.source, 200) })).filter((n) => n.name && n.value);
   const unconfirmed = list(body.unconfirmed, 30).map((f) => ({ question: str(f?.question, 300), suggested: str(f?.suggested, 1000), source: str(f?.source, 200) })).filter((f) => f.question);
-  const documents = list(body.documents, 80).map((d) => ({ filename: str(d?.filename, 200), label: str(d?.label, 160), summary: str(d?.summary, 800), self_prepared: d?.self_prepared === true })).filter((d) => d.filename);
+  const documents = list(body.documents, 80)
+    .map((d) => ({
+      filename: str(d?.filename, 200),
+      label: str(d?.label, 160),
+      summary: str(d?.summary, 800),
+      self_prepared: d?.self_prepared === true,
+      key_facts: list(d?.key_facts, 12).map((f) => ({ fact: str(f?.fact, 300), quote: str(f?.quote, 300) })).filter((f) => f.fact || f.quote),
+    }))
+    .filter((d) => d.filename);
+  // A number counts as verified only with a source that is one of the documents sent.
+  const fileNames = new Set(documents.map((d) => d.filename));
+  const numbers = list(body.numbers, 10)
+    .map((n) => ({ name: str(n?.name, 60), value: str(n?.value, 120), period: str(n?.period, 80), source: str(n?.source, 200) }))
+    .filter((n) => n.name && n.value && fileNames.has(n.source));
   const notes = list(body.notes, 50).map((n) => ({ text: str(n?.text, 4000), by: str(n?.by, 120) })).filter((n) => n.text);
   const warnings = list(body.warnings, 6).map((w) => str(`${w?.title ?? ""}: ${w?.text ?? ""}`, 400));
   const story = { headline: str(body.story?.headline, 300), steps: list(body.story?.steps, 6).map((s) => `${str(s?.when, 40)}: ${str(s?.what, 400)} (${str(s?.source, 200)})`) };
@@ -106,7 +119,10 @@ export function buildRoadmapContent(c, catalog) {
     for (const s of c.story.steps) L.push(`- ${s}`);
   }
   L.push(`\nDOCUMENTS (${c.documents.length}):`);
-  for (const d of c.documents) L.push(`- ${d.filename}: ${d.label}${d.self_prepared ? " (self-prepared / related party)" : ""}. ${d.summary}`);
+  for (const d of c.documents) {
+    L.push(`- ${d.filename}: ${d.label}${d.self_prepared ? " (self-prepared / related party)" : ""}. ${d.summary}`);
+    for (const f of d.key_facts) L.push(`    · ${f.fact}${f.quote ? ` ("${f.quote}")` : ""}`);
+  }
   L.push("\nTEAM NOTES:");
   if (!c.notes.length) L.push("(none)");
   for (const n of c.notes) L.push(`- ${n.by}: ${n.text}`);
@@ -180,14 +196,26 @@ export function parseRoadmapReply(text, c, catalog) {
   const findings = [];
   for (const f of Array.isArray(p.findings) ? p.findings : []) {
     const source = okSource(f?.source);
+    // A quote attributed to a document must match what we read from it; otherwise the finding is kept
+    // only as unconfirmed, without the quote.
+    let quote = source ? str(f?.quote, 300) : "";
+    let unconfirmed = f?.unconfirmed === true;
+    const doc = c.documents.find((d) => d.filename === source);
+    if (doc) {
+      const known = norm([doc.summary, ...doc.key_facts.flatMap((k) => [k.fact, k.quote])].join(" "));
+      if (!quote || !known.includes(norm(quote))) {
+        quote = "";
+        unconfirmed = true;
+      }
+    }
     const item = {
       kind: FINDING_KINDS.includes(f?.kind) ? f.kind : "",
       vital_sign: VITAL_SIGNS.includes(f?.vital_sign) ? f.vital_sign : "",
       text: clean(f?.text, 300),
       evidence: clean(f?.evidence, 300),
-      source,
-      quote: source ? clean(f?.quote, 300) : "",
-      unconfirmed: f?.unconfirmed === true,
+      source: redact(source),
+      quote: redact(quote),
+      unconfirmed,
       feeds: (() => {
         const v = str(f?.feeds, 20);
         if (/^6\s*months?$/i.test(v)) return "6 months";
@@ -195,7 +223,7 @@ export function parseRoadmapReply(text, c, catalog) {
       })(),
     };
     // Every finding names its source (handoff §7).
-    if (!item.kind || !item.vital_sign || !item.text || !source) {
+    if (!item.kind || !item.vital_sign || !item.text || !item.evidence || !source) {
       dropped.findings++;
       continue;
     }
@@ -211,6 +239,16 @@ export function parseRoadmapReply(text, c, catalog) {
     closing: clean(cv.closing, 300),
   };
   return { findings: findings.slice(0, 8), path, actions, client_view, dropped };
+}
+
+/** What a usable roadmap must have; an empty list means it's complete. */
+export function roadmapGaps(r) {
+  const gaps = [];
+  if (!r.findings.length) gaps.push("findings with a source");
+  if (r.path.length < 2) gaps.push("the path from now to 12 months");
+  if (r.actions.length < 2) gaps.push("complete actions (owner, due week, number to move)");
+  if (!r.client_view.title || !r.client_view.intro || !r.client_view.steps.length) gaps.push("the client preview");
+  return gaps;
 }
 
 export async function handleWorkspaceRoadmap(request, env, { checkPassword, fetchImpl = fetch }) {
@@ -238,6 +276,7 @@ export async function handleWorkspaceRoadmap(request, env, { checkPassword, fetc
   if (out.stop_reason === "max_tokens") return json({ success: false, error: "The roadmap ran long and was cut off. Try again." }, 502);
   const parsed = parseRoadmapReply(out.text, c, catalog);
   if (!parsed) return json({ success: false, error: "Solomon's roadmap couldn't be read. Try again." }, 502);
-  if (parsed.actions.length < 2) return json({ success: false, error: "Solomon's plan didn't have enough complete actions (owner, due week, number to move). Try again." }, 502);
+  const missing = roadmapGaps(parsed);
+  if (missing.length) return json({ success: false, error: `Solomon's roadmap was missing ${missing.join(", ")}. Try again.` }, 502);
   return json({ success: true, ...parsed, catalog_names: Object.fromEntries(catalog.map((s) => [s.service_id, s.name])) });
 }

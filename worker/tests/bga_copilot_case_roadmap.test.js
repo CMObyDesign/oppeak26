@@ -2,7 +2,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { handleWorkspaceRoadmap, cleanRoadmapBody, buildRoadmapContent, parseRoadmapReply, redact } from "../src/bga_copilot/case_roadmap.js";
+import { handleWorkspaceRoadmap, cleanRoadmapBody, buildRoadmapContent, parseRoadmapReply, redact, roadmapGaps } from "../src/bga_copilot/case_roadmap.js";
 import { _setCatalogForTests } from "../src/bga_copilot/services_catalog.js";
 import { isAllowlisted } from "../src/portal_pass.js";
 
@@ -14,9 +14,12 @@ const BODY = {
   contactId: "c1",
   goal: "A loan against the paid-off equipment, plus a line of credit.",
   confirmed: [{ question: "Who owns the business?", answer: "Brandon, 100%." }],
-  numbers: [{ name: "Revenue", value: "$535K", period: "2025", source: "2025 return.pdf" }],
+  numbers: [{ name: "Revenue", value: "$535K", period: "2025", source: "2025 return.pdf" }, { name: "Cash on hand", value: "$26K", period: "Oct", source: "" }],
   unconfirmed: [{ question: "Is the waiting list signed?", suggested: "", source: "" }],
-  documents: [{ filename: "2025 return.pdf", label: "2025 federal return", summary: "Owes $155K.", self_prepared: true }],
+  documents: [
+    { filename: "2025 return.pdf", label: "2025 federal return", summary: "Owes $155K.", self_prepared: true, key_facts: [{ fact: "Owes $155,621", quote: "Amount you owe 155,621" }] },
+    { filename: "return-12-3456789.pdf", label: "2024 return", summary: "Receipts of $549K." },
+  ],
   notes: [{ text: "Doesn't know his numbers per project.", by: "Liz" }],
   warnings: [{ title: "Contact mismatch", text: "Tye vs Brandon." }],
   story: { headline: "A consultant became a manufacturer.", steps: [{ when: "2025", what: "Bought a printer.", source: "Bill of sale.pdf" }] },
@@ -28,9 +31,12 @@ const REPLY = {
     { kind: "weak_spot", vital_sign: "Money", text: "No profit per project", evidence: "Team note", source: "Team note", feeds: "A9" },
     { kind: "opportunity", vital_sign: "Customers", text: "Waiting list", evidence: "Owner says so", source: "invented.pdf", feeds: "6 months" },
     { kind: "strength", vital_sign: "Money", text: "Revenue held steady", evidence: "Return", source: "Verified: Revenue", feeds: "6 months" },
+    { kind: "weak_spot", vital_sign: "Money", text: "Receipts fell", evidence: "2024 vs 2025", source: "return-12-3456789.pdf", quote: "Receipts of $549K", feeds: "6 months" },
+    { kind: "threat", vital_sign: "Money", text: "Invented claim", evidence: "Return", source: "2025 return.pdf", quote: "Line 99: owes $2M", feeds: "6 months" },
+    { kind: "threat", vital_sign: "Money", text: "No evidence given", evidence: "", source: "2025 return.pdf", feeds: "6 months" },
     { kind: "nope", vital_sign: "Money", text: "x", source: "Team note" },
   ],
-  path: [{ when: "Now to day 90", what: "A file a lender can rely on." }, { when: "", what: "x" }],
+  path: [{ when: "Now to day 90", what: "A file a lender can rely on." }, { when: "Then", what: "Equipment loan." }, { when: "", what: "x" }],
   actions: [
     { id: "A1", what: "Set up profit tracking by project", vital_sign: "Operations", from_finding: "No profit per project", owner: "Accounting", due: "Week 8", number: "Open jobs with a profit number", start: "0", target: "all", service_id: "accounting_tax" },
     { id: "A2", what: "Pull IRS transcripts, EIN 12-3456789, acct 123456789012", vital_sign: "Money", from_finding: "Tax owed", owner: "Accounting", due: "Week 1", number: "Tax owed", start: "unconfirmed", target: "on a plan", service_id: "made_up" },
@@ -71,15 +77,31 @@ describe("case workspace roadmap", () => {
     assert.equal(out.dropped.actions, 2);
     assert.ok(!out.actions[1].what.includes("12-3456789"));
     assert.ok(!out.actions[1].what.includes("123456789012"));
-    assert.deepEqual(out.findings.map((f) => [f.source, f.feeds]), [
-      ["2025 return.pdf", "A2"],
-      ["Team note", ""],
-      ["Verified: Revenue", "6 months"],
+    assert.deepEqual(out.findings.map((f) => [f.source, f.feeds, f.unconfirmed, f.quote]), [
+      ["2025 return.pdf", "A2", false, "Amount you owe 155,621"],
+      ["Team note", "", false, ""],
+      ["Verified: Revenue", "6 months", false, ""],
+      ["return-[ID removed].pdf", "6 months", false, "Receipts of $549K"], // the file name's EIN is redacted
+      ["2025 return.pdf", "6 months", true, ""], // a quote the document doesn't have: kept only as unconfirmed
     ]);
-    assert.equal(out.dropped.findings, 2);
-    assert.equal(out.path.length, 1);
+    assert.equal(out.dropped.findings, 3); // bad kind, ungrounded source, no evidence
+    assert.equal(out.path.length, 2);
     assert.deepEqual(out.client_view.steps, ["CPA statements."]);
     assert.equal(parseRoadmapReply("nothing", c, CATALOG), null);
+  });
+
+  it("a number is verified only with a real document source; key facts go to Solomon", () => {
+    const c = cleanRoadmapBody(BODY);
+    assert.deepEqual(c.numbers.map((n) => n.name), ["Revenue"]);
+    const t = buildRoadmapContent(c, CATALOG);
+    assert.ok(!t.includes("Cash on hand: $26K"));
+    assert.ok(t.includes('· Owes $155,621 ("Amount you owe 155,621")'));
+  });
+
+  it("a roadmap missing a section isn't accepted", () => {
+    const full = { findings: [{}], path: [{}, {}], actions: [{}, {}], client_view: { title: "t", intro: "i", steps: ["s"] } };
+    assert.deepEqual(roadmapGaps(full), []);
+    assert.deepEqual(roadmapGaps({ ...full, findings: [], path: [{}], client_view: { title: "", intro: "", steps: [] } }), ["findings with a source", "the path from now to 12 months", "the client preview"]);
   });
 
   it("redacts ID shapes but keeps ordinary amounts", () => {
