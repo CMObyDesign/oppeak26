@@ -100,6 +100,7 @@ import { claimsPaid47V2, validatePaid47V2, buildRegenerationNudge } from "./paid
 import { gatePortalPass, portalPassFor } from "./portal_pass.js";
 import { handleDraftIntake } from "./bga_copilot/draft_intake.js";
 import { handleReadDoc, handleBuildBase } from "./bga_copilot/case_workspace.js";
+import { handleWorkspaceRoadmap } from "./bga_copilot/case_roadmap.js";
 import { handleStaffAsk } from "./staff_ask.js";
 
 // Versioning for canonical records (Phase 1 architecture — see
@@ -8681,6 +8682,9 @@ async function routeFetch(request, env, ctx) {
     }
     if (path === "/asksolomon/case/build-base") {
       return handleBuildBase(request, env, { checkPassword: checkConsolePassword });
+    }
+    if (path === "/asksolomon/case/workspace-roadmap") {
+      return handleWorkspaceRoadmap(request, env, { checkPassword: checkConsolePassword });
     }
     if (path === "/asksolomon/ask") {
       return handleStaffAsk(request, env, { checkPassword: checkConsolePassword });
